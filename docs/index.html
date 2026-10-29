@@ -305,7 +305,16 @@ input[type=file]{padding:9px 12px}
         <button class="full" type="submit">Save income</button>
       </form>
     </div>
-    <div class="card"><h2>Income history</h2><ul class="list" id="incomeList"></ul></div>
+    <div class="card">
+      <h2>Past income</h2>
+      <div class="toggle chips" id="incomeFilter"></div>
+      <div class="grid" style="margin:10px 0 4px">
+        <div class="stat"><small>Total</small><b id="piTotal">$0</b></div>
+        <div class="stat"><small id="piCount">Average</small><b id="piAvg">$0</b></div>
+        <div class="stat"><small>Latest</small><b id="piLast">$0</b></div>
+      </div>
+      <ul class="list" id="incomeList"></ul>
+    </div>
     <div class="card">
       <h2>Import data</h2>
       <label>Import file (.json)<input type="file" id="importFile" accept=".json,application/json"></label>
@@ -757,12 +766,47 @@ function catRow(r, max) {
   return '<li><div class="main"><div>' + esc(r[0]) + '</div><div class="bar"><span style="width:' + pct + '%"></span></div></div><span class="amt">' + money(r[1]) + '</span></li>';
 }
 
-function renderIncome() {
-  $("incomeList").innerHTML = ST.income.length ? ST.income.map(incomeRow).join("") : '<li class="empty">No income logged yet.</li>';
+let incomeFilter = "all";
+const DEFAULT_INCOME_SOURCES = ["QR pay", "Zane rent", "Apartment rent", "Car spot", "Tax refund"];
+// Choices follow your income sources (so a rename like "JHT Property" shows up), plus anything already logged.
+function incomeSourceNames() {
+  const names = ST.incomeSources.map((x) => x.name).concat(ST.income.map((i) => i.source));
+  const all = names.length ? names : DEFAULT_INCOME_SOURCES;
+  return [...new Set(all.concat("Other"))];
 }
+function chipBtn(value, label, on) {
+  return '<button data-f="' + esc(value) + '"' + (on ? ' class="on"' : "") + ">" + esc(label) + "</button>";
+}
+function renderIncome() {
+  const sel = $("incomeForm").elements.source, keep = sel.value;
+  sel.innerHTML = incomeSourceNames().map((n) => "<option>" + esc(n) + "</option>").join("");
+  if (keep) sel.value = keep;
+  const sources = [...new Set(ST.income.map((i) => i.source))].sort();
+  if (incomeFilter !== "all" && !sources.includes(incomeFilter)) incomeFilter = "all";
+  $("incomeFilter").innerHTML = chipBtn("all", "All", incomeFilter === "all") + sources.map((n) => chipBtn(n, n, incomeFilter === n)).join("");
+  const rows = ST.income.filter((i) => incomeFilter === "all" || i.source === incomeFilter);
+  const total = rows.reduce((t, i) => t + i.amount, 0);
+  $("piTotal").textContent = money(total);
+  $("piCount").textContent = "Average of " + rows.length;
+  $("piAvg").textContent = money(rows.length ? total / rows.length : 0);
+  $("piLast").textContent = money(rows.length ? rows[0].amount : 0);
+  $("incomeList").innerHTML = rows.length ? rows.map(incomeRow).join("") : '<li class="empty">No income logged yet.</li>';
+}
+$("incomeFilter").addEventListener("click", (e) => {
+  if (!e.target.dataset.f) return;
+  incomeFilter = e.target.dataset.f;
+  renderIncome();
+});
+// Picking a source pre-fills its usual amount (you can change it, since pay and rent vary).
+$("incomeForm").elements.source.addEventListener("change", (e) => {
+  const usual = ST.incomeSources.find((x) => x.name === e.target.value), amt = $("incomeForm").elements.amount;
+  if (usual && !editing.income && !amt.value) amt.value = usual.amount;
+});
 function incomeRow(i) {
+  const usual = ST.incomeSources.find((x) => x.name === i.source), diff = usual ? round2(i.amount - usual.amount) : 0;
+  const vs = Math.abs(diff) >= 0.01 ? " · " + (diff > 0 ? "+" : "−") + money(Math.abs(diff)) + " vs usual" : "";
   const note = i.note ? " · " + esc(i.note) : "";
-  return '<li><div class="main"><div>' + esc(i.source) + '</div><div class="sub">' + fmtDate(i.date) + note + '</div></div>' +
+  return '<li><div class="main"><div>' + esc(i.source) + '</div><div class="sub wrap">' + fmtLong(i.date) + vs + note + '</div></div>' +
     '<span class="amt pos">' + money(i.amount) + '</span>' +
     '<button class="ghost" data-edit-income="' + i.id + '">Edit</button>' +
     '<button class="ghost" data-del="income:' + i.id + '">✕</button></li>';
