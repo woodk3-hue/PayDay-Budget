@@ -138,6 +138,31 @@ nav button span{pointer-events:none}
 nav button.on{color:var(--brand)}
 
 .hidden{display:none!important}
+.hbtn{min-width:44px;padding:0 8px;display:inline-flex;align-items:center;justify-content:center}
+header button.ghost.hbtn{min-height:44px}
+.hbtn svg{width:24px;height:24px;pointer-events:none}
+/* Add forms live in bottom sheets opened from the header + button */
+.addcard{display:none}
+.addcard.open{display:block;position:fixed;left:0;right:0;margin:0 auto;bottom:0;width:min(560px,100%);max-height:90vh;overflow:auto;z-index:650;
+  border-radius:28px 28px 0 0;background:var(--card);padding:22px 18px calc(22px + env(safe-area-inset-bottom));
+  -webkit-backdrop-filter:none;backdrop-filter:none;animation:rise .38s cubic-bezier(.2,.9,.3,1)}
+.addcard .x{position:absolute;top:6px;right:8px}
+.sheetback{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:640;animation:fade .2s ease}
+nav.none::before{opacity:0}
+/* Stats */
+.statsnav{display:flex;align-items:center;justify-content:space-between;margin:6px 0 8px}
+.statsnav b{font-size:17px}
+.statsnav button:disabled{opacity:.3}
+.chart{display:flex;gap:8px;height:150px;align-items:stretch}
+.chart .col{flex:1;display:flex;flex-direction:column;min-width:0}
+.chart .bars{flex:1;display:flex;align-items:flex-end;gap:3px}
+.chart .bars i{flex:1;display:block;border-radius:6px 6px 2px 2px}
+.chart .inc{background:linear-gradient(180deg,#63e6a0,var(--green))}
+.chart .exp{background:linear-gradient(180deg,#64d2ff,var(--brand))}
+.chart small{text-align:center;font-size:11px;color:var(--muted);margin-top:4px;white-space:nowrap}
+.chart .cur small{color:var(--ink);font-weight:600}
+.legend{display:flex;gap:16px;font-size:13px;color:var(--muted);margin-top:10px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px}
 
 /* Sign-in */
 #login{min-height:75vh;display:grid;place-items:center;text-align:center;padding:0 20px}
@@ -209,6 +234,8 @@ input[type=file]{padding:9px 12px}
 <header>
   <h1 id="pageTitle">Budget</h1>
   <span id="syncPill" class="pill">Synced</span>
+  <button id="statsBtn" class="ghost hbtn hidden" aria-label="Stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V11M12 20V4M19 20v-6"/></svg></button>
+  <button id="addBtn" class="ghost hbtn hidden" aria-label="Add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button>
   <button id="signOutBtn" class="ghost hidden">Sign out</button>
 </header>
 
@@ -276,7 +303,8 @@ input[type=file]{padding:9px 12px}
       <h2>Income sources (normalised per fortnight)</h2>
       <ul class="list" id="srcList"></ul>
     </div>
-    <div class="card">
+    <div class="card addcard" id="srcCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
       <h2 id="srcFormTitle">Add income source</h2>
       <form id="srcForm">
         <label class="full">Name<input name="name" required placeholder="e.g. Job, Property 1 rent"></label>
@@ -290,7 +318,8 @@ input[type=file]{padding:9px 12px}
         <button class="full" type="submit" id="srcSubmit">Save source</button>
       </form>
     </div>
-    <div class="card">
+    <div class="card addcard" id="incomeCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
       <h2 id="incomeFormTitle">Add income</h2>
       <form id="incomeForm">
         <label>Date<input type="date" name="date" required></label>
@@ -339,7 +368,8 @@ input[type=file]{padding:9px 12px}
       <ul class="list" id="schedList"></ul>
       <p class="note">Each bill's allocation = amount × times per year ÷ 26. Includes recurring property and personal bills. One-offs aren't listed.</p>
     </div>
-    <div class="card">
+    <div class="card addcard" id="expenseCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
       <h2 id="expenseFormTitle">Add expense</h2>
       <form id="expenseForm">
         <label>Date<input type="date" name="date" required></label>
@@ -385,7 +415,8 @@ input[type=file]{padding:9px 12px}
       <button class="full" id="wishSaveBtn" style="width:100%;margin-top:12px">Save to wishlist</button>
     </div>
     <div class="card"><h2>Wishlist · tap an item to edit</h2><ul class="list" id="wishList"></ul></div>
-    <div class="card">
+    <div class="card addcard" id="transferCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
       <h2 id="transferFormTitle">Move money</h2>
       <form id="transferForm">
         <label class="full">Goal<select name="goalId" id="goalSelect" required></select></label>
@@ -402,7 +433,8 @@ input[type=file]{padding:9px 12px}
       </form>
     </div>
     <div class="card"><h2>Goals</h2><ul class="list" id="goalList"></ul></div>
-    <div class="card">
+    <div class="card addcard" id="goalCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
       <h2 id="goalFormTitle">New goal</h2>
       <form id="goalForm">
         <label class="full">Name<input name="name" required placeholder="e.g. Japan trip"></label>
@@ -421,7 +453,8 @@ input[type=file]{padding:9px 12px}
       <p id="alertsText">Get a phone alert before things renew.</p>
       <button id="alertsBtn">Turn on alerts</button>
     </div>
-    <div class="card">
+    <div class="card addcard" id="subCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
       <h2 id="subFormTitle">Add subscription, bill or purchase</h2>
       <form id="subForm">
         <label class="full">Name<input name="name" required placeholder="e.g. Spotify"></label>
@@ -479,7 +512,8 @@ input[type=file]{padding:9px 12px}
         <button class="full" type="submit">Save property</button>
       </form>
     </div>
-    <div class="card">
+    <div class="card addcard" id="billCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
       <h2 id="billFormTitle">Add a bill or receipt</h2>
       <form id="billForm">
         <label class="full">PDF (optional)<input type="file" id="billFile" accept="application/pdf,.pdf"></label>
@@ -518,6 +552,31 @@ input[type=file]{padding:9px 12px}
       <h2>Maintenance receipts by tax year (Jul–Jun)</h2>
       <ul class="list" id="receiptList"></ul>
     </div>
+  </section>
+
+  <!-- STATS -->
+  <section id="view-stats" class="view hidden">
+    <div class="card">
+      <div class="toggle" id="statsView">
+        <button data-f="fortnight" class="on">Fortnight</button><button data-f="month">Month</button><button data-f="year">Year</button>
+      </div>
+      <div class="statsnav">
+        <button class="ghost" id="statsPrev" aria-label="Earlier">‹</button><b id="statsLabel"></b><button class="ghost" id="statsNext" aria-label="Later">›</button>
+      </div>
+      <div class="grid">
+        <div class="stat"><small>Income</small><b id="stInc">$0</b></div>
+        <div class="stat"><small>Expenses</small><b id="stExp">$0</b></div>
+        <div class="stat"><small>Net</small><b id="stNet">$0</b></div>
+      </div>
+      <p class="note" id="stNote" style="margin-top:8px"></p>
+    </div>
+    <div class="card">
+      <h2>Income vs expenses</h2>
+      <div class="chart" id="statsChart"></div>
+      <div class="legend"><span><i style="background:var(--green)"></i>Income</span><span><i style="background:var(--brand)"></i>Expenses</span></div>
+    </div>
+    <div class="card"><h2>Spending by category</h2><ul class="list" id="statsCats"></ul></div>
+    <div class="card"><h2>Income by source</h2><ul class="list" id="statsSources"></ul></div>
   </section>
 </main>
 
@@ -696,6 +755,7 @@ function startSync() {
    ========================================================= */
 function render() {
   renderHome(); renderIncome(); renderExpenses(); renderSavings(); renderSubs(); renderProperty(); syncBufferField(); renderAfford(); renderWishlist(); renderCashflow(); renderSources(); renderSchedule(); syncBaselineField();
+  if (currentView === "stats") renderStats();
 }
 
 function subsSorted() {
@@ -889,12 +949,14 @@ $("incomeForm").addEventListener("submit", (e) => {
   const d = formData(e.target), isNew = !editing.income;
   save("income", editing.income, d);
   resetForm(e.target, "income");
+  closeSheets(false);
   if (isNew) checkSurplus(d);
 });
 $("expenseForm").addEventListener("submit", (e) => {
   e.preventDefault();
   save("expenses", editing.expenses, formData(e.target));
   resetForm(e.target, "expenses");
+  closeSheets(false);
 });
 $("subForm").addEventListener("submit", (e) => {
   e.preventDefault();
@@ -905,6 +967,7 @@ $("subForm").addEventListener("submit", (e) => {
   e.target.dueDate.value = today();
   e.target.querySelector("button[type=submit]").textContent = "Save";
   $("subFormTitle").textContent = "Add subscription, bill or purchase";
+  closeSheets(false);
 });
 function startEditSub(s) {
   const form = $("subForm");
@@ -913,7 +976,7 @@ function startEditSub(s) {
   editing.subscriptions = s.id;
   form.querySelector("button[type=submit]").textContent = "Update";
   $("subFormTitle").textContent = "Editing " + s.name;
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  openSheet("subCard");
 }
 
 $("goalForm").addEventListener("submit", (e) => {
@@ -921,20 +984,21 @@ $("goalForm").addEventListener("submit", (e) => {
   save("goals", editing.goals || null, formData(e.target));
   editing.goals = null; e.target.reset();
   $("goalFormTitle").textContent = "New goal"; $("goalSubmit").textContent = "Add goal";
+  closeSheets(false);
 });
 function startEditGoal(g) {
   const f = $("goalForm").elements;
   f.name.value = g.name; f.target.value = g.target; f.opening.value = g.opening ?? 0; f.targetDate.value = g.targetDate || "";
   editing.goals = g.id;
   $("goalFormTitle").textContent = "Editing " + g.name; $("goalSubmit").textContent = "Update goal";
-  window.scrollTo({ top: $("goalForm").offsetTop - 80, behavior: "smooth" });
+  openSheet("goalCard");
 }
 function startEditTransfer(t) {
   const f = $("transferForm").elements;
   f.goalId.value = t.goalId; f.type.value = t.type; f.amount.value = t.amount; f.date.value = t.date; f.note.value = t.note || "";
   editing.transfers = t.id;
   $("transferFormTitle").textContent = "Editing a move"; $("transferSubmit").textContent = "Update";
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  openSheet("transferCard");
 }
 $("transferForm").addEventListener("submit", (e) => {
   e.preventDefault();
@@ -943,6 +1007,7 @@ $("transferForm").addEventListener("submit", (e) => {
   $("transferFormTitle").textContent = "Move money"; $("transferSubmit").textContent = "Save";
   const keepGoal = e.target.goalId.value; e.target.reset();
   e.target.goalId.value = keepGoal; e.target.date.value = today();
+  closeSheets(false);
 });
 
 function startEdit(kind, item) {
@@ -951,7 +1016,7 @@ function startEdit(kind, item) {
   editing[kind] = item.id;
   form.querySelector("button[type=submit]").textContent = "Update";
   $(kind === "income" ? "incomeFormTitle" : "expenseFormTitle").textContent = "Editing";
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  openSheet(kind === "income" ? "incomeCard" : "expenseCard");
 }
 
 document.addEventListener("click", (e) => {
@@ -1032,15 +1097,25 @@ $("expenseFilter").addEventListener("click", (e) => {
 });
 
 const TITLES = { home: "Budget", income: "Income", expenses: "Expenses", savings: "Goals", subs: "Subscriptions", property: "Property & Bills" };
+TITLES.stats = "Stats";
+let currentView = "home";
+function showView(v) {
+  const tabs = [...$("tabs").children], idx = tabs.findIndex((b) => b.dataset.v === v);
+  document.querySelectorAll(".view").forEach((s) => s.classList.toggle("hidden", s.id !== "view-" + v));
+  tabs.forEach((b) => b.classList.toggle("on", b.dataset.v === v));
+  $("tabs").classList.toggle("none", idx < 0);
+  if (idx >= 0) $("tabs").style.setProperty("--i", idx);
+  $("pageTitle").textContent = TITLES[v];
+  currentView = v;
+  closeSheets(true);
+  $("addBtn").classList.toggle("hidden", !ADD_FORMS[v]);
+  if (v === "property") fillPropForm();
+  if (v === "stats") renderStats();
+  window.scrollTo(0, 0);
+}
 $("tabs").addEventListener("click", (e) => {
   const btn = e.target.closest("button"); if (!btn || !btn.dataset.v) return;
-  const v = btn.dataset.v;
-  document.querySelectorAll(".view").forEach((s) => s.classList.toggle("hidden", s.id !== "view-" + v));
-  [...$("tabs").children].forEach((b) => b.classList.toggle("on", b === btn));
-  $("tabs").style.setProperty("--i", [...$("tabs").children].indexOf(btn));
-  $("pageTitle").textContent = TITLES[v];
-  if (v === "property") fillPropForm();
-  window.scrollTo(0, 0);
+  showView(btn.dataset.v);
 });
 
 /* =========================================================
@@ -1336,7 +1411,7 @@ function startEditBill(b) {
   $("billFormTitle").textContent = "Editing " + b.vendor;
   $("billSubmit").textContent = "Update";
   setScanMsg("The PDF can't be changed once saved.");
-  window.scrollTo({ top: $("billForm").offsetTop - 80, behavior: "smooth" });
+  openSheet("billCard");
 }
 $("billForm").addEventListener("submit", (e) => {
   e.preventDefault();
@@ -1358,6 +1433,7 @@ $("billForm").addEventListener("submit", (e) => {
   }
   batch.commit().catch((err) => toast("Save failed: " + err.message));
   resetBillForm();
+  closeSheets(false);
 });
 $("billFilter").addEventListener("click", (e) => {
   if (!e.target.dataset.f) return;
@@ -1563,6 +1639,7 @@ $("srcForm").addEventListener("submit", (e) => {
   e.target.nextDate.value = today();
   $("srcSubmit").textContent = "Save source";
   $("srcFormTitle").textContent = "Add income source";
+  closeSheets(false);
 });
 function startEditSrc(s) {
   const f = $("srcForm").elements;
@@ -1571,7 +1648,7 @@ function startEditSrc(s) {
   editing.incomeSources = s.id;
   $("srcSubmit").textContent = "Update";
   $("srcFormTitle").textContent = "Editing " + s.name;
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  openSheet("srcCard");
 }
 
 // Recurring expenses and subscriptions/bills as one schedule (one-offs excluded).
@@ -1821,6 +1898,140 @@ $("importBtn").addEventListener("click", () => {
 });
 
 /* =========================================================
+   6h. ADD SHEETS (header + button) and STATS
+   ========================================================= */
+const ADD_FORMS = {
+  income: [["incomeCard", "Add income"], ["srcCard", "Add income source"]],
+  expenses: [["expenseCard", "Add expense"]],
+  savings: [["transferCard", "Move money"], ["goalCard", "New goal"]],
+  subs: [["subCard", "Add subscription, bill or purchase"]],
+  property: [["billCard", "Add a bill or receipt"]]
+};
+let sheetBack = null;
+function openSheet(id) {
+  closeSheets(false);
+  sheetBack = document.createElement("div");
+  sheetBack.className = "sheetback";
+  sheetBack.addEventListener("click", () => closeSheets(true));
+  document.body.appendChild(sheetBack);
+  $(id).classList.add("open");
+}
+function closeSheets(cancel) {
+  document.querySelectorAll(".addcard.open").forEach((c) => c.classList.remove("open"));
+  if (sheetBack) { sheetBack.remove(); sheetBack = null; }
+  if (cancel) resetAddForms();
+}
+// Closing without saving drops any half-finished edit so the next "+" starts clean.
+function resetAddForms() {
+  resetForm($("incomeForm"), "income"); resetForm($("expenseForm"), "expenses");
+  editing.subscriptions = null; $("subForm").reset(); $("subForm").dueDate.value = today();
+  $("subForm").querySelector("button[type=submit]").textContent = "Save"; $("subFormTitle").textContent = "Add subscription, bill or purchase";
+  editing.incomeSources = null; $("srcForm").reset(); $("srcForm").nextDate.value = today();
+  $("srcSubmit").textContent = "Save source"; $("srcFormTitle").textContent = "Add income source";
+  editing.goals = null; $("goalForm").reset(); $("goalSubmit").textContent = "Add goal"; $("goalFormTitle").textContent = "New goal";
+  editing.transfers = null; $("transferForm").reset(); $("transferForm").date.value = today();
+  $("transferSubmit").textContent = "Save"; $("transferFormTitle").textContent = "Move money";
+  resetBillForm();
+}
+document.addEventListener("click", (e) => { if (e.target.closest("[data-close-sheet]")) closeSheets(true); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheets(true); });
+$("addBtn").addEventListener("click", () => {
+  const opts = ADD_FORMS[currentView];
+  if (!opts) return;
+  if (opts.length === 1) { openSheet(opts[0][0]); return; }
+  const wrap = document.createElement("div");
+  wrap.className = "overlay sheet";
+  wrap.innerHTML = '<div class="card"><h3>Add</h3><div class="sec">' +
+    opts.map((o) => '<button style="width:100%;margin-top:8px" data-add="' + o[0] + '">' + esc(o[1]) + "</button>").join("") +
+    '</div><div class="actions"><button class="plain" data-add="">Cancel</button></div></div>';
+  wrap.addEventListener("click", (e) => {
+    if (e.target.dataset.add === undefined && e.target !== wrap) return;
+    wrap.remove();
+    if (e.target.dataset.add) openSheet(e.target.dataset.add);
+  });
+  document.body.appendChild(wrap);
+});
+$("statsBtn").addEventListener("click", () => showView("stats"));
+
+let statsView = "fortnight", statsOffset = 0;
+// A fortnight follows your pay periods; month and year are calendar periods. k scales per-fortnight amounts to the period.
+function statsRange(offset) {
+  if (statsView === "fortnight") {
+    const anchor = dayNum(PAY_ANCHOR.toLocaleDateString("en-CA")), n = Math.floor((dayNum(today()) - anchor) / 14) + offset;
+    const start = isoFromDay(anchor + 14 * n), end = isoFromDay(anchor + 14 * n + 13);
+    return { start: start, end: end, label: fmtDate(start) + " – " + fmtLong(end), short: fmtDate(start), k: 1 };
+  }
+  const now = new Date();
+  if (statsView === "month") {
+    const d = new Date(now.getFullYear(), now.getMonth() + offset, 1), e = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    return { start: d.toLocaleDateString("en-CA"), end: e.toLocaleDateString("en-CA"),
+      label: d.toLocaleDateString("en-AU", { month: "long", year: "numeric" }), short: d.toLocaleDateString("en-AU", { month: "short" }), k: 26 / 12 };
+  }
+  const y = now.getFullYear() + offset;
+  return { start: y + "-01-01", end: y + "-12-31", label: String(y), short: String(y), k: 26 };
+}
+function statsTotals(r) {
+  const income = ST.income.filter((i) => i.date >= r.start && i.date <= r.end);
+  const once = ST.expenses.filter((e) => e.frequency === "once" && e.date >= r.start && e.date <= r.end);
+  const spent = once.reduce((t, e) => t + e.amount, 0), recurring = recurringPerFortnight() * r.k;
+  return { income: income, incTotal: income.reduce((t, i) => t + i.amount, 0), once: once, spent: spent, recurring: recurring, expenses: spent + recurring };
+}
+function statsCategories(r, t) {
+  const map = {};
+  const add = (c, v) => { if (v > 0.005) map[c] = (map[c] || 0) + v; };
+  t.once.forEach((e) => add(e.category || "Other", e.amount));
+  ST.expenses.forEach((e) => add(e.category || "Other", toFortnight(e.amount, e.frequency) * r.k));
+  ST.subscriptions.forEach((x) => add(x.type === "subscription" ? "Subscriptions" : x.type === "bill" ? "Bills" : "Other", toFortnight(x.amount, x.frequency) * r.k));
+  ST.bills.filter(isRecurringBill).forEach((b) => add(b.category === "property" ? "Property" : "Bills", toFortnight(b.amount, b.frequency) * r.k));
+  return Object.entries(map).sort((a, b) => b[1] - a[1]);
+}
+function statsBarRow(name, amount, max, sub) {
+  const pct = max ? Math.round((amount / max) * 100) : 0;
+  return '<li><div class="main"><div>' + esc(name) + '</div><div class="bar"><span style="width:' + pct + '%"></span></div>' +
+    (sub ? '<div class="sub">' + sub + "</div>" : "") + '</div><span class="amt">' + money(amount) + "</span></li>";
+}
+function statsChartCol(offset, max) {
+  const r = statsRange(offset), t = statsTotals(r);
+  const h = (v) => (max ? Math.max(2, Math.round((v / max) * 100)) : 2);
+  return '<div class="col' + (offset === statsOffset ? " cur" : "") + '"><div class="bars"><i class="inc" style="height:' + h(t.incTotal) +
+    '%"></i><i class="exp" style="height:' + h(t.expenses) + '%"></i></div><small>' + esc(r.short) + "</small></div>";
+}
+function renderStats() {
+  const r = statsRange(statsOffset), t = statsTotals(r), net = t.incTotal - t.expenses;
+  $("statsLabel").textContent = r.label;
+  $("statsNext").disabled = statsOffset >= 0;
+  $("stInc").textContent = money(t.incTotal);
+  $("stExp").textContent = money(t.expenses);
+  $("stNet").textContent = money(net);
+  $("stNet").className = net >= 0 ? "pos" : "neg";
+  $("stNote").textContent = "Expenses = " + money(t.spent) + " spent + " + money(t.recurring) + " of recurring bills. Expected income from your sources: " + money(incomePerFortnight() * r.k) + ".";
+
+  const n = statsView === "year" ? 4 : 6, cols = [];
+  let max = 0;
+  for (let i = 0; i < n; i++) { const tt = statsTotals(statsRange(statsOffset - (n - 1) + i)); max = Math.max(max, tt.incTotal, tt.expenses); }
+  for (let i = 0; i < n; i++) cols.push(statsChartCol(statsOffset - (n - 1) + i, max));
+  $("statsChart").innerHTML = cols.join("");
+
+  const cats = statsCategories(r, t), total = cats.reduce((x, c) => x + c[1], 0);
+  $("statsCats").innerHTML = cats.length ? cats.map((c) => statsBarRow(c[0], c[1], cats[0][1], Math.round((c[1] / total) * 100) + "% of expenses")).join("")
+    : '<li class="empty">No spending in this period.</li>';
+
+  const bySrc = {};
+  t.income.forEach((i) => { bySrc[i.source] = (bySrc[i.source] || 0) + i.amount; });
+  const srcs = Object.entries(bySrc).sort((a, b) => b[1] - a[1]);
+  $("statsSources").innerHTML = srcs.length ? srcs.map((x) => statsBarRow(x[0], x[1], srcs[0][1], "")).join("")
+    : '<li class="empty">No income logged in this period.</li>';
+}
+$("statsView").addEventListener("click", (e) => {
+  if (!e.target.dataset.f) return;
+  statsView = e.target.dataset.f; statsOffset = 0;
+  [...$("statsView").children].forEach((b) => b.classList.toggle("on", b === e.target));
+  renderStats();
+});
+$("statsPrev").addEventListener("click", () => { statsOffset--; renderStats(); });
+$("statsNext").addEventListener("click", () => { if (statsOffset < 0) { statsOffset++; renderStats(); } });
+
+/* =========================================================
    7. AUTH
    ========================================================= */
 $("signInBtn").addEventListener("click", async () => {
@@ -1836,6 +2047,8 @@ onAuthStateChanged(auth, (user) => {
   $("login").classList.toggle("hidden", !!user);
   $("tabs").classList.toggle("hidden", !user);
   $("signOutBtn").classList.toggle("hidden", !user);
+  $("statsBtn").classList.toggle("hidden", !user);
+  if (!user) $("addBtn").classList.add("hidden");
   $("view-home").classList.toggle("hidden", !user);
   if (!user) { document.querySelectorAll(".view").forEach((s) => s.classList.add("hidden")); return; }
   document.querySelectorAll("form input[type=date]:not([data-blank])").forEach((i) => (i.value = today()));
