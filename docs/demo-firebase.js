@@ -56,10 +56,12 @@ const store = {
     { name: "New phone", cost: 1800, kind: "want", perPay: 80, saved: 0, order: 30, neededBy: day(430) }
   ],
   settings: [{ id: "pay", baseline: 2450, updated: 1 }],
+  banks: [{ id: "bk1", name: "Bank Australia" }, { id: "bk2", name: "Up" }],
   accounts: [
-    { id: "acc1", name: "Big Savings", bank: "Bank Australia", balance: 5200 },
-    { id: "acc2", name: "Up Account", bank: "Up", balance: 410 },
-    { id: "acc3", name: "HouseAcc", bank: "Bank Australia", balance: 1350 }
+    { id: "acc1", name: "Big Savings", bank: "Bank Australia", bankId: "bk1", balance: 5200 },
+    { id: "acc2", name: "Everyday", bank: "Up", bankId: "bk2", balance: 410 },
+    { id: "acc3", name: "HouseAcc", bank: "Bank Australia", bankId: "bk1", balance: 1350 },
+    { id: "acc4", name: "ApartmentAcc", bank: "Bank Australia", bankId: "bk1", balance: 900 }
   ],
   acctTransfers: [
     { name: "Up bills", fromId: "acc1", toId: "acc2", externalName: "", amount: 305, frequency: "fortnightly", nextApply: day(-1) },
