@@ -94,8 +94,6 @@ input,select{font:inherit;font-size:17px;letter-spacing:-.41px;padding:11px 12px
   box-shadow:inset 0 0 0 .5px var(--line),inset 0 1px 2px rgba(0,0,0,.05)}
 select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238e8e93' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
-textarea{font:inherit;font-size:15px;padding:11px 12px;border:0;border-radius:10px;background:var(--tile);color:var(--ink);width:100%;
-  outline:none;resize:vertical;box-shadow:inset 0 0 0 .5px var(--line)}
 input:focus,select:focus{box-shadow:0 0 0 3px var(--brand-soft),inset 0 0 0 .5px var(--brand)}
 input::placeholder{color:var(--muted)}
 
@@ -353,13 +351,6 @@ input[type=file]{padding:9px 12px}
         <div class="stat"><small>Latest</small><b id="piLast">$0</b></div>
       </div>
       <ul class="list" id="incomeList"></ul>
-    </div>
-    <div class="card">
-      <h2>Import data</h2>
-      <label>Import file (.json)<input type="file" id="importFile" accept=".json,application/json"></label>
-      <label style="margin-top:10px">or paste it here<textarea id="importText" rows="4" placeholder="Paste the import text"></textarea></label>
-      <button id="importBtn" style="width:100%;margin-top:12px">Import</button>
-      <p class="note" style="margin-top:8px">Adds everything in the file to your account. Run it once.</p>
     </div>
   </section>
 
@@ -1925,66 +1916,6 @@ function spClick(e) {
   }
   else if (d.spApply !== undefined) spApply();
 }
-
-/* =========================================================
-   6g. IMPORT — load a prepared plan (income, bills, properties) into this account
-   ========================================================= */
-const IMPORT_FREQ = ["once", "weekly", "fortnightly", "monthly", "quarterly", "yearly"];
-const IMPORT_COLS = {
-  incomeSources: ["name", "amount", "frequency", "nextDate"],
-  expenses: ["date", "amount", "category", "frequency", "description"],
-  subscriptions: ["name", "amount", "type", "frequency", "dueDate", "remindDays"],
-  bills: ["category", "propertyId", "vendor", "amount", "dueDate", "frequency", "paid", "fileStatus"]
-};
-function importRow(cols, row) {
-  if (!row || typeof row !== "object" || !(Number(row.amount) >= 0) || !IMPORT_FREQ.includes(row.frequency)) return null;
-  const out = {};
-  cols.forEach((k) => {
-    if (row[k] === undefined) return;
-    out[k] = typeof row[k] === "number" ? round2(row[k]) : typeof row[k] === "boolean" ? row[k] : String(row[k]).slice(0, 120);
-  });
-  return out;
-}
-function importPlan(text) {
-  const data = JSON.parse(text), plan = { rows: {}, skipped: 0 };
-  Object.keys(IMPORT_COLS).forEach((name) => {
-    plan.rows[name] = [];
-    (Array.isArray(data[name]) ? data[name] : []).forEach((r) => {
-      const clean = importRow(IMPORT_COLS[name], r);
-      if (clean) plan.rows[name].push(clean); else plan.skipped++;
-    });
-  });
-  plan.properties = (Array.isArray(data.properties) ? data.properties : []).filter((p) => p && PROP_IDS.includes(p.id)).map((p) =>
-    ({ id: p.id, name: String(p.name || "").slice(0, 80), rates: Number(p.rates) || 0, water: Number(p.water) || 0, insurance: Number(p.insurance) || 0, landTax: Number(p.landTax) || 0 }));
-  const base = data.settings && data.settings.pay && Number(data.settings.pay.baseline);
-  plan.baseline = base > 0 ? base : null;
-  return plan;
-}
-function importSummary(plan) {
-  const r = plan.rows, n = (x, w) => x.length + " " + w;
-  return "Import " + [n(r.incomeSources, "income sources"), n(r.expenses, "recurring expenses"), n(r.subscriptions, "bills & subscriptions"),
-    n(r.bills, "property bills"), n(plan.properties, "properties")].join(", ") + "? Only do this once.";
-}
-function runImport(plan) {
-  const batch = writeBatch(db);
-  Object.keys(IMPORT_COLS).forEach((name) => plan.rows[name].forEach((row) =>
-    batch.set(doc(col(name)), { ...row, created: serverTimestamp() })));
-  plan.properties.forEach((p) => { const { id, ...rest } = p; batch.set(doc(db, "users", uid, "properties", id), rest, { merge: true }); });
-  if (plan.baseline) batch.set(doc(db, "users", uid, "settings", "pay"), { baseline: plan.baseline, updated: serverTimestamp() }, { merge: true });
-  batch.commit().then(() => toast("Imported. Everything is in your account now.")).catch((err) => toast("Import failed: " + err.message));
-  $("importText").value = ""; $("importFile").value = "";
-}
-$("importFile").addEventListener("change", async (e) => {
-  const f = e.target.files[0];
-  if (f) $("importText").value = await f.text();
-});
-$("importBtn").addEventListener("click", () => {
-  let plan;
-  try { plan = importPlan($("importText").value); } catch (err) { toast("That doesn't look like an import file."); return; }
-  const total = Object.values(plan.rows).reduce((t, r) => t + r.length, 0) + plan.properties.length;
-  if (!total) { toast("Nothing to import in that file."); return; }
-  showInlineConfirm(importSummary(plan) + (plan.skipped ? " (" + plan.skipped + " rows skipped.)" : ""), () => runImport(plan), "Import");
-});
 
 /* =========================================================
    6h. ADD SHEETS (header + button) and STATS
