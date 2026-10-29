@@ -136,6 +136,9 @@ nav button span{pointer-events:none}
 nav button.on{color:var(--brand)}
 
 .hidden{display:none!important}
+.bankhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.bankhead b{font-size:19px}
+.bankbtns{display:flex;flex-wrap:wrap;gap:2px;margin:2px -6px 4px}
 .check{display:flex;align-items:center;gap:10px;font-size:15px;color:var(--ink)}
 input[type=checkbox]{appearance:auto;-webkit-appearance:checkbox;width:24px;min-height:24px;height:24px;flex:none;accent-color:var(--brand);box-shadow:none}
 .hbtn{min-width:44px;padding:0 8px;display:inline-flex;align-items:center;justify-content:center}
@@ -593,16 +596,24 @@ input[type=file]{padding:9px 12px}
     <div class="card">
       <h2>All accounts</h2>
       <div class="grid"><div class="stat"><small>Total balance</small><b id="acTotal">$0</b></div></div>
-      <ul class="list" id="acctList" style="margin-top:8px"></ul>
-      <p class="note">Balances move by themselves when a bill, transfer or logged payment hits an account. Edit a balance any time to match your bank.</p>
+      <p class="note" style="margin-top:8px">Balances move by themselves when a bill, transfer or logged payment hits an account. Edit a balance any time to match your bank.</p>
     </div>
+    <div id="bankGroups"></div>
     <div class="card"><h2>Transfers</h2><ul class="list" id="xferList"></ul></div>
+    <div class="card addcard" id="bankCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
+      <h2 id="bankFormTitle">Add bank</h2>
+      <form id="bankForm">
+        <label class="full">Bank name<input name="name" required placeholder="e.g. Bank Australia"></label>
+        <button class="full" type="submit" id="bankSubmit">Save bank</button>
+      </form>
+    </div>
     <div class="card addcard" id="acctCard">
       <button type="button" class="ghost x" data-close-sheet>Close</button>
       <h2 id="acctFormTitle">Add account</h2>
       <form id="acctForm">
-        <label class="full">Name<input name="name" required placeholder="e.g. Up Account"></label>
-        <label class="full">Bank<input name="bank" placeholder="e.g. Up, Bank Australia, ING"></label>
+        <label class="full">Account name<input name="name" required placeholder="e.g. Bills account"></label>
+        <label class="full">Bank<select name="bankId" class="bankSel"></select></label>
         <label class="full">Current balance<input type="number" name="balance" step="0.01" inputmode="decimal" required value="0"></label>
         <button class="full" type="submit" id="acctSubmit">Save account</button>
       </form>
@@ -664,7 +675,7 @@ const db = initializeFirestore(app, {
 /* =========================================================
    2. STATE
    ========================================================= */
-const ST = { income: [], expenses: [], goals: [], transfers: [], subscriptions: [], properties: [], bills: [], wishlist: [], settings: [], incomeSources: [], accounts: [], acctTransfers: [] };
+const ST = { income: [], expenses: [], goals: [], transfers: [], subscriptions: [], properties: [], bills: [], wishlist: [], settings: [], incomeSources: [], accounts: [], acctTransfers: [], banks: [] };
 const CATEGORIES = ["Groceries","Eating out","Shopping","Clothes","Fuel","Transport","Bills","Subscriptions",
   "Health","Medication","Gym","Home","Property","Loan","Travel","Tech","Gifts","Kids","Beauty","Other"];
 const DEFAULT_GOALS = [
@@ -678,8 +689,8 @@ const PAY_ANCHOR = new Date("2026-11-04T00:00:00");
 // Fortnights run Monday to Sunday from here (19 Oct – 1 Nov, 2 – 15 Nov, ...). Pay counts for the fortnight it was earned in.
 const PERIOD_ANCHOR = new Date("2026-10-19T00:00:00");
 const PAY_SOURCE = "QR pay";
-let uid = null, unsubs = [], editing = { income: null, expenses: null, subscriptions: null, bills: null, incomeSources: null, accounts: null, acctTransfers: null }, expenseFilter = "all", schedFilter = "all", cashView = "fortnight", billFilter = "all", pendingFile = null;
-const pending = { income: false, expenses: false, goals: false, transfers: false, subscriptions: false, properties: false, bills: false, wishlist: false, settings: false, incomeSources: false, accounts: false, acctTransfers: false };
+let uid = null, unsubs = [], editing = { income: null, expenses: null, subscriptions: null, bills: null, incomeSources: null, accounts: null, acctTransfers: null, banks: null }, expenseFilter = "all", schedFilter = "all", cashView = "fortnight", billFilter = "all", pendingFile = null;
+const pending = { income: false, expenses: false, goals: false, transfers: false, subscriptions: false, properties: false, bills: false, wishlist: false, settings: false, incomeSources: false, accounts: false, acctTransfers: false, banks: false };
 
 /* =========================================================
    3. HELPERS
@@ -797,7 +808,8 @@ function startSync() {
     listen("settings", "updated", "asc"),
     listen("incomeSources", "name", "asc"),
     listen("accounts", "name", "asc"),
-    listen("acctTransfers", "name", "asc")
+    listen("acctTransfers", "name", "asc"),
+    listen("banks", "name", "asc")
   ];
   refreshAlertsButton();
   // Seed default goals once, the first time this account has none.
@@ -1953,6 +1965,7 @@ function resetAddForms() {
   $("transferSubmit").textContent = "Save"; $("transferFormTitle").textContent = "Move money";
   resetBillForm();
   editing.accounts = null; $("acctForm").reset(); $("acctSubmit").textContent = "Save account"; $("acctFormTitle").textContent = "Add account";
+  editing.banks = null; $("bankForm").reset(); $("bankSubmit").textContent = "Save bank"; $("bankFormTitle").textContent = "Add bank";
   editing.acctTransfers = null; $("xferForm").reset(); $("xferForm").nextApply.value = today();
   $("xferSubmit").textContent = "Save transfer"; $("xferFormTitle").textContent = "Add transfer";
 }
@@ -2057,9 +2070,10 @@ $("statsNext").addEventListener("click", () => { if (statsOffset < 0) { statsOff
 /* =========================================================
    6i. ACCOUNTS — balances that follow bills, transfers and logged income
    ========================================================= */
-ADD_FORMS.accounts = [["acctCard", "Add account"], ["xferCard", "Add transfer"]];
+ADD_FORMS.accounts = [["bankCard", "Add bank"], ["acctCard", "Add account"], ["xferCard", "Add transfer"]];
 const acctById = (id) => ST.accounts.find((a) => a.id === id);
-const acctName = (id, outside) => id ? (acctById(id) ? acctById(id).name : "Deleted account") : (outside || "Outside");
+const acctLabel = (a) => (a.bank ? a.bank + " · " : "") + a.name;
+const acctName = (id, outside) => id ? (acctById(id) ? acctLabel(acctById(id)) : "Deleted account") : (outside || "Outside");
 function bumpAccount(id, delta) {
   if (!id || !delta) return;
   updateDoc(doc(db, "users", uid, "accounts", id), { balance: increment(round2(delta)) }).catch(() => {});
@@ -2078,7 +2092,9 @@ function linkFields(d, anchor, existing) {
   return d;
 }
 function renderAccountSelects() {
-  const list = ST.accounts.map((a) => '<option value="' + a.id + '">' + esc(a.name) + "</option>").join("");
+  const list = ST.accounts.map((a) => '<option value="' + a.id + '">' + esc(acctLabel(a)) + "</option>").join("");
+  const banks = ST.banks.map((b) => '<option value="' + b.id + '">' + esc(b.name) + "</option>").join("");
+  document.querySelectorAll("select.bankSel").forEach((sel) => setOptions(sel, '<option value="">No bank</option>' + banks));
   document.querySelectorAll("select.acctSel").forEach((sel) => setOptions(sel, '<option value="">None</option>' + list));
   document.querySelectorAll("select.acctExt").forEach((sel) => setOptions(sel, '<option value="">Outside my accounts</option>' + list));
 }
@@ -2150,7 +2166,7 @@ function acctFlows(id) {
 }
 function acctRow(a) {
   const f = acctFlows(a.id), net = f.inn - f.out;
-  return '<li><div class="main"><div>' + esc(a.name) + '</div><div class="sub wrap">' + (a.bank ? esc(a.bank) + " · " : "") + "In " + money(f.inn) + " · out " + money(f.out) +
+  return '<li><div class="main"><div>' + esc(a.name) + '</div><div class="sub wrap">' + "In " + money(f.inn) + " · out " + money(f.out) +
     ' · <span class="' + (net >= 0 ? "ok" : "bad") + '">net ' + money(net) + '/fn</span></div></div><span class="amt">' + money(a.balance || 0) + '</span>' +
     '<button class="ghost" data-edit-acct="' + a.id + '">Edit</button><button class="ghost" data-del="accounts:' + a.id + '">✕</button></li>';
 }
@@ -2160,10 +2176,29 @@ function xferRow(t) {
     " · " + kind + " · " + cap(t.frequency) + (t.nextApply ? " · next " + fmtDate(t.nextApply) : "") + '</div></div><span class="amt">' + money(t.amount) + '</span>' +
     '<button class="ghost" data-edit-xfer="' + t.id + '">Edit</button><button class="ghost" data-del="acctTransfers:' + t.id + '">✕</button></li>';
 }
+// Accounts sit under their bank. Older accounts that only have a bank name are grouped by that name.
+function bankGroups() {
+  const key = (n) => String(n || "").trim().toLowerCase(), groups = new Map();
+  ST.banks.forEach((b) => groups.set(key(b.name), { id: b.id, name: b.name, accounts: [] }));
+  ST.accounts.forEach((a) => {
+    const b = a.bankId ? ST.banks.find((x) => x.id === a.bankId) : null, name = b ? b.name : a.bank || "";
+    if (!groups.has(key(name))) groups.set(key(name), { id: "", name: name || "No bank", accounts: [] });
+    groups.get(key(name)).accounts.push(a);
+  });
+  return [...groups.values()];
+}
+function bankHtml(g) {
+  const total = g.accounts.reduce((t, a) => t + (Number(a.balance) || 0), 0);
+  const btns = (g.id ? '<button class="ghost" data-edit-bank="' + g.id + '">Rename</button>' : "") +
+    '<button class="ghost" data-add-acct="' + g.id + '">+ Account</button>' + (g.id ? '<button class="ghost" data-del-bank="' + g.id + '">Remove</button>' : "");
+  const rows = g.accounts.length ? g.accounts.map(acctRow).join("") : '<li class="empty">No accounts in this bank yet.</li>';
+  return '<div class="card"><div class="bankhead"><b>' + esc(g.name) + '</b><span class="amt">' + money(total) + '</span></div>' +
+    '<div class="sub note">' + g.accounts.length + (g.accounts.length === 1 ? " account" : " accounts") + '</div><div class="bankbtns">' + btns + '</div><ul class="list">' + rows + "</ul></div>";
+}
 function renderAccounts() {
   const total = ST.accounts.reduce((t, a) => t + (Number(a.balance) || 0), 0);
   $("acTotal").textContent = money(total);
-  $("acctList").innerHTML = ST.accounts.length ? ST.accounts.map(acctRow).join("") : '<li class="empty">No accounts yet. Tap + to add one.</li>';
+  $("bankGroups").innerHTML = bankGroups().length ? bankGroups().map(bankHtml).join("") : '<div class="card"><p class="empty">No banks yet. Tap + to add your first bank.</p></div>';
   $("xferList").innerHTML = ST.acctTransfers.length ? ST.acctTransfers.map(xferRow).join("") : '<li class="empty">No transfers yet.</li>';
   $("hAcctTotal").textContent = money(total);
   $("hAcctN").textContent = ST.accounts.length + (ST.accounts.length === 1 ? " account" : " accounts") + " · total";
@@ -2174,9 +2209,24 @@ function renderAccounts() {
 $("homeAccounts").addEventListener("click", () => showView("accounts"));
 $("acctForm").addEventListener("submit", (e) => {
   e.preventDefault();
-  save("accounts", editing.accounts, formData(e.target));
+  const d = formData(e.target), bank = ST.banks.find((b) => b.id === d.bankId);
+  d.bank = bank ? bank.name : "";
+  save("accounts", editing.accounts, d);
   editing.accounts = null; e.target.reset();
   $("acctSubmit").textContent = "Save account"; $("acctFormTitle").textContent = "Add account";
+  closeSheets(false);
+});
+$("bankForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const name = formData(e.target).name.trim();
+  if (editing.banks) {
+    const batch = writeBatch(db);
+    batch.update(doc(db, "users", uid, "banks", editing.banks), { name: name });
+    ST.accounts.filter((a) => a.bankId === editing.banks).forEach((a) => batch.update(doc(db, "users", uid, "accounts", a.id), { bank: name }));
+    batch.commit().catch((err) => toast("Save failed: " + err.message));
+  } else save("banks", null, { name: name });
+  editing.banks = null; e.target.reset();
+  $("bankSubmit").textContent = "Save bank"; $("bankFormTitle").textContent = "Add bank";
   closeSheets(false);
 });
 $("xferForm").addEventListener("submit", (e) => {
@@ -2193,9 +2243,22 @@ document.addEventListener("click", (e) => {
   const t = e.target;
   if (t.dataset.editAcct) {
     const a = acctById(t.dataset.editAcct), f = $("acctForm").elements;
-    f.name.value = a.name; f.bank.value = a.bank || ""; f.balance.value = a.balance ?? 0;
+    const match = ST.banks.find((b) => b.name.toLowerCase() === String(a.bank || "").toLowerCase());
+    f.name.value = a.name; f.bankId.value = a.bankId || (match ? match.id : ""); f.balance.value = a.balance ?? 0;
     editing.accounts = a.id; $("acctSubmit").textContent = "Update"; $("acctFormTitle").textContent = "Editing " + a.name;
     openSheet("acctCard");
+  }
+  if (t.dataset.editBank) {
+    const b = ST.banks.find((x) => x.id === t.dataset.editBank);
+    $("bankForm").elements.name.value = b.name; editing.banks = b.id;
+    $("bankSubmit").textContent = "Update"; $("bankFormTitle").textContent = "Rename " + b.name;
+    openSheet("bankCard");
+  }
+  if (t.dataset.addAcct !== undefined) { openSheet("acctCard"); $("acctForm").elements.bankId.value = t.dataset.addAcct; }
+  if (t.dataset.delBank) {
+    const b = ST.banks.find((x) => x.id === t.dataset.delBank);
+    if (ST.accounts.some((a) => a.bankId === b.id)) toast("Move or delete this bank's accounts first.");
+    else showInlineConfirm("Remove " + b.name + "?", () => remove("banks", b.id), "Remove");
   }
   if (t.dataset.editXfer) {
     const x = ST.acctTransfers.find((y) => y.id === t.dataset.editXfer), f = $("xferForm").elements;
