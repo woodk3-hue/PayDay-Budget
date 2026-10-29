@@ -279,6 +279,7 @@ input[type=file]{padding:9px 12px}
         <div class="stat"><small>Spent</small><b id="sSpent">$0</b></div>
         <div class="stat"><small>Left over</small><b id="sLeft">$0</b></div>
       </div>
+      <p class="note" id="periodNote" style="margin-top:8px"></p>
     </div>
     <div class="card">
       <h2>Recurring bills (per fortnight)</h2>
@@ -681,8 +682,11 @@ const DEFAULT_GOALS = [
   { name: "Tech", target: 4000 },
   { name: "Gear", target: 2000 }
 ];
-// First QR payday in the new plan; every fortnight from here is a pay period.
+// Paydays: Wednesday, every 14 days from here (the pay for a fortnight lands 3 days after it ends).
 const PAY_ANCHOR = new Date("2026-11-04T00:00:00");
+// Fortnights run Monday to Sunday from here (19 Oct – 1 Nov, 2 – 15 Nov, ...). Pay counts for the fortnight it was earned in.
+const PERIOD_ANCHOR = new Date("2026-10-19T00:00:00");
+const PAY_SOURCE = "QR pay";
 let uid = null, unsubs = [], editing = { income: null, expenses: null, subscriptions: null, bills: null, incomeSources: null, accounts: null, acctTransfers: null }, expenseFilter = "all", schedFilter = "all", cashView = "fortnight", billFilter = "all", pendingFile = null;
 const pending = { income: false, expenses: false, goals: false, transfers: false, subscriptions: false, properties: false, bills: false, wishlist: false, settings: false, incomeSources: false, accounts: false, acctTransfers: false };
 
@@ -699,12 +703,15 @@ const FREQ_PER_FORTNIGHT = { weekly: 2, fortnightly: 1, monthly: 12 / 26, quarte
 
 function currentPeriod() {
   const dayMs = 86400000, now = new Date(); now.setHours(0, 0, 0, 0);
-  const n = Math.floor((now - PAY_ANCHOR) / (14 * dayMs));
-  const start = new Date(PAY_ANCHOR.getTime() + n * 14 * dayMs);
+  const n = Math.floor((now - PERIOD_ANCHOR) / (14 * dayMs));
+  const start = new Date(PERIOD_ANCHOR.getTime() + n * 14 * dayMs);
   const end = new Date(start.getTime() + 13 * dayMs);
   return { start: start.toLocaleDateString("en-CA"), end: end.toLocaleDateString("en-CA") };
 }
 const inPeriod = (d, p) => d >= p.start && d <= p.end;
+// A pay entry belongs to the fortnight that ended just before it landed, so a holiday-shifted payday still counts for the right one.
+const periodStartDay = (d) => { const a = dayNum(PERIOD_ANCHOR.toLocaleDateString("en-CA")); return a + 14 * Math.floor((dayNum(d) - a) / 14); };
+const incomePeriodDate = (i) => (i.source === PAY_SOURCE ? isoFromDay(periodStartDay(i.date) - 1) : i.date);
 
 // Renewal scheduler (same rules as the OptiPlex notifier): roll a past due date forward
 // by its billing cycle until it is today or later. One-off purchases never roll.
@@ -862,7 +869,7 @@ function recurringPerFortnight() {
 }
 function periodStats() {
   const p = currentPeriod();
-  const inc = ST.income.filter((i) => inPeriod(i.date, p)).reduce((s, i) => s + i.amount, 0);
+  const inc = ST.income.filter((i) => inPeriod(incomePeriodDate(i), p)).reduce((s, i) => s + i.amount, 0);
   const spentRows = ST.expenses.filter((e) => e.frequency === "once" && inPeriod(e.date, p));
   const recurring = recurringPerFortnight();
   const spent = spentRows.reduce((s, e) => s + e.amount, 0) + recurring;
@@ -871,6 +878,9 @@ function periodStats() {
 function renderHome() {
   const { p, inc, spentRows, recurring, spent, left } = periodStats();
   $("periodTitle").textContent = "This fortnight · " + fmtDate(p.start) + " – " + fmtDate(p.end);
+  const payDay = isoFromDay(dayNum(p.end) + 3), paid = ST.income.some((i) => i.source === PAY_SOURCE && inPeriod(incomePeriodDate(i), p));
+  $("periodNote").textContent = paid ? "Pay for this fortnight is in." : "Pay for this fortnight is due " +
+    new Date(payDay + "T00:00:00").toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "short" }) + ".";
   $("sIncome").textContent = money(inc);
   $("sSpent").textContent = money(spent);
   $("sLeft").textContent = money(left);
@@ -929,7 +939,8 @@ function incomeRow(i) {
   const usual = ST.incomeSources.find((x) => x.name === i.source), diff = usual ? round2(i.amount - usual.amount) : 0;
   const vs = Math.abs(diff) >= 0.01 ? " · " + (diff > 0 ? "+" : "−") + money(Math.abs(diff)) + " vs usual" : "";
   const note = i.note ? " · " + esc(i.note) : "";
-  return '<li><div class="main"><div>' + esc(i.source) + '</div><div class="sub wrap">' + fmtLong(i.date) + vs + note + '</div></div>' +
+  const earned = i.source === PAY_SOURCE ? " · for fortnight ending " + fmtDate(incomePeriodDate(i)) : "";
+  return '<li><div class="main"><div>' + esc(i.source) + '</div><div class="sub wrap">' + fmtLong(i.date) + earned + vs + note + '</div></div>' +
     '<span class="amt pos">' + money(i.amount) + '</span>' +
     '<button class="ghost" data-edit-income="' + i.id + '">Edit</button>' +
     '<button class="ghost" data-del="income:' + i.id + '">✕</button></li>';
@@ -2038,9 +2049,9 @@ let statsView = "fortnight", statsOffset = 0;
 // A fortnight follows your pay periods; month and year are calendar periods. k scales per-fortnight amounts to the period.
 function statsRange(offset) {
   if (statsView === "fortnight") {
-    const anchor = dayNum(PAY_ANCHOR.toLocaleDateString("en-CA")), n = Math.floor((dayNum(today()) - anchor) / 14) + offset;
+    const anchor = dayNum(PERIOD_ANCHOR.toLocaleDateString("en-CA")), n = Math.floor((dayNum(today()) - anchor) / 14) + offset;
     const start = isoFromDay(anchor + 14 * n), end = isoFromDay(anchor + 14 * n + 13);
-    return { start: start, end: end, label: fmtDate(start) + " – " + fmtLong(end), short: fmtDate(start), k: 1 };
+    return { start: start, end: end, label: fmtDate(start) + " – " + fmtLong(end), short: fmtDate(start), k: 1, earned: true };
   }
   const now = new Date();
   if (statsView === "month") {
@@ -2052,7 +2063,7 @@ function statsRange(offset) {
   return { start: y + "-01-01", end: y + "-12-31", label: String(y), short: String(y), k: 26 };
 }
 function statsTotals(r) {
-  const income = ST.income.filter((i) => i.date >= r.start && i.date <= r.end);
+  const income = ST.income.filter((i) => { const d = r.earned ? incomePeriodDate(i) : i.date; return d >= r.start && d <= r.end; });
   const once = ST.expenses.filter((e) => e.frequency === "once" && e.date >= r.start && e.date <= r.end);
   const spent = once.reduce((t, e) => t + e.amount, 0), recurring = recurringPerFortnight() * r.k;
   return { income: income, incTotal: income.reduce((t, i) => t + i.amount, 0), once: once, spent: spent, recurring: recurring, expenses: spent + recurring };
