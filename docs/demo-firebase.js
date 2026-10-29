@@ -4,6 +4,7 @@ const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.
 const store = {
   income: [
     { date: day(-2), amount: 2450, source: "QR pay", note: "" },
+    { date: day(6), amount: 2450, source: "QR pay", note: "", wages: true },
     { date: day(-5), amount: 620, source: "Zane rent", note: "" },
     { date: day(-9), amount: 480, source: "Apartment rent", note: "" }
   ],
@@ -46,8 +47,8 @@ const store = {
   ],
   incomeSources: [
     { name: "QR pay", amount: 3000, frequency: "fortnightly", nextDate: day(5), accountId: "acc2", wages: true, fixed: false },
-    { name: "Rent 1", amount: 1100, frequency: "fortnightly", nextDate: day(3), accountId: "acc3", wages: false, fixed: true },
-    { name: "Rent 2", amount: 3791.67, frequency: "monthly", nextDate: day(12), accountId: "acc4", wages: false, fixed: false }
+    { name: "Rent 1", amount: 1100, frequency: "fortnightly", nextDate: day(3), accountId: "acc3", wages: false, fixed: true, propertyId: "A" },
+    { name: "Rent 2", amount: 3791.67, frequency: "monthly", nextDate: day(12), accountId: "acc4", wages: false, fixed: false, propertyId: "B" }
   ],
   wishlist: [
     { name: "MacBook Pro", cost: 3500, kind: "want", perPay: 250, saved: 750, order: 0 },

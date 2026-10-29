@@ -269,6 +269,14 @@ input[type=file]{padding:9px 12px}
       <p class="note" id="periodNote"></p>
       <button class="full" id="allotBtn" style="width:100%;margin-top:10px">Allot left over</button>
     </div>
+    <div class="card" id="homeProperty" role="button" tabindex="0" style="cursor:pointer">
+      <h2>Property · per fortnight · tap to open</h2>
+      <div class="grid">
+        <div class="stat"><small>Rent in</small><b id="hpIn">$0</b></div>
+        <div class="stat"><small>Costs</small><b id="hpCost">$0</b></div>
+        <div class="stat"><small>Net</small><b id="hpNet">$0</b></div>
+      </div>
+    </div>
     <div class="card hidden" id="manualCard"><h2>Bills you pay yourself</h2><ul class="list" id="manualList"></ul></div>
     <div class="card">
       <h2>Recurring bills (per fortnight)</h2>
@@ -316,6 +324,7 @@ input[type=file]{padding:9px 12px}
         </label>
         <label class="full">Next pay date<input type="date" name="nextDate" required></label>
         <label class="full">Paid into<select name="accountId" class="acctSel"></select></label>
+        <label class="full">Property (if this is rent)<select name="propertyId" id="srcProp"></select></label>
         <label class="check full"><input type="checkbox" name="wages"> This is my wages (counts for the fortnight it was earned in, and flags extra pay)</label>
         <label class="check full"><input type="checkbox" name="fixed"> Same amount every time (pre-fill it when I enter it)</label>
         <button class="full" type="submit" id="srcSubmit">Save source</button>
@@ -492,6 +501,16 @@ input[type=file]{padding:9px 12px}
 
   <!-- PROPERTY & BILLS -->
   <section id="view-property" class="view hidden">
+    <div class="card">
+      <h2>Rent vs costs (per fortnight)</h2>
+      <div class="grid">
+        <div class="stat"><small>Rent in</small><b id="ptIn">$0</b></div>
+        <div class="stat"><small>Costs</small><b id="ptCost">$0</b></div>
+        <div class="stat"><small>Net</small><b id="ptNet">$0</b></div>
+      </div>
+      <ul class="list" id="propFlowList" style="margin-top:8px"></ul>
+      <p class="note">Rent comes from income sources that aren't wages. Pick the property on each rent source (Income page).</p>
+    </div>
     <div class="card">
       <h2>Set aside every pay</h2>
       <div class="grid">
@@ -882,17 +901,20 @@ function goalBalance(g) {
 function recurringPerFortnight() {
   return ST.expenses.concat(ST.subscriptions, ST.bills.filter(isRecurringBill)).reduce((s, e) => s + e.amount * (FREQ_PER_FORTNIGHT[e.frequency] || 0), 0);
 }
+// Commitments = my own recurring bills. Property costs live on the Property tab.
+function commitmentsPerFortnight() {
+  const personal = ST.bills.filter((b) => b.category === "personal" && isRecurringBill(b));
+  return ST.expenses.filter((e) => e.category !== "Property").concat(ST.subscriptions, personal)
+    .reduce((t, x) => t + x.amount * (FREQ_PER_FORTNIGHT[x.frequency] || 0), 0);
+}
+// Home counts only my pay (wages): left over = pay − commitments − anything already allotted.
 function periodStats() {
   const p = currentPeriod();
-  const inc = ST.income.filter((i) => inPeriod(incomePeriodDate(i), p)).reduce((s, i) => s + i.amount, 0);
+  const inc = ST.income.filter((i) => isWages(i) && inPeriod(incomePeriodDate(i), p)).reduce((s, i) => s + i.amount, 0);
   const spentRows = ST.expenses.filter((e) => e.frequency === "once" && inPeriod(e.date, p));
-  const recurring = recurringPerFortnight();
-  const spent = spentRows.reduce((s, e) => s + e.amount, 0) + recurring;
+  const recurring = commitmentsPerFortnight();
   const allotted = ST.allotments.filter((a) => inPeriod(a.date, p)).reduce((t, a) => t + a.amount, 0);
-  // With payday transfers on, bills are paid from the accounts those transfers fund, so left over is pay minus what was sent out.
-  const sent = ST.paydayMoves.filter((m) => inPeriod(isoFromDay(periodStartDay(m.date) - 1), p)).reduce((t, m) => t + m.amount, 0);
-  const left = paydayOn() ? inc - sent - allotted : inc - spent - allotted;
-  return { p: p, inc: inc, spentRows: spentRows, recurring: recurring, spent: spent, allotted: allotted, sent: sent, left: left };
+  return { p: p, inc: inc, spentRows: spentRows, recurring: recurring, allotted: allotted, left: inc - recurring - allotted };
 }
 function renderHome() {
   const { p, inc, spentRows, recurring, spent, left } = periodStats();
@@ -985,7 +1007,8 @@ function renderSavings() {
   $("transferList").innerHTML = recent.length ? recent.map(transferRow).join("") : '<li class="empty">No moves yet.</li>';
 }
 // Spare cash per pay: Safe to Spend when income sources are set, otherwise this fortnight's left-over.
-const spareFortnight = () => ST.incomeSources.length ? incomePerFortnight() - recurringPerFortnight() : periodStats().left;
+const wagesPerFortnight = () => ST.incomeSources.filter((x) => x.wages).reduce((t, x) => t + toFortnight(x.amount, x.frequency), 0);
+const spareFortnight = () => wagesPerFortnight() > 0 ? wagesPerFortnight() - commitmentsPerFortnight() : periodStats().left;
 // What it takes to have `remaining` by a date: pays left, amount per pay, and whether it fits the spare cash.
 function datePlan(remaining, dateStr) {
   if (!dateStr || remaining <= 0.005) return null;
@@ -1288,18 +1311,34 @@ function receiptRow(r) {
 function setOptions(sel, html) {
   const keep = sel.value; sel.innerHTML = html; if (keep) sel.value = keep;
 }
+const rentSources = () => ST.incomeSources.filter((x) => !x.wages);
+const rentFortnight = (id) => rentSources().filter((x) => (x.propertyId || "") === id).reduce((t, x) => t + toFortnight(x.amount, x.frequency), 0);
+const propCosts = (id) => { const c = propSetAside(id); return c.base + c.extra; };
+function flowRow(label, rent, costs) {
+  const net = rent - costs;
+  return '<li><div class="main"><div>' + esc(label) + '</div><div class="sub wrap">Rent ' + money(rent) + " · costs " + money(costs) +
+    '</div></div><span class="amt ' + (net >= 0 ? "pos" : "neg") + '">' + money(net) + "</span></li>";
+}
+function renderPropertyFlows() {
+  const rent = rentSources().reduce((t, x) => t + toFortnight(x.amount, x.frequency), 0), costs = PROP_IDS.reduce((t, id) => t + propCosts(id), 0), net = rent - costs;
+  [["ptIn", rent], ["ptCost", costs], ["ptNet", net], ["hpIn", rent], ["hpCost", costs], ["hpNet", net]].forEach((x) => { $(x[0]).textContent = money(x[1]); });
+  ["ptNet", "hpNet"].forEach((id) => { $(id).className = net >= 0 ? "pos" : "neg"; });
+  const loose = rentFortnight("");
+  $("propFlowList").innerHTML = PROP_IDS.map((id) => flowRow(propName(id), rentFortnight(id), propCosts(id))).join("") +
+    (loose > 0.005 ? flowRow("Rent not assigned to a property", loose, 0) : "");
+}
 function renderProperty() {
   const opts = PROP_IDS.map((id) => '<option value="' + id + '">' + esc(propName(id)) + "</option>").join("");
   setOptions($("propSelect"), opts); setOptions($("billProp"), opts);
+  setOptions($("srcProp"), '<option value="">No property</option>' + opts);
 
   const sums = PROP_IDS.map((id) => ({ id: id, ...propSetAside(id) }));
-  const personal = ST.bills.filter((b) => openBill(b) && b.category === "personal").reduce((t, b) => t + billExtra(b), 0);
-  const fixed = sums.reduce((t, s) => t + s.base, 0), extra = sums.reduce((t, s) => t + s.extra, 0) + personal;
+  const fixed = sums.reduce((t, s) => t + s.base, 0), extra = sums.reduce((t, s) => t + s.extra, 0);
   $("pFixed").textContent = money(fixed);
   $("pExtra").textContent = money(extra);
   $("pTotal").textContent = money(fixed + extra);
-  $("propSummaryList").innerHTML = sums.map((s) => summaryRow(propName(s.id), s.base, s.extra)).join("") +
-    summaryRow("Personal bills", null, personal);
+  $("propSummaryList").innerHTML = sums.map((s) => summaryRow(propName(s.id), s.base, s.extra)).join("");
+  renderPropertyFlows();
 
   const rows = ST.bills.filter((b) => billFilter === "all" || b.category === billFilter)
     .sort((a, b) => {
@@ -1717,12 +1756,11 @@ const incomePerFortnight = () => ST.incomeSources.reduce((t, s) => t + toFortnig
 function renderCashflow() {
   const st = periodStats();
   $("cIncome").textContent = money(st.inc);
-  $("cBillsLbl").textContent = paydayOn() ? "Sent to accounts" : "Bills";
-  $("cBills").textContent = money(paydayOn() ? st.sent : st.recurring);
+  $("cBillsLbl").textContent = "Commitments";
+  $("cBills").textContent = money(st.recurring);
   $("sLeft").textContent = money(st.left);
   $("sLeft").className = st.left >= 0 ? "pos" : "neg";
-  $("cNote").textContent = (paydayOn() ? "Left over = pay received − payday transfers sent" : "Left over = pay received − bills − " + money(st.spent - st.recurring) + " spent") +
-    (st.allotted ? " − " + money(st.allotted) + " already allotted" : "") + ".";
+  $("cNote").textContent = "Left over = your pay − your bills" + (st.allotted ? " − " + money(st.allotted) + " already allotted" : "") + ". Property is separate.";
   $("allotBtn").classList.toggle("hidden", !(st.left > 0.005 && ST.accounts.length > 1));
 }
 
@@ -1741,7 +1779,7 @@ function renderSources() {
 $("srcForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const d = formData(e.target);
-  d.accountId = d.accountId || ""; d.wages = !!d.wages; d.fixed = !!d.fixed;
+  d.accountId = d.accountId || ""; d.wages = !!d.wages; d.fixed = !!d.fixed; d.propertyId = d.wages ? "" : (d.propertyId || "");
   save("incomeSources", editing.incomeSources, d);
   editing.incomeSources = null; e.target.reset();
   e.target.nextDate.value = today();
@@ -1753,7 +1791,7 @@ function startEditSrc(s) {
   const f = $("srcForm").elements;
   ["name", "amount", "frequency", "nextDate"].forEach((k) => { f[k].value = s[k] ?? ""; });
   f.nextDate.value = nextDue({ dueDate: s.nextDate, frequency: s.frequency });
-  f.accountId.value = s.accountId || ""; f.wages.checked = !!s.wages; f.fixed.checked = !!s.fixed;
+  f.accountId.value = s.accountId || ""; f.wages.checked = !!s.wages; f.fixed.checked = !!s.fixed; f.propertyId.value = s.propertyId || "";
   editing.incomeSources = s.id;
   $("srcSubmit").textContent = "Update";
   $("srcFormTitle").textContent = "Editing " + s.name;
@@ -2212,6 +2250,7 @@ function renderAccounts() {
   $("manualList").innerHTML = due.map(manualRow).join("");
 }
 $("homeAccounts").addEventListener("click", () => showView("accounts"));
+$("homeProperty").addEventListener("click", () => showView("property"));
 $("acctForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const d = formData(e.target), bank = ST.banks.find((b) => b.id === d.bankId);
