@@ -12,7 +12,11 @@ const store = {
     { date: day(-3), amount: 52, category: "Fuel", frequency: "once", description: "Ampol" },
     { date: day(-4), amount: 34.5, category: "Eating out", frequency: "once", description: "Lunch" },
     { date: day(-30), amount: 1850, category: "Loan", frequency: "monthly", description: "Mortgage" },
-    { date: day(-30), amount: 95, category: "Gym", frequency: "fortnightly", description: "Gym" }
+    { date: day(-30), amount: 95, category: "Gym", frequency: "fortnightly", description: "Gym" },
+    { date: day(-20), amount: 550, category: "Property", frequency: "quarterly", description: "Council rates" },
+    { date: day(-10), amount: 180, category: "Property", frequency: "quarterly", description: "Water" },
+    { date: day(-100), amount: 1200, category: "Bills", frequency: "yearly", description: "Car insurance" },
+    { date: day(-2), amount: 60, category: "Groceries", frequency: "weekly", description: "Weekly shop" }
   ],
   goals: [
     { id: "g1", name: "Emergency fund", target: 10000, opening: 4200 },
@@ -39,6 +43,11 @@ const store = {
     { category: "property", propertyId: "B", vendor: "Allianz Insurance", amount: 1100, dueDate: day(25), paid: false, fileStatus: "pending" },
     { category: "maintenance", propertyId: "A", vendor: "Smith Plumbing", amount: 340, dueDate: day(-8), paid: true, fileStatus: "filed" },
     { category: "personal", propertyId: "", vendor: "Telstra", amount: 129, dueDate: day(5), paid: false, fileStatus: "none" }
+  ],
+  incomeSources: [
+    { name: "Job", amount: 2450, frequency: "fortnightly", nextDate: day(5) },
+    { name: "Property 1 rent", amount: 310, frequency: "fortnightly", nextDate: day(3) },
+    { name: "Property 2 rent", amount: 1350, frequency: "monthly", nextDate: day(12) }
   ],
   wishlist: [{ name: "MacBook Pro", cost: 3500, kind: "want", perPay: 250, saved: 750 }],
   settings: [],
