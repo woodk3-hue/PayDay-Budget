@@ -138,6 +138,33 @@ nav button span{pointer-events:none}
 nav button.on{color:var(--brand)}
 
 .hidden{display:none!important}
+.check{display:flex;align-items:center;gap:10px;font-size:15px;color:var(--ink)}
+input[type=checkbox]{appearance:auto;-webkit-appearance:checkbox;width:24px;min-height:24px;height:24px;flex:none;accent-color:var(--brand);box-shadow:none}
+.hbtn{min-width:44px;padding:0 8px;display:inline-flex;align-items:center;justify-content:center}
+header button.ghost.hbtn{min-height:44px}
+.hbtn svg{width:24px;height:24px;pointer-events:none}
+/* Add forms live in bottom sheets opened from the header + button */
+.addcard{display:none}
+.addcard.open{display:block;position:fixed;left:0;right:0;margin:0 auto;bottom:0;width:min(560px,100%);max-height:90vh;overflow:auto;z-index:650;
+  border-radius:28px 28px 0 0;background:var(--card);padding:22px 18px calc(22px + env(safe-area-inset-bottom));
+  -webkit-backdrop-filter:none;backdrop-filter:none;animation:rise .38s cubic-bezier(.2,.9,.3,1)}
+.addcard .x{position:absolute;top:6px;right:8px}
+.sheetback{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:640;animation:fade .2s ease}
+nav.none::before{opacity:0}
+/* Stats */
+.statsnav{display:flex;align-items:center;justify-content:space-between;margin:6px 0 8px}
+.statsnav b{font-size:17px}
+.statsnav button:disabled{opacity:.3}
+.chart{display:flex;gap:8px;height:150px;align-items:stretch}
+.chart .col{flex:1;display:flex;flex-direction:column;min-width:0}
+.chart .bars{flex:1;display:flex;align-items:flex-end;gap:3px}
+.chart .bars i{flex:1;display:block;border-radius:6px 6px 2px 2px}
+.chart .inc{background:linear-gradient(180deg,#63e6a0,var(--green))}
+.chart .exp{background:linear-gradient(180deg,#64d2ff,var(--brand))}
+.chart small{text-align:center;font-size:11px;color:var(--muted);margin-top:4px;white-space:nowrap}
+.chart .cur small{color:var(--ink);font-weight:600}
+.legend{display:flex;gap:16px;font-size:13px;color:var(--muted);margin-top:10px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px}
 
 /* Sign-in */
 #login{min-height:75vh;display:grid;place-items:center;text-align:center;padding:0 20px}
@@ -209,6 +236,8 @@ input[type=file]{padding:9px 12px}
 <header>
   <h1 id="pageTitle">Budget</h1>
   <span id="syncPill" class="pill">Synced</span>
+  <button id="statsBtn" class="ghost hbtn hidden" aria-label="Stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V11M12 20V4M19 20v-6"/></svg></button>
+  <button id="addBtn" class="ghost hbtn hidden" aria-label="Add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button>
   <button id="signOutBtn" class="ghost hidden">Sign out</button>
 </header>
 
@@ -238,6 +267,11 @@ input[type=file]{padding:9px 12px}
       </div>
       <p class="note" id="cNote" style="margin-top:8px"></p>
     </div>
+    <div class="card" id="homeAccounts" role="button" tabindex="0" style="cursor:pointer">
+      <h2>Accounts · tap to open</h2>
+      <div class="grid"><div class="stat"><small id="hAcctN">0 accounts</small><b id="hAcctTotal">$0</b></div></div>
+    </div>
+    <div class="card hidden" id="manualCard"><h2>Bills you pay yourself</h2><ul class="list" id="manualList"></ul></div>
     <div class="card">
       <h2 id="periodTitle">This fortnight</h2>
       <div class="grid">
@@ -276,7 +310,8 @@ input[type=file]{padding:9px 12px}
       <h2>Income sources (normalised per fortnight)</h2>
       <ul class="list" id="srcList"></ul>
     </div>
-    <div class="card">
+    <div class="card addcard" id="srcCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
       <h2 id="srcFormTitle">Add income source</h2>
       <form id="srcForm">
         <label class="full">Name<input name="name" required placeholder="e.g. Job, Property 1 rent"></label>
@@ -287,10 +322,12 @@ input[type=file]{padding:9px 12px}
           </select>
         </label>
         <label class="full">Next pay date<input type="date" name="nextDate" required></label>
+        <label class="full">Paid into<select name="accountId" class="acctSel"></select></label>
         <button class="full" type="submit" id="srcSubmit">Save source</button>
       </form>
     </div>
-    <div class="card">
+    <div class="card addcard" id="incomeCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
       <h2 id="incomeFormTitle">Add income</h2>
       <form id="incomeForm">
         <label>Date<input type="date" name="date" required></label>
@@ -301,11 +338,21 @@ input[type=file]{padding:9px 12px}
             <option>Car spot</option><option>Tax refund</option><option>Other</option>
           </select>
         </label>
+        <label class="full">Paid into<select name="accountId" class="acctSel"></select></label>
         <label class="full">Note<input name="note" placeholder="Optional"></label>
         <button class="full" type="submit">Save income</button>
       </form>
     </div>
-    <div class="card"><h2>Income history</h2><ul class="list" id="incomeList"></ul></div>
+    <div class="card">
+      <h2>Past income</h2>
+      <div class="toggle chips" id="incomeFilter"></div>
+      <div class="grid" style="margin:10px 0 4px">
+        <div class="stat"><small>Total</small><b id="piTotal">$0</b></div>
+        <div class="stat"><small id="piCount">Average</small><b id="piAvg">$0</b></div>
+        <div class="stat"><small>Latest</small><b id="piLast">$0</b></div>
+      </div>
+      <ul class="list" id="incomeList"></ul>
+    </div>
     <div class="card">
       <h2>Import data</h2>
       <label>Import file (.json)<input type="file" id="importFile" accept=".json,application/json"></label>
@@ -330,7 +377,8 @@ input[type=file]{padding:9px 12px}
       <ul class="list" id="schedList"></ul>
       <p class="note">Each bill's allocation = amount × times per year ÷ 26. Includes recurring property and personal bills. One-offs aren't listed.</p>
     </div>
-    <div class="card">
+    <div class="card addcard" id="expenseCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
       <h2 id="expenseFormTitle">Add expense</h2>
       <form id="expenseForm">
         <label>Date<input type="date" name="date" required></label>
@@ -344,6 +392,8 @@ input[type=file]{padding:9px 12px}
           </select>
         </label>
         <label class="full">Description<input name="description" required placeholder="e.g. Woolworths"></label>
+        <label class="full">Paid from<select name="accountId" class="acctSel"></select></label>
+        <label class="check full"><input type="checkbox" name="manual"> I pay this one myself (don't take it off automatically)</label>
         <button class="full" type="submit">Save expense</button>
       </form>
     </div>
@@ -376,7 +426,8 @@ input[type=file]{padding:9px 12px}
       <button class="full" id="wishSaveBtn" style="width:100%;margin-top:12px">Save to wishlist</button>
     </div>
     <div class="card"><h2>Wishlist · tap an item to edit</h2><ul class="list" id="wishList"></ul></div>
-    <div class="card">
+    <div class="card addcard" id="transferCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
       <h2 id="transferFormTitle">Move money</h2>
       <form id="transferForm">
         <label class="full">Goal<select name="goalId" id="goalSelect" required></select></label>
@@ -393,7 +444,8 @@ input[type=file]{padding:9px 12px}
       </form>
     </div>
     <div class="card"><h2>Goals</h2><ul class="list" id="goalList"></ul></div>
-    <div class="card">
+    <div class="card addcard" id="goalCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
       <h2 id="goalFormTitle">New goal</h2>
       <form id="goalForm">
         <label class="full">Name<input name="name" required placeholder="e.g. Japan trip"></label>
@@ -412,7 +464,8 @@ input[type=file]{padding:9px 12px}
       <p id="alertsText">Get a phone alert before things renew.</p>
       <button id="alertsBtn">Turn on alerts</button>
     </div>
-    <div class="card">
+    <div class="card addcard" id="subCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
       <h2 id="subFormTitle">Add subscription, bill or purchase</h2>
       <form id="subForm">
         <label class="full">Name<input name="name" required placeholder="e.g. Spotify"></label>
@@ -433,6 +486,8 @@ input[type=file]{padding:9px 12px}
         </label>
         <label>Next due<input type="date" name="dueDate" required></label>
         <label class="full">Remind me (days before)<input type="number" name="remindDays" min="0" max="30" value="3"></label>
+        <label class="full">Paid from<select name="accountId" class="acctSel"></select></label>
+        <label class="check full"><input type="checkbox" name="manual"> I pay this one myself (don't take it off automatically)</label>
         <button class="full" type="submit">Save</button>
       </form>
     </div>
@@ -470,7 +525,8 @@ input[type=file]{padding:9px 12px}
         <button class="full" type="submit">Save property</button>
       </form>
     </div>
-    <div class="card">
+    <div class="card addcard" id="billCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
       <h2 id="billFormTitle">Add a bill or receipt</h2>
       <form id="billForm">
         <label class="full">PDF (optional)<input type="file" id="billFile" accept="application/pdf,.pdf"></label>
@@ -492,6 +548,10 @@ input[type=file]{padding:9px 12px}
         </label>
         <label>Total<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
         <label><span id="billDateLabel">Due date</span><input type="date" name="dueDate" required></label>
+        <div class="full" id="billAcctWrap" style="display:grid;gap:12px">
+          <label class="full">Paid from<select name="accountId" class="acctSel"></select></label>
+        <label class="check full"><input type="checkbox" name="manual"> I pay this one myself (don't take it off automatically)</label>
+        </div>
         <button class="full" type="submit" id="billSubmit">Save bill</button>
       </form>
     </div>
@@ -508,6 +568,72 @@ input[type=file]{padding:9px 12px}
     <div class="card">
       <h2>Maintenance receipts by tax year (Jul–Jun)</h2>
       <ul class="list" id="receiptList"></ul>
+    </div>
+  </section>
+
+  <!-- STATS -->
+  <section id="view-stats" class="view hidden">
+    <div class="card">
+      <div class="toggle" id="statsView">
+        <button data-f="fortnight" class="on">Fortnight</button><button data-f="month">Month</button><button data-f="year">Year</button>
+      </div>
+      <div class="statsnav">
+        <button class="ghost" id="statsPrev" aria-label="Earlier">‹</button><b id="statsLabel"></b><button class="ghost" id="statsNext" aria-label="Later">›</button>
+      </div>
+      <div class="grid">
+        <div class="stat"><small>Income</small><b id="stInc">$0</b></div>
+        <div class="stat"><small>Expenses</small><b id="stExp">$0</b></div>
+        <div class="stat"><small>Net</small><b id="stNet">$0</b></div>
+      </div>
+      <p class="note" id="stNote" style="margin-top:8px"></p>
+    </div>
+    <div class="card">
+      <h2>Income vs expenses</h2>
+      <div class="chart" id="statsChart"></div>
+      <div class="legend"><span><i style="background:var(--green)"></i>Income</span><span><i style="background:var(--brand)"></i>Expenses</span></div>
+    </div>
+    <div class="card"><h2>Spending by category</h2><ul class="list" id="statsCats"></ul></div>
+    <div class="card"><h2>Income by source</h2><ul class="list" id="statsSources"></ul></div>
+  </section>
+
+  <!-- ACCOUNTS -->
+  <section id="view-accounts" class="view hidden">
+    <div class="card">
+      <h2>All accounts</h2>
+      <div class="grid"><div class="stat"><small>Total balance</small><b id="acTotal">$0</b></div></div>
+      <ul class="list" id="acctList" style="margin-top:8px"></ul>
+      <p class="note">Balances move by themselves when a bill, transfer or logged payment hits an account. Edit a balance any time to match your bank.</p>
+    </div>
+    <div class="card"><h2>Transfers</h2><ul class="list" id="xferList"></ul></div>
+    <div class="card addcard" id="acctCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
+      <h2 id="acctFormTitle">Add account</h2>
+      <form id="acctForm">
+        <label class="full">Name<input name="name" required placeholder="e.g. Up Account"></label>
+        <label class="full">Bank<input name="bank" placeholder="e.g. Up, Bank Australia, ING"></label>
+        <label class="full">Current balance<input type="number" name="balance" step="0.01" inputmode="decimal" required value="0"></label>
+        <button class="full" type="submit" id="acctSubmit">Save account</button>
+      </form>
+    </div>
+    <div class="card addcard" id="xferCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
+      <h2 id="xferFormTitle">Add transfer</h2>
+      <form id="xferForm">
+        <label class="full">Name<input name="name" required placeholder="e.g. Up bills, Rent to Cat"></label>
+        <label>From<select name="fromId" class="acctExt"></select></label>
+        <label>To<select name="toId" class="acctExt"></select></label>
+        <label class="full">Other bank or person (if one side is outside)<input name="externalName" placeholder="e.g. Cat ING"></label>
+        <label>Amount<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
+        <label>How often
+          <select name="frequency">
+            <option value="fortnightly">Fortnightly</option><option value="once">One-off</option><option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option>
+          </select>
+        </label>
+        <label class="full">Next transfer date<input type="date" name="nextApply" required></label>
+        <p class="note full">Anything dated today or earlier is applied straight away.</p>
+        <button class="full" type="submit" id="xferSubmit">Save transfer</button>
+      </form>
     </div>
   </section>
 </main>
@@ -533,7 +659,7 @@ import { initializeApp } from "firebase-app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut }
   from "firebase-auth";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  collection, doc, setDoc, updateDoc, deleteDoc, writeBatch, onSnapshot, query, orderBy, serverTimestamp }
+  collection, doc, setDoc, updateDoc, deleteDoc, writeBatch, runTransaction, increment, onSnapshot, query, orderBy, serverTimestamp }
   from "firebase-firestore";
 
 const app = initializeApp(firebaseConfig);
@@ -546,7 +672,7 @@ const db = initializeFirestore(app, {
 /* =========================================================
    2. STATE
    ========================================================= */
-const ST = { income: [], expenses: [], goals: [], transfers: [], subscriptions: [], properties: [], bills: [], wishlist: [], settings: [], incomeSources: [] };
+const ST = { income: [], expenses: [], goals: [], transfers: [], subscriptions: [], properties: [], bills: [], wishlist: [], settings: [], incomeSources: [], accounts: [], acctTransfers: [] };
 const CATEGORIES = ["Groceries","Eating out","Shopping","Clothes","Fuel","Transport","Bills","Subscriptions",
   "Health","Medication","Gym","Home","Property","Loan","Travel","Tech","Gifts","Kids","Beauty","Other"];
 const DEFAULT_GOALS = [
@@ -557,8 +683,8 @@ const DEFAULT_GOALS = [
 ];
 // First QR payday in the new plan; every fortnight from here is a pay period.
 const PAY_ANCHOR = new Date("2026-11-04T00:00:00");
-let uid = null, unsubs = [], editing = { income: null, expenses: null, subscriptions: null, bills: null, incomeSources: null }, expenseFilter = "all", schedFilter = "all", cashView = "fortnight", billFilter = "all", pendingFile = null;
-const pending = { income: false, expenses: false, goals: false, transfers: false, subscriptions: false, properties: false, bills: false, wishlist: false, settings: false, incomeSources: false };
+let uid = null, unsubs = [], editing = { income: null, expenses: null, subscriptions: null, bills: null, incomeSources: null, accounts: null, acctTransfers: null }, expenseFilter = "all", schedFilter = "all", cashView = "fortnight", billFilter = "all", pendingFile = null;
+const pending = { income: false, expenses: false, goals: false, transfers: false, subscriptions: false, properties: false, bills: false, wishlist: false, settings: false, incomeSources: false, accounts: false, acctTransfers: false };
 
 /* =========================================================
    3. HELPERS
@@ -611,6 +737,7 @@ function save(name, id, data) {
   op.catch((e) => toast("Save failed: " + e.message));
 }
 function remove(name, id) {
+  if (name === "income") { const row = ST.income.find((x) => x.id === id); if (row && row.accountId) bumpAccount(row.accountId, -row.amount); }
   deleteDoc(doc(db, "users", uid, name, id)).catch((e) => toast("Delete failed: " + e.message));
   if (name === "bills") deleteDoc(doc(db, "users", uid, "billFiles", id)).catch(() => {});
 }
@@ -670,7 +797,9 @@ function startSync() {
     listen("bills", "dueDate", "asc"),
     listen("wishlist", "name", "asc"),
     listen("settings", "updated", "asc"),
-    listen("incomeSources", "name", "asc")
+    listen("incomeSources", "name", "asc"),
+    listen("accounts", "name", "asc"),
+    listen("acctTransfers", "name", "asc")
   ];
   refreshAlertsButton();
   // Seed default goals once, the first time this account has none.
@@ -687,6 +816,8 @@ function startSync() {
    ========================================================= */
 function render() {
   renderHome(); renderIncome(); renderExpenses(); renderSavings(); renderSubs(); renderProperty(); syncBufferField(); renderAfford(); renderWishlist(); renderCashflow(); renderSources(); renderSchedule(); syncBaselineField();
+  if (currentView === "stats") renderStats();
+  renderAccountSelects(); renderAccounts(); scheduleApply();
 }
 
 function subsSorted() {
@@ -757,12 +888,48 @@ function catRow(r, max) {
   return '<li><div class="main"><div>' + esc(r[0]) + '</div><div class="bar"><span style="width:' + pct + '%"></span></div></div><span class="amt">' + money(r[1]) + '</span></li>';
 }
 
-function renderIncome() {
-  $("incomeList").innerHTML = ST.income.length ? ST.income.map(incomeRow).join("") : '<li class="empty">No income logged yet.</li>';
+let incomeFilter = "all";
+const DEFAULT_INCOME_SOURCES = ["QR pay", "Zane rent", "Apartment rent", "Car spot", "Tax refund"];
+// Choices follow your income sources (so a rename like "JHT Property" shows up), plus anything already logged.
+function incomeSourceNames() {
+  const names = ST.incomeSources.map((x) => x.name).concat(ST.income.map((i) => i.source));
+  const all = names.length ? names : DEFAULT_INCOME_SOURCES;
+  return [...new Set(all.concat("Other"))];
 }
+function chipBtn(value, label, on) {
+  return '<button data-f="' + esc(value) + '"' + (on ? ' class="on"' : "") + ">" + esc(label) + "</button>";
+}
+function renderIncome() {
+  const sel = $("incomeForm").elements.source, keep = sel.value;
+  sel.innerHTML = incomeSourceNames().map((n) => "<option>" + esc(n) + "</option>").join("");
+  if (keep) sel.value = keep;
+  const sources = [...new Set(ST.income.map((i) => i.source))].sort();
+  if (incomeFilter !== "all" && !sources.includes(incomeFilter)) incomeFilter = "all";
+  $("incomeFilter").innerHTML = chipBtn("all", "All", incomeFilter === "all") + sources.map((n) => chipBtn(n, n, incomeFilter === n)).join("");
+  const rows = ST.income.filter((i) => incomeFilter === "all" || i.source === incomeFilter);
+  const total = rows.reduce((t, i) => t + i.amount, 0);
+  $("piTotal").textContent = money(total);
+  $("piCount").textContent = "Average of " + rows.length;
+  $("piAvg").textContent = money(rows.length ? total / rows.length : 0);
+  $("piLast").textContent = money(rows.length ? rows[0].amount : 0);
+  $("incomeList").innerHTML = rows.length ? rows.map(incomeRow).join("") : '<li class="empty">No income logged yet.</li>';
+}
+$("incomeFilter").addEventListener("click", (e) => {
+  if (!e.target.dataset.f) return;
+  incomeFilter = e.target.dataset.f;
+  renderIncome();
+});
+// Picking a source pre-fills its usual amount (you can change it, since pay and rent vary).
+$("incomeForm").elements.source.addEventListener("change", (e) => {
+  const usual = ST.incomeSources.find((x) => x.name === e.target.value), amt = $("incomeForm").elements.amount;
+  if (usual && !editing.income && !amt.value) amt.value = usual.amount;
+  if (usual && usual.accountId && !editing.income) $("incomeForm").elements.accountId.value = usual.accountId;
+});
 function incomeRow(i) {
+  const usual = ST.incomeSources.find((x) => x.name === i.source), diff = usual ? round2(i.amount - usual.amount) : 0;
+  const vs = Math.abs(diff) >= 0.01 ? " · " + (diff > 0 ? "+" : "−") + money(Math.abs(diff)) + " vs usual" : "";
   const note = i.note ? " · " + esc(i.note) : "";
-  return '<li><div class="main"><div>' + esc(i.source) + '</div><div class="sub">' + fmtDate(i.date) + note + '</div></div>' +
+  return '<li><div class="main"><div>' + esc(i.source) + '</div><div class="sub wrap">' + fmtLong(i.date) + vs + note + '</div></div>' +
     '<span class="amt pos">' + money(i.amount) + '</span>' +
     '<button class="ghost" data-edit-income="' + i.id + '">Edit</button>' +
     '<button class="ghost" data-del="income:' + i.id + '">✕</button></li>';
@@ -831,7 +998,7 @@ function transferRow(t) {
    ========================================================= */
 function formData(form) {
   const d = Object.fromEntries(new FormData(form));
-  ["amount", "target", "opening", "remindDays", "rates", "water", "insurance", "landTax"].forEach((k) => { if (k in d) d[k] = Math.round(parseFloat(d[k] || 0) * 100) / 100; });
+  ["amount", "target", "opening", "remindDays", "rates", "water", "insurance", "landTax", "balance"].forEach((k) => { if (k in d) d[k] = Math.round(parseFloat(d[k] || 0) * 100) / 100; });
   return d;
 }
 function resetForm(form, kind) {
@@ -843,33 +1010,42 @@ function resetForm(form, kind) {
 $("incomeForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const d = formData(e.target), isNew = !editing.income;
+  d.accountId = d.accountId || "";
+  adjustIncomeAccount(isNew ? null : ST.income.find((x) => x.id === editing.income), d);
   save("income", editing.income, d);
   resetForm(e.target, "income");
+  closeSheets(false);
   if (isNew) checkSurplus(d);
 });
 $("expenseForm").addEventListener("submit", (e) => {
   e.preventDefault();
-  save("expenses", editing.expenses, formData(e.target));
+  const d = formData(e.target);
+  linkFields(d, d.date, ST.expenses.find((x) => x.id === editing.expenses));
+  save("expenses", editing.expenses, d);
   resetForm(e.target, "expenses");
+  closeSheets(false);
 });
 $("subForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const d = formData(e.target);
   if (editing.subscriptions) d.lastNotified = null; // re-arm the reminder after an edit
+  linkFields(d, d.dueDate, ST.subscriptions.find((x) => x.id === editing.subscriptions));
   save("subscriptions", editing.subscriptions, d);
   editing.subscriptions = null; e.target.reset();
   e.target.dueDate.value = today();
   e.target.querySelector("button[type=submit]").textContent = "Save";
   $("subFormTitle").textContent = "Add subscription, bill or purchase";
+  closeSheets(false);
 });
 function startEditSub(s) {
   const form = $("subForm");
   ["name", "amount", "type", "frequency", "dueDate", "remindDays"].forEach((k) => { form.elements[k].value = s[k] ?? ""; });
   form.dueDate.value = nextDue(s);
+  form.elements.accountId.value = s.accountId || ""; form.elements.manual.checked = !!s.manual;
   editing.subscriptions = s.id;
   form.querySelector("button[type=submit]").textContent = "Update";
   $("subFormTitle").textContent = "Editing " + s.name;
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  openSheet("subCard");
 }
 
 $("goalForm").addEventListener("submit", (e) => {
@@ -877,20 +1053,21 @@ $("goalForm").addEventListener("submit", (e) => {
   save("goals", editing.goals || null, formData(e.target));
   editing.goals = null; e.target.reset();
   $("goalFormTitle").textContent = "New goal"; $("goalSubmit").textContent = "Add goal";
+  closeSheets(false);
 });
 function startEditGoal(g) {
   const f = $("goalForm").elements;
   f.name.value = g.name; f.target.value = g.target; f.opening.value = g.opening ?? 0; f.targetDate.value = g.targetDate || "";
   editing.goals = g.id;
   $("goalFormTitle").textContent = "Editing " + g.name; $("goalSubmit").textContent = "Update goal";
-  window.scrollTo({ top: $("goalForm").offsetTop - 80, behavior: "smooth" });
+  openSheet("goalCard");
 }
 function startEditTransfer(t) {
   const f = $("transferForm").elements;
   f.goalId.value = t.goalId; f.type.value = t.type; f.amount.value = t.amount; f.date.value = t.date; f.note.value = t.note || "";
   editing.transfers = t.id;
   $("transferFormTitle").textContent = "Editing a move"; $("transferSubmit").textContent = "Update";
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  openSheet("transferCard");
 }
 $("transferForm").addEventListener("submit", (e) => {
   e.preventDefault();
@@ -899,15 +1076,17 @@ $("transferForm").addEventListener("submit", (e) => {
   $("transferFormTitle").textContent = "Move money"; $("transferSubmit").textContent = "Save";
   const keepGoal = e.target.goalId.value; e.target.reset();
   e.target.goalId.value = keepGoal; e.target.date.value = today();
+  closeSheets(false);
 });
 
 function startEdit(kind, item) {
   const form = $(kind === "income" ? "incomeForm" : "expenseForm");
-  Object.keys(item).forEach((k) => { if (form.elements[k]) form.elements[k].value = item[k]; });
+  Object.keys(item).forEach((k) => { if (form.elements[k] && k !== "manual") form.elements[k].value = item[k]; });
+  if (form.elements.manual) form.elements.manual.checked = !!item.manual;
   editing[kind] = item.id;
   form.querySelector("button[type=submit]").textContent = "Update";
   $(kind === "income" ? "incomeFormTitle" : "expenseFormTitle").textContent = "Editing";
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  openSheet(kind === "income" ? "incomeCard" : "expenseCard");
 }
 
 document.addEventListener("click", (e) => {
@@ -988,15 +1167,26 @@ $("expenseFilter").addEventListener("click", (e) => {
 });
 
 const TITLES = { home: "Budget", income: "Income", expenses: "Expenses", savings: "Goals", subs: "Subscriptions", property: "Property & Bills" };
+TITLES.stats = "Stats"; TITLES.accounts = "Accounts";
+let currentView = "home";
+function showView(v) {
+  const tabs = [...$("tabs").children], idx = tabs.findIndex((b) => b.dataset.v === v);
+  document.querySelectorAll(".view").forEach((s) => s.classList.toggle("hidden", s.id !== "view-" + v));
+  tabs.forEach((b) => b.classList.toggle("on", b.dataset.v === v));
+  $("tabs").classList.toggle("none", idx < 0);
+  if (idx >= 0) $("tabs").style.setProperty("--i", idx);
+  $("pageTitle").textContent = TITLES[v];
+  currentView = v;
+  closeSheets(true);
+  $("addBtn").classList.toggle("hidden", !ADD_FORMS[v]);
+  if (v === "property") fillPropForm();
+  if (v === "stats") renderStats();
+  if (v === "accounts") renderAccounts();
+  window.scrollTo(0, 0);
+}
 $("tabs").addEventListener("click", (e) => {
   const btn = e.target.closest("button"); if (!btn || !btn.dataset.v) return;
-  const v = btn.dataset.v;
-  document.querySelectorAll(".view").forEach((s) => s.classList.toggle("hidden", s.id !== "view-" + v));
-  [...$("tabs").children].forEach((b) => b.classList.toggle("on", b === btn));
-  $("tabs").style.setProperty("--i", [...$("tabs").children].indexOf(btn));
-  $("pageTitle").textContent = TITLES[v];
-  if (v === "property") fillPropForm();
-  window.scrollTo(0, 0);
+  showView(btn.dataset.v);
 });
 
 /* =========================================================
@@ -1266,6 +1456,7 @@ $("billFile").addEventListener("change", async (e) => {
 function syncBillForm() {
   const cat = $("billCat").value;
   $("billPropWrap").classList.toggle("hidden", cat === "personal");
+  $("billAcctWrap").classList.toggle("hidden", cat === "maintenance");
   $("billFreqWrap").classList.toggle("hidden", cat === "maintenance");
   $("billDateLabel").textContent = cat === "maintenance" ? "Receipt date" : "Due date";
 }
@@ -1287,12 +1478,13 @@ function startEditBill(b) {
   if (b.propertyId) form.propertyId.value = b.propertyId;
   form.vendor.value = b.vendor; form.amount.value = b.amount; form.dueDate.value = b.dueDate;
   form.frequency.value = b.frequency || "once";
+  form.elements.accountId.value = b.accountId || ""; form.elements.manual.checked = !!b.manual;
   editing.bills = b.id; pendingFile = null;
   $("billFile").disabled = true;
   $("billFormTitle").textContent = "Editing " + b.vendor;
   $("billSubmit").textContent = "Update";
   setScanMsg("The PDF can't be changed once saved.");
-  window.scrollTo({ top: $("billForm").offsetTop - 80, behavior: "smooth" });
+  openSheet("billCard");
 }
 $("billForm").addEventListener("submit", (e) => {
   e.preventDefault();
@@ -1300,6 +1492,8 @@ $("billForm").addEventListener("submit", (e) => {
   if (d.category === "personal") d.propertyId = "";
   if (d.category === "maintenance") d.frequency = "once";
   d.paid = d.category === "maintenance";
+  if (d.category === "maintenance") { d.accountId = ""; d.manual = false; d.nextApply = ""; }
+  else linkFields(d, d.dueDate, ST.bills.find((x) => x.id === editing.bills));
   const batch = writeBatch(db);
   if (editing.bills) {
     if (d.category !== "maintenance") delete d.paid; // keep the paid state; the ✓ button controls it
@@ -1314,6 +1508,7 @@ $("billForm").addEventListener("submit", (e) => {
   }
   batch.commit().catch((err) => toast("Save failed: " + err.message));
   resetBillForm();
+  closeSheets(false);
 });
 $("billFilter").addEventListener("click", (e) => {
   if (!e.target.dataset.f) return;
@@ -1514,20 +1709,24 @@ function renderSources() {
 }
 $("srcForm").addEventListener("submit", (e) => {
   e.preventDefault();
-  save("incomeSources", editing.incomeSources, formData(e.target));
+  const d = formData(e.target);
+  d.accountId = d.accountId || "";
+  save("incomeSources", editing.incomeSources, d);
   editing.incomeSources = null; e.target.reset();
   e.target.nextDate.value = today();
   $("srcSubmit").textContent = "Save source";
   $("srcFormTitle").textContent = "Add income source";
+  closeSheets(false);
 });
 function startEditSrc(s) {
   const f = $("srcForm").elements;
   ["name", "amount", "frequency", "nextDate"].forEach((k) => { f[k].value = s[k] ?? ""; });
   f.nextDate.value = nextDue({ dueDate: s.nextDate, frequency: s.frequency });
+  f.accountId.value = s.accountId || "";
   editing.incomeSources = s.id;
   $("srcSubmit").textContent = "Update";
   $("srcFormTitle").textContent = "Editing " + s.name;
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  openSheet("srcCard");
 }
 
 // Recurring expenses and subscriptions/bills as one schedule (one-offs excluded).
@@ -1777,6 +1976,298 @@ $("importBtn").addEventListener("click", () => {
 });
 
 /* =========================================================
+   6h. ADD SHEETS (header + button) and STATS
+   ========================================================= */
+const ADD_FORMS = {
+  income: [["incomeCard", "Add income"], ["srcCard", "Add income source"]],
+  expenses: [["expenseCard", "Add expense"]],
+  savings: [["transferCard", "Move money"], ["goalCard", "New goal"]],
+  subs: [["subCard", "Add subscription, bill or purchase"]],
+  property: [["billCard", "Add a bill or receipt"]]
+};
+let sheetBack = null;
+function openSheet(id) {
+  closeSheets(false);
+  sheetBack = document.createElement("div");
+  sheetBack.className = "sheetback";
+  sheetBack.addEventListener("click", () => closeSheets(true));
+  document.body.appendChild(sheetBack);
+  $(id).classList.add("open");
+}
+function closeSheets(cancel) {
+  document.querySelectorAll(".addcard.open").forEach((c) => c.classList.remove("open"));
+  if (sheetBack) { sheetBack.remove(); sheetBack = null; }
+  if (cancel) resetAddForms();
+}
+// Closing without saving drops any half-finished edit so the next "+" starts clean.
+function resetAddForms() {
+  resetForm($("incomeForm"), "income"); resetForm($("expenseForm"), "expenses");
+  editing.subscriptions = null; $("subForm").reset(); $("subForm").dueDate.value = today();
+  $("subForm").querySelector("button[type=submit]").textContent = "Save"; $("subFormTitle").textContent = "Add subscription, bill or purchase";
+  editing.incomeSources = null; $("srcForm").reset(); $("srcForm").nextDate.value = today();
+  $("srcSubmit").textContent = "Save source"; $("srcFormTitle").textContent = "Add income source";
+  editing.goals = null; $("goalForm").reset(); $("goalSubmit").textContent = "Add goal"; $("goalFormTitle").textContent = "New goal";
+  editing.transfers = null; $("transferForm").reset(); $("transferForm").date.value = today();
+  $("transferSubmit").textContent = "Save"; $("transferFormTitle").textContent = "Move money";
+  resetBillForm();
+  editing.accounts = null; $("acctForm").reset(); $("acctSubmit").textContent = "Save account"; $("acctFormTitle").textContent = "Add account";
+  editing.acctTransfers = null; $("xferForm").reset(); $("xferForm").nextApply.value = today();
+  $("xferSubmit").textContent = "Save transfer"; $("xferFormTitle").textContent = "Add transfer";
+}
+document.addEventListener("click", (e) => { if (e.target.closest("[data-close-sheet]")) closeSheets(true); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheets(true); });
+$("addBtn").addEventListener("click", () => {
+  const opts = ADD_FORMS[currentView];
+  if (!opts) return;
+  if (opts.length === 1) { openSheet(opts[0][0]); return; }
+  const wrap = document.createElement("div");
+  wrap.className = "overlay sheet";
+  wrap.innerHTML = '<div class="card"><h3>Add</h3><div class="sec">' +
+    opts.map((o) => '<button style="width:100%;margin-top:8px" data-add="' + o[0] + '">' + esc(o[1]) + "</button>").join("") +
+    '</div><div class="actions"><button class="plain" data-add="">Cancel</button></div></div>';
+  wrap.addEventListener("click", (e) => {
+    if (e.target.dataset.add === undefined && e.target !== wrap) return;
+    wrap.remove();
+    if (e.target.dataset.add) openSheet(e.target.dataset.add);
+  });
+  document.body.appendChild(wrap);
+});
+$("statsBtn").addEventListener("click", () => showView("stats"));
+
+let statsView = "fortnight", statsOffset = 0;
+// A fortnight follows your pay periods; month and year are calendar periods. k scales per-fortnight amounts to the period.
+function statsRange(offset) {
+  if (statsView === "fortnight") {
+    const anchor = dayNum(PAY_ANCHOR.toLocaleDateString("en-CA")), n = Math.floor((dayNum(today()) - anchor) / 14) + offset;
+    const start = isoFromDay(anchor + 14 * n), end = isoFromDay(anchor + 14 * n + 13);
+    return { start: start, end: end, label: fmtDate(start) + " – " + fmtLong(end), short: fmtDate(start), k: 1 };
+  }
+  const now = new Date();
+  if (statsView === "month") {
+    const d = new Date(now.getFullYear(), now.getMonth() + offset, 1), e = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    return { start: d.toLocaleDateString("en-CA"), end: e.toLocaleDateString("en-CA"),
+      label: d.toLocaleDateString("en-AU", { month: "long", year: "numeric" }), short: d.toLocaleDateString("en-AU", { month: "short" }), k: 26 / 12 };
+  }
+  const y = now.getFullYear() + offset;
+  return { start: y + "-01-01", end: y + "-12-31", label: String(y), short: String(y), k: 26 };
+}
+function statsTotals(r) {
+  const income = ST.income.filter((i) => i.date >= r.start && i.date <= r.end);
+  const once = ST.expenses.filter((e) => e.frequency === "once" && e.date >= r.start && e.date <= r.end);
+  const spent = once.reduce((t, e) => t + e.amount, 0), recurring = recurringPerFortnight() * r.k;
+  return { income: income, incTotal: income.reduce((t, i) => t + i.amount, 0), once: once, spent: spent, recurring: recurring, expenses: spent + recurring };
+}
+function statsCategories(r, t) {
+  const map = {};
+  const add = (c, v) => { if (v > 0.005) map[c] = (map[c] || 0) + v; };
+  t.once.forEach((e) => add(e.category || "Other", e.amount));
+  ST.expenses.forEach((e) => add(e.category || "Other", toFortnight(e.amount, e.frequency) * r.k));
+  ST.subscriptions.forEach((x) => add(x.type === "subscription" ? "Subscriptions" : x.type === "bill" ? "Bills" : "Other", toFortnight(x.amount, x.frequency) * r.k));
+  ST.bills.filter(isRecurringBill).forEach((b) => add(b.category === "property" ? "Property" : "Bills", toFortnight(b.amount, b.frequency) * r.k));
+  return Object.entries(map).sort((a, b) => b[1] - a[1]);
+}
+function statsBarRow(name, amount, max, sub) {
+  const pct = max ? Math.round((amount / max) * 100) : 0;
+  return '<li><div class="main"><div>' + esc(name) + '</div><div class="bar"><span style="width:' + pct + '%"></span></div>' +
+    (sub ? '<div class="sub">' + sub + "</div>" : "") + '</div><span class="amt">' + money(amount) + "</span></li>";
+}
+function statsChartCol(offset, max) {
+  const r = statsRange(offset), t = statsTotals(r);
+  const h = (v) => (max ? Math.max(2, Math.round((v / max) * 100)) : 2);
+  return '<div class="col' + (offset === statsOffset ? " cur" : "") + '"><div class="bars"><i class="inc" style="height:' + h(t.incTotal) +
+    '%"></i><i class="exp" style="height:' + h(t.expenses) + '%"></i></div><small>' + esc(r.short) + "</small></div>";
+}
+function renderStats() {
+  const r = statsRange(statsOffset), t = statsTotals(r), net = t.incTotal - t.expenses;
+  $("statsLabel").textContent = r.label;
+  $("statsNext").disabled = statsOffset >= 0;
+  $("stInc").textContent = money(t.incTotal);
+  $("stExp").textContent = money(t.expenses);
+  $("stNet").textContent = money(net);
+  $("stNet").className = net >= 0 ? "pos" : "neg";
+  $("stNote").textContent = "Expenses = " + money(t.spent) + " spent + " + money(t.recurring) + " of recurring bills. Expected income from your sources: " + money(incomePerFortnight() * r.k) + ".";
+
+  const n = statsView === "year" ? 4 : 6, cols = [];
+  let max = 0;
+  for (let i = 0; i < n; i++) { const tt = statsTotals(statsRange(statsOffset - (n - 1) + i)); max = Math.max(max, tt.incTotal, tt.expenses); }
+  for (let i = 0; i < n; i++) cols.push(statsChartCol(statsOffset - (n - 1) + i, max));
+  $("statsChart").innerHTML = cols.join("");
+
+  const cats = statsCategories(r, t), total = cats.reduce((x, c) => x + c[1], 0);
+  $("statsCats").innerHTML = cats.length ? cats.map((c) => statsBarRow(c[0], c[1], cats[0][1], Math.round((c[1] / total) * 100) + "% of expenses")).join("")
+    : '<li class="empty">No spending in this period.</li>';
+
+  const bySrc = {};
+  t.income.forEach((i) => { bySrc[i.source] = (bySrc[i.source] || 0) + i.amount; });
+  const srcs = Object.entries(bySrc).sort((a, b) => b[1] - a[1]);
+  $("statsSources").innerHTML = srcs.length ? srcs.map((x) => statsBarRow(x[0], x[1], srcs[0][1], "")).join("")
+    : '<li class="empty">No income logged in this period.</li>';
+}
+$("statsView").addEventListener("click", (e) => {
+  if (!e.target.dataset.f) return;
+  statsView = e.target.dataset.f; statsOffset = 0;
+  [...$("statsView").children].forEach((b) => b.classList.toggle("on", b === e.target));
+  renderStats();
+});
+$("statsPrev").addEventListener("click", () => { statsOffset--; renderStats(); });
+$("statsNext").addEventListener("click", () => { if (statsOffset < 0) { statsOffset++; renderStats(); } });
+
+/* =========================================================
+   6i. ACCOUNTS — balances that follow bills, transfers and logged income
+   ========================================================= */
+ADD_FORMS.accounts = [["acctCard", "Add account"], ["xferCard", "Add transfer"]];
+const acctById = (id) => ST.accounts.find((a) => a.id === id);
+const acctName = (id, outside) => id ? (acctById(id) ? acctById(id).name : "Deleted account") : (outside || "Outside");
+function bumpAccount(id, delta) {
+  if (!id || !delta) return;
+  updateDoc(doc(db, "users", uid, "accounts", id), { balance: increment(round2(delta)) }).catch(() => {});
+}
+function adjustIncomeAccount(old, d) {
+  if (old && old.accountId) bumpAccount(old.accountId, -old.amount);
+  if (d.accountId) bumpAccount(d.accountId, d.amount);
+}
+// Tie an item to an account: `nextApply` is the next occurrence still to come off the balance (blank = nothing pending).
+function linkFields(d, anchor, existing) {
+  d.accountId = d.accountId || "";
+  d.manual = d.accountId ? !!d.manual : false;
+  if (!d.accountId) { d.nextApply = ""; return d; }
+  const applied = existing && existing.accountId === d.accountId && existing.nextApply === "" && d.frequency === "once";
+  d.nextApply = applied || !anchor ? "" : nextDue({ dueDate: anchor, frequency: d.frequency });
+  return d;
+}
+function renderAccountSelects() {
+  const list = ST.accounts.map((a) => '<option value="' + a.id + '">' + esc(a.name) + "</option>").join("");
+  document.querySelectorAll("select.acctSel").forEach((sel) => setOptions(sel, '<option value="">None</option>' + list));
+  document.querySelectorAll("select.acctExt").forEach((sel) => setOptions(sel, '<option value="">Outside my accounts</option>' + list));
+}
+
+// Each due occurrence is applied once: a transaction re-checks `nextApply`, so two devices can't both take the money.
+const LINKED = {
+  subscriptions: () => ST.subscriptions, expenses: () => ST.expenses,
+  bills: () => ST.bills.filter((b) => b.category !== "maintenance"), acctTransfers: () => ST.acctTransfers
+};
+const linkedFrom = (coll, x) => coll === "acctTransfers" ? x.fromId : x.accountId;
+const linkedTo = (coll, x) => coll === "acctTransfers" ? x.toId : "";
+const linkedName = (coll, x) => x.name || x.vendor || x.description || "Payment";
+async function applySpec(coll, item, mode) {
+  const itemRef = doc(db, "users", uid, coll, item.id), acct = (id) => doc(db, "users", uid, "accounts", id);
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(itemRef);
+    if (!snap.exists()) return;
+    const cur = snap.data();
+    if (cur.nextApply !== item.nextApply || (mode === "due" && cur.manual)) return;
+    const freq = cur.frequency || "once", step = (n) => (freq === "once" ? "" : addCycle(n, freq));
+    let n = cur.nextApply, count = 0;
+    if (mode === "one") { count = 1; n = step(n); }
+    else for (let g = 0; n && n <= today() && g < 400; g++) { count++; n = step(n); }
+    if (!count) return;
+    const amt = (Number(cur.amount) || 0) * count, fromId = linkedFrom(coll, cur), toId = linkedTo(coll, cur), bal = {};
+    for (const id of [fromId, toId]) if (id && bal[id] === undefined) { const a = await tx.get(acct(id)); if (a.exists()) bal[id] = Number(a.data().balance) || 0; }
+    if (fromId && bal[fromId] !== undefined) tx.update(acct(fromId), { balance: round2(bal[fromId] - amt) });
+    if (toId && bal[toId] !== undefined) tx.update(acct(toId), { balance: round2(bal[toId] + amt) });
+    tx.update(itemRef, { nextApply: n });
+  });
+}
+let applying = false, applyTimer = null;
+function scheduleApply() {
+  clearTimeout(applyTimer);
+  applyTimer = setTimeout(applyDue, 1200);
+}
+async function applyDue() {
+  if (applying || !uid) return;
+  applying = true;
+  try {
+    for (const coll of Object.keys(LINKED)) {
+      for (const x of LINKED[coll]()) {
+        if (x.nextApply && x.nextApply <= today() && !x.manual && (linkedFrom(coll, x) || linkedTo(coll, x))) await applySpec(coll, x, "due");
+      }
+    }
+  } catch (e) { console.warn("Couldn't update balances yet:", e.message); }
+  applying = false;
+}
+function manualDue() {
+  const limit = isoFromDay(dayNum(today()) + 7), out = [];
+  Object.keys(LINKED).forEach((coll) => LINKED[coll]().forEach((x) => {
+    if (x.manual && x.nextApply && x.nextApply <= limit && x.accountId) out.push({ coll: coll, item: x });
+  }));
+  return out.sort((a, b) => a.item.nextApply.localeCompare(b.item.nextApply));
+}
+function manualRow(m) {
+  const x = m.item;
+  return '<li><div class="main"><div>' + esc(linkedName(m.coll, x)) + '</div><div class="sub wrap">Due ' + fmtDate(x.nextApply) + " · from " + esc(acctName(x.accountId)) +
+    '</div></div><span class="amt">' + money(x.amount) + '</span><button class="ghost" data-pay-manual="' + m.coll + ":" + x.id + '">Mark paid</button></li>';
+}
+
+function acctFlows(id) {
+  let inn = 0, out = 0;
+  ST.incomeSources.filter((x) => x.accountId === id).forEach((x) => { inn += toFortnight(x.amount, x.frequency); });
+  ST.acctTransfers.forEach((t) => { const f = toFortnight(t.amount, t.frequency); if (t.toId === id) inn += f; if (t.fromId === id) out += f; });
+  [ST.expenses, ST.subscriptions, ST.bills.filter((b) => b.category !== "maintenance")].forEach((list) =>
+    list.forEach((x) => { if (x.accountId === id) out += toFortnight(x.amount, x.frequency); }));
+  return { inn: inn, out: out };
+}
+function acctRow(a) {
+  const f = acctFlows(a.id), net = f.inn - f.out;
+  return '<li><div class="main"><div>' + esc(a.name) + '</div><div class="sub wrap">' + (a.bank ? esc(a.bank) + " · " : "") + "In " + money(f.inn) + " · out " + money(f.out) +
+    ' · <span class="' + (net >= 0 ? "ok" : "bad") + '">net ' + money(net) + '/fn</span></div></div><span class="amt">' + money(a.balance || 0) + '</span>' +
+    '<button class="ghost" data-edit-acct="' + a.id + '">Edit</button><button class="ghost" data-del="accounts:' + a.id + '">✕</button></li>';
+}
+function xferRow(t) {
+  const kind = t.fromId && t.toId ? "internal" : "external";
+  return '<li><div class="main"><div>' + esc(t.name) + '</div><div class="sub wrap">' + esc(acctName(t.fromId, t.externalName)) + " → " + esc(acctName(t.toId, t.externalName)) +
+    " · " + kind + " · " + cap(t.frequency) + (t.nextApply ? " · next " + fmtDate(t.nextApply) : "") + '</div></div><span class="amt">' + money(t.amount) + '</span>' +
+    '<button class="ghost" data-edit-xfer="' + t.id + '">Edit</button><button class="ghost" data-del="acctTransfers:' + t.id + '">✕</button></li>';
+}
+function renderAccounts() {
+  const total = ST.accounts.reduce((t, a) => t + (Number(a.balance) || 0), 0);
+  $("acTotal").textContent = money(total);
+  $("acctList").innerHTML = ST.accounts.length ? ST.accounts.map(acctRow).join("") : '<li class="empty">No accounts yet. Tap + to add one.</li>';
+  $("xferList").innerHTML = ST.acctTransfers.length ? ST.acctTransfers.map(xferRow).join("") : '<li class="empty">No transfers yet.</li>';
+  $("hAcctTotal").textContent = money(total);
+  $("hAcctN").textContent = ST.accounts.length + (ST.accounts.length === 1 ? " account" : " accounts") + " · total";
+  const due = manualDue();
+  $("manualCard").classList.toggle("hidden", !due.length);
+  $("manualList").innerHTML = due.map(manualRow).join("");
+}
+$("homeAccounts").addEventListener("click", () => showView("accounts"));
+$("acctForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  save("accounts", editing.accounts, formData(e.target));
+  editing.accounts = null; e.target.reset();
+  $("acctSubmit").textContent = "Save account"; $("acctFormTitle").textContent = "Add account";
+  closeSheets(false);
+});
+$("xferForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const d = formData(e.target);
+  if (!d.fromId && !d.toId) { toast("Pick at least one of your accounts."); return; }
+  if (d.fromId === d.toId) { toast("From and To are the same account."); return; }
+  save("acctTransfers", editing.acctTransfers, d);
+  editing.acctTransfers = null; e.target.reset(); e.target.nextApply.value = today();
+  $("xferSubmit").textContent = "Save transfer"; $("xferFormTitle").textContent = "Add transfer";
+  closeSheets(false);
+});
+document.addEventListener("click", (e) => {
+  const t = e.target;
+  if (t.dataset.editAcct) {
+    const a = acctById(t.dataset.editAcct), f = $("acctForm").elements;
+    f.name.value = a.name; f.bank.value = a.bank || ""; f.balance.value = a.balance ?? 0;
+    editing.accounts = a.id; $("acctSubmit").textContent = "Update"; $("acctFormTitle").textContent = "Editing " + a.name;
+    openSheet("acctCard");
+  }
+  if (t.dataset.editXfer) {
+    const x = ST.acctTransfers.find((y) => y.id === t.dataset.editXfer), f = $("xferForm").elements;
+    ["name", "fromId", "toId", "externalName", "amount", "frequency", "nextApply"].forEach((k) => { f[k].value = x[k] ?? ""; });
+    editing.acctTransfers = x.id; $("xferSubmit").textContent = "Update"; $("xferFormTitle").textContent = "Editing " + x.name;
+    openSheet("xferCard");
+  }
+  if (t.dataset.payManual) {
+    const [coll, id] = t.dataset.payManual.split(":"), item = LINKED[coll]().find((x) => x.id === id);
+    if (item) applySpec(coll, item, "one").catch((err) => toast("Couldn't mark it paid: " + err.message));
+  }
+});
+
+/* =========================================================
    7. AUTH
    ========================================================= */
 $("signInBtn").addEventListener("click", async () => {
@@ -1792,6 +2283,8 @@ onAuthStateChanged(auth, (user) => {
   $("login").classList.toggle("hidden", !!user);
   $("tabs").classList.toggle("hidden", !user);
   $("signOutBtn").classList.toggle("hidden", !user);
+  $("statsBtn").classList.toggle("hidden", !user);
+  if (!user) $("addBtn").classList.add("hidden");
   $("view-home").classList.toggle("hidden", !user);
   if (!user) { document.querySelectorAll(".view").forEach((s) => s.classList.add("hidden")); return; }
   document.querySelectorAll("form input[type=date]:not([data-blank])").forEach((i) => (i.value = today()));

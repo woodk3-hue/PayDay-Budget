@@ -56,6 +56,15 @@ const store = {
     { name: "New phone", cost: 1800, kind: "want", perPay: 80, saved: 0, order: 30, neededBy: day(430) }
   ],
   settings: [{ id: "pay", baseline: 2450, updated: 1 }],
+  accounts: [
+    { id: "acc1", name: "Big Savings", bank: "Bank Australia", balance: 5200 },
+    { id: "acc2", name: "Up Account", bank: "Up", balance: 410 },
+    { id: "acc3", name: "HouseAcc", bank: "Bank Australia", balance: 1350 }
+  ],
+  acctTransfers: [
+    { name: "Up bills", fromId: "acc1", toId: "acc2", externalName: "", amount: 305, frequency: "fortnightly", nextApply: day(-1) },
+    { name: "Rent to Cat", fromId: "acc1", toId: "", externalName: "Cat ING", amount: 400, frequency: "fortnightly", nextApply: day(6) }
+  ],
   pushDevices: [], billFiles: []
 };
 let counter = 0;
@@ -76,6 +85,7 @@ function write(ref, data, merge) {
   const rows = store[ref.name] || (store[ref.name] = []);
   const i = rows.findIndex((r) => r.id === ref.id);
   const clean = JSON.parse(JSON.stringify(data));
+  Object.keys(clean).forEach((k) => { if (clean[k] && clean[k].__inc !== undefined) clean[k] = ((i >= 0 && rows[i][k]) || 0) + clean[k].__inc; });
   if (i < 0) rows.push({ ...clean, id: ref.id });
   else rows[i] = merge ? { ...rows[i], ...clean } : { ...clean, id: ref.id };
 }
@@ -92,6 +102,15 @@ export const initializeFirestore = () => ({});
 export const persistentLocalCache = () => ({});
 export const persistentMultipleTabManager = () => ({});
 export const serverTimestamp = () => Date.now();
+export const increment = (n) => ({ __inc: n });
+export const runTransaction = async (db, fn) => {
+  const pending = [];
+  const tx = {
+    get: async (ref) => { const row = (store[ref.name] || []).find((r) => r.id === ref.id); return { exists: () => !!row, data: () => { const { id, ...rest } = row || {}; return rest; } }; },
+    update: (ref, data) => pending.push(() => write(ref, data, true))
+  };
+  await fn(tx); pending.forEach((f) => f()); notify();
+};
 export const collection = (db, ...p) => ({ name: p[p.length - 1] });
 export const doc = (a, ...p) => a && a.name && !p.length ? { name: a.name, id: "n" + (++counter) } : { name: p[p.length - 2], id: p[p.length - 1] };
 export const orderBy = (field, dir = "asc") => ({ field, dir });
