@@ -11,6 +11,27 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
+<script>
+// Paste your Firebase keys here (SETUP.md part 1). While they are still PASTE_ placeholders — or with ?demo
+// on the address — the app runs in preview mode with sample data and nothing is saved.
+window.FIREBASE_CONFIG = {
+  apiKey: "PASTE_API_KEY",
+  authDomain: "PASTE_PROJECT.firebaseapp.com",
+  projectId: "PASTE_PROJECT_ID",
+  storageBucket: "PASTE_PROJECT.appspot.com",
+  messagingSenderId: "PASTE_SENDER_ID",
+  appId: "PASTE_APP_ID"
+};
+window.DEMO = /[?&]demo\b/.test(location.search) || window.FIREBASE_CONFIG.apiKey.indexOf("PASTE_") === 0;
+(function () {
+  var g = "https://www.gstatic.com/firebasejs/10.12.2/", demo = new URL("demo-firebase.js", location.href).href;
+  var map = window.DEMO ? { "firebase-app": demo, "firebase-auth": demo, "firebase-firestore": demo }
+    : { "firebase-app": g + "firebase-app.js", "firebase-auth": g + "firebase-auth.js", "firebase-firestore": g + "firebase-firestore.js" };
+  var s = document.createElement("script");
+  s.type = "importmap"; s.textContent = JSON.stringify({ imports: map });
+  document.head.appendChild(s);
+})();
+</script>
 <style>
 /* Apple HIG styling — iOS system colours, SF type scale, inset grouped lists, glass bars */
 :root{
@@ -391,23 +412,16 @@ input[type=file]{padding:9px 12px}
 /* =========================================================
    1. FIREBASE CONFIG — paste yours from the Firebase console
    ========================================================= */
-const firebaseConfig = {
-  apiKey: "PASTE_API_KEY",
-  authDomain: "PASTE_PROJECT.firebaseapp.com",
-  projectId: "PASTE_PROJECT_ID",
-  storageBucket: "PASTE_PROJECT.appspot.com",
-  messagingSenderId: "PASTE_SENDER_ID",
-  appId: "PASTE_APP_ID"
-};
+const firebaseConfig = window.FIREBASE_CONFIG;
 // Public VAPID key from the OptiPlex notifier setup (SETUP.md, part 5).
 const VAPID_PUBLIC_KEY = "PASTE_VAPID_PUBLIC_KEY";
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { initializeApp } from "firebase-app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut }
-  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  from "firebase-auth";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   collection, doc, setDoc, updateDoc, deleteDoc, writeBatch, onSnapshot, query, orderBy, serverTimestamp }
-  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  from "firebase-firestore";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -522,6 +536,7 @@ function listen(name, orderField, dir = "desc") {
 }
 function updateSyncPill(fromCache) {
   const p = $("syncPill");
+  if (window.DEMO) { p.textContent = "Preview · sample data"; p.className = "pill off"; return; }
   const waiting = Object.values(pending).some(Boolean);
   if (!navigator.onLine || fromCache && waiting) { p.textContent = "Offline – saved on device"; p.className = "pill off"; }
   else if (waiting) { p.textContent = "Syncing…"; p.className = "pill"; }
@@ -768,6 +783,7 @@ function deviceName() {
 }
 async function refreshAlertsButton() {
   const btn = $("alertsBtn"), txt = $("alertsText");
+  if (window.DEMO) { btn.classList.add("hidden"); txt.textContent = "Alerts are off in preview mode."; return; }
   if (!("PushManager" in window) || !("serviceWorker" in navigator)) {
     btn.classList.add("hidden"); txt.textContent = "This browser can't receive push alerts."; return;
   }
