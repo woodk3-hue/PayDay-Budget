@@ -137,6 +137,8 @@ nav button.on{color:var(--brand)}
 
 .hidden{display:none!important}
 .list input.amtin{width:104px;flex:none;text-align:right}
+textarea{font:inherit;font-size:15px;padding:11px 12px;border:0;border-radius:10px;background:var(--tile);color:var(--ink);width:100%;
+  outline:none;resize:vertical;box-shadow:inset 0 0 0 .5px var(--line)}
 button.small{min-height:44px;padding:0 16px;font-size:15px;flex:none}
 .bankhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
 .bankhead b{font-size:19px}
@@ -597,6 +599,13 @@ input[type=file]{padding:9px 12px}
       <p class="note" style="margin-top:8px">Off by default and personal to you. When on, a transfer set to "On payday" runs each time you save your wages, instead of on a fixed date.</p>
     </div>
     <div class="card"><h2>Transfers</h2><ul class="list" id="xferList"></ul></div>
+    <div class="card">
+      <h2>Import setup</h2>
+      <label>Import file (.json)<input type="file" id="setupFile" accept=".json,application/json"></label>
+      <label style="margin-top:10px">or paste it here<textarea id="setupText" rows="4" placeholder="Paste the setup text"></textarea></label>
+      <button id="setupBtn" style="width:100%;margin-top:12px">Import</button>
+      <p class="note" style="margin-top:8px">Adds the banks, accounts and payday transfers in the file. Existing accounts with the same name are reused. Run it once.</p>
+    </div>
     <div class="card addcard" id="bankCard">
       <button type="button" class="ghost x" data-close-sheet>Close</button>
       <h2 id="bankFormTitle">Add bank</h2>
@@ -2419,6 +2428,54 @@ function runPaydayTransfers(date) {
   batch.commit().catch((err) => toast("Payday transfers failed: " + err.message));
   toast("Ran " + list.length + " payday transfers (" + money(total) + ").");
 }
+
+/* =========================================================
+   6m. SETUP IMPORT — banks, accounts and payday transfers from a prepared file (temporary)
+   ========================================================= */
+const norm = (n) => String(n || "").trim().toLowerCase();
+const accByName = (n) => ST.accounts.find((a) => norm(a.name) === norm(n));
+function setupPlan(text) {
+  const data = JSON.parse(text), plan = { banks: [], accounts: [], transfers: [], skipped: 0, payday: !!(data.settings && data.settings.payday) };
+  const known = new Set(ST.accounts.map((a) => norm(a.name)));
+  (Array.isArray(data.accounts) ? data.accounts : []).forEach((a) => {
+    const name = String((a && a.name) || "").trim().slice(0, 80), bank = String((a && a.bank) || "").trim().slice(0, 80);
+    if (!name || known.has(norm(name))) return;
+    known.add(norm(name));
+    plan.accounts.push({ name: name, bank: bank });
+    if (bank && !ST.banks.some((b) => norm(b.name) === norm(bank)) && !plan.banks.some((b) => norm(b) === norm(bank))) plan.banks.push(bank);
+  });
+  (Array.isArray(data.paydayTransfers) ? data.paydayTransfers : []).forEach((t) => {
+    const ok = t && t.name && Number(t.amount) > 0 && (!t.from || known.has(norm(t.from))) && (!t.to || known.has(norm(t.to))) && (t.from || t.to);
+    if (!ok || ST.acctTransfers.some((x) => norm(x.name) === norm(t.name))) { plan.skipped++; return; }
+    plan.transfers.push({ name: String(t.name).slice(0, 80), from: t.from || "", to: t.to || "", externalName: String(t.externalName || "").slice(0, 80), amount: round2(Number(t.amount)) });
+  });
+  return plan;
+}
+function runSetup(plan) {
+  const batch = writeBatch(db), bankIds = {}, accIds = {};
+  ST.banks.forEach((b) => { bankIds[norm(b.name)] = b.id; });
+  ST.accounts.forEach((a) => { accIds[norm(a.name)] = a.id; });
+  plan.banks.forEach((name) => { const ref = doc(col("banks")); bankIds[norm(name)] = ref.id; batch.set(ref, { name: name, created: serverTimestamp() }); });
+  plan.accounts.forEach((a) => {
+    const ref = doc(col("accounts")); accIds[norm(a.name)] = ref.id;
+    batch.set(ref, { name: a.name, bank: a.bank, bankId: a.bank ? bankIds[norm(a.bank)] || "" : "", balance: 0, created: serverTimestamp() });
+  });
+  plan.transfers.forEach((t) => batch.set(doc(col("acctTransfers")), {
+    name: t.name, fromId: t.from ? accIds[norm(t.from)] : "", toId: t.to ? accIds[norm(t.to)] : "", externalName: t.externalName,
+    amount: t.amount, frequency: "fortnightly", trigger: "payday", nextApply: "", created: serverTimestamp() }));
+  if (plan.payday) batch.set(doc(db, "users", uid, "settings", "payday"), { enabled: true, updated: serverTimestamp() }, { merge: true });
+  batch.commit().then(() => toast("Imported. Set each account's balance with Edit.")).catch((err) => toast("Import failed: " + err.message));
+  $("setupText").value = ""; $("setupFile").value = "";
+}
+$("setupFile").addEventListener("change", async (e) => { const f = e.target.files[0]; if (f) $("setupText").value = await f.text(); });
+$("setupBtn").addEventListener("click", () => {
+  let plan;
+  try { plan = setupPlan($("setupText").value); } catch (err) { toast("That doesn't look like a setup file."); return; }
+  if (!plan.accounts.length && !plan.transfers.length && !plan.banks.length) { toast("Nothing new to import in that file."); return; }
+  const names = plan.accounts.map((a) => a.name).join(", ");
+  showInlineConfirm("Add " + plan.banks.length + " banks, " + plan.accounts.length + " new accounts" + (names ? " (" + names + ")" : "") + " and " +
+    plan.transfers.length + " payday transfers? Accounts you already have are reused. Only do this once.", () => runSetup(plan), "Import");
+});
 
 /* =========================================================
    7. AUTH
