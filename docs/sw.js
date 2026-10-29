@@ -1,7 +1,7 @@
 // Budget Sync service worker — caches the app shell and Firebase SDK so the app opens offline.
 // Firestore data itself is cached by Firebase (IndexedDB), not here.
 // Bump VERSION whenever you change index.html so devices pick up the new copy.
-const VERSION = "budget-v3";
+const VERSION = "budget-v4";
 const SHELL = [
   "./",
   "./index.html",
@@ -44,7 +44,7 @@ self.addEventListener("fetch", (e) => {
   // Everything else in the shell: cache first.
   e.respondWith(
     caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
-      if (res.ok && (url.origin === location.origin || url.hostname === "www.gstatic.com")) {
+      if (res.ok && (url.origin === location.origin || url.hostname === "www.gstatic.com" || url.hostname === "cdnjs.cloudflare.com")) {
         const copy = res.clone();
         caches.open(VERSION).then((c) => c.put(e.request, copy));
       }

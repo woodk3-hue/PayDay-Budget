@@ -3,6 +3,7 @@
 //   1. rolls past due dates forward to the next billing cycle,
 //   2. sends a push alert for anything due in exactly `remindDays` days, or due today,
 //   3. removes devices whose push registration has expired.
+// It also files uploaded bill PDFs into Seafile as they arrive (filing.js).
 // Commands:  node notifier.js          → run on schedule (keeps running)
 //            node notifier.js --now    → run the daily check once, then exit
 //            node notifier.js --test   → send a test alert to every device, then exit
@@ -11,6 +12,7 @@ import fs from "node:fs";
 import cron from "node-cron";
 import webpush from "web-push";
 import admin from "firebase-admin";
+import { startFiling } from "./filing.js";
 
 const TZ = "Australia/Brisbane";
 const arg = process.argv[2];
@@ -103,5 +105,6 @@ if (arg === "--test") {
   const [h, m] = REMIND_TIME.split(":").map(Number);
   cron.schedule(m + " " + h + " * * *", () => dailyCheck().catch((e) => console.error(e)), { timezone: TZ });
   console.log("Notifier running. Daily check at", REMIND_TIME, TZ);
+  startFiling(db);
   dailyCheck().catch((e) => console.error(e)); // catch up on start (safe: never double-alerts the same day)
 }

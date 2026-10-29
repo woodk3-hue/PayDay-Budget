@@ -76,6 +76,33 @@ Your phone should show "Test alert from your OptiPlex ✅", even with the app cl
 
 On a computer, alerts only show while Chrome or Edge is running (it can be minimised). If you choose a different "Remind me" number on an item, it alerts that many days before instead of 3.
 
+## 6. File bill PDFs to Seafile (optional, runs on the OptiPlex)
+In the app, **Property** tab → pick a PDF → it reads the vendor, total and date → check them → Save. The OptiPlex then moves the PDF into Seafile and deletes the temporary copy. Folders it makes: `Property name/Bills`, `Property name/Receipts/2026-27` (July–June tax year) and `Personal Bills`.
+
+**a. Get a Seafile token**
+In Seafile: click your avatar → **Settings** → **Web API Auth Token** → create it and copy it. Open the library you want to use and copy the long ID from its address bar (the part after `/library/`).
+
+**b. Add it to the OptiPlex**
+```
+ssh YOUR_USER@OPTIPLEX_IP
+cd ~/notifier
+nano .env
+```
+Add these lines (use your Tailscale address for the URL), then Ctrl+O, Enter, Ctrl+X:
+```
+SEAFILE_URL=http://YOUR-SEAFILE-ADDRESS:8000
+SEAFILE_TOKEN=paste-token-here
+SEAFILE_REPO_ID=paste-library-id-here
+```
+
+**c. Update the notifier files and restart**
+Copy the new `notifier` folder files (`filing.js`, `notifier.js`, `Dockerfile`) over the old ones, then:
+```
+docker compose up -d --build
+docker logs budget-notifier
+```
+You should see "Filing bill PDFs to Seafile folder". PDFs over about 700 KB are read but not kept. Until Seafile is set up, bills still save and the PDF waits safely in the app's database.
+
 ## How offline works
 Anything you add without signal is saved on that device straight away (the top pill shows "Offline – saved on device"). It uploads by itself when you're back online, and your other devices update within seconds.
 
