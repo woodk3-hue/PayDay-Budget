@@ -1,0 +1,9 @@
+# Secrets — never commit
+notifier/.env
+notifier/service-account.json
+*.json.key
+node_modules/
+.DS_Store
+
+# Personal financial files stay on this computer only
+money-plan/

@@ -1,0 +1,10 @@
+services:
+  notifier:
+    build: .
+    container_name: budget-notifier
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - TZ=Australia/Brisbane
+    volumes:
+      - ./service-account.json:/app/service-account.json:ro

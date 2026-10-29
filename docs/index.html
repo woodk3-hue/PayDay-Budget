@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Budget Sync</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+/* Apple HIG styling — iOS system colours, SF type scale, inset grouped lists, glass bars */
+:root{
+  --bg:#f2f2f7;--card:#ffffff;--ink:#000000;--muted:rgba(60,60,67,.6);--line:rgba(60,60,67,.18);
+  --fill:rgba(118,118,128,.12);--brand:#007aff;--brand-soft:rgba(0,122,255,.12);
+  --green:#248a3d;--red:#ff3b30;--red-soft:rgba(255,59,48,.12);--amber:#ff9500;
+  --glass:rgba(249,249,251,.72);--shadow:0 1px 2px rgba(0,0,0,.04);
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;
+  --rounded:ui-rounded,"SF Pro Rounded",-apple-system,system-ui,sans-serif;
+  color-scheme:light dark;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#000000;--card:#1c1c1e;--ink:#ffffff;--muted:rgba(235,235,245,.6);--line:rgba(84,84,88,.6);
+        --fill:rgba(118,118,128,.24);--brand:#0a84ff;--brand-soft:rgba(10,132,255,.18);
+        --green:#30d158;--red:#ff453a;--red-soft:rgba(255,69,58,.18);--amber:#ff9f0a;
+        --glass:rgba(28,28,30,.72);--shadow:none}
+}
+*{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
+body{font-family:var(--font);font-size:17px;line-height:1.3;letter-spacing:-.41px;background:var(--bg);color:var(--ink);
+  -webkit-font-smoothing:antialiased;padding-bottom:calc(100px + env(safe-area-inset-bottom))}
+
+/* Navigation bar: glass, large title */
+header{position:sticky;top:0;z-index:10;flex-wrap:wrap;background:var(--glass);
+  -webkit-backdrop-filter:blur(24px) saturate(1.8);backdrop-filter:blur(24px) saturate(1.8);
+  border-bottom:.5px solid var(--line);padding:calc(8px + env(safe-area-inset-top)) 20px 10px;
+  display:flex;align-items:center;gap:10px}
+header h1{font-size:34px;font-weight:700;letter-spacing:.37px;line-height:1.2;order:3;flex-basis:100%;margin-top:2px}
+.pill{font-size:12px;font-weight:600;padding:4px 10px;border-radius:99px;background:var(--fill);color:var(--muted);
+  white-space:nowrap;display:inline-flex;align-items:center;gap:5px;margin-right:auto}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green)}
+.pill.off::before{background:var(--amber)}
+.pill.off{color:var(--amber)}
+
+main{max-width:680px;margin:0 auto;padding:12px 16px}
+
+/* Inset grouped sections */
+.card{background:var(--card);border-radius:12px;padding:12px 16px;margin-bottom:22px;box-shadow:var(--shadow)}
+.card h2{font-size:13px;font-weight:400;text-transform:uppercase;letter-spacing:-.08px;color:var(--muted);margin:2px 0 10px}
+
+/* Stat tiles */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.stat{background:var(--fill);border-radius:10px;padding:10px 12px}
+.stat small{color:var(--muted);font-size:13px;display:block;margin-bottom:2px}
+.stat b{font-family:var(--rounded);font-size:24px;font-weight:700;letter-spacing:.2px;font-variant-numeric:tabular-nums}
+.pos{color:var(--green)}.neg{color:var(--red)}
+
+/* Forms */
+form{display:grid;gap:12px;grid-template-columns:1fr 1fr}
+form .full{grid-column:1/-1}
+label{font-size:13px;color:var(--muted);display:grid;gap:5px}
+input,select{font:inherit;font-size:17px;letter-spacing:-.41px;padding:11px 12px;min-height:44px;border:0;border-radius:10px;
+  background:var(--fill);color:var(--ink);width:100%;appearance:none;-webkit-appearance:none;outline:none}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238e8e93' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
+input:focus,select:focus{box-shadow:0 0 0 3px var(--brand-soft)}
+input::placeholder{color:var(--muted)}
+
+/* Buttons */
+button{font:inherit;font-size:17px;font-weight:600;letter-spacing:-.41px;border:0;border-radius:12px;min-height:50px;padding:0 18px;
+  cursor:pointer;background:var(--brand);color:#fff;transition:opacity .15s,transform .15s}
+button:active{opacity:.7;transform:scale(.98)}
+button.ghost{background:transparent;color:var(--brand);font-weight:400;min-height:44px;min-width:44px;padding:0 6px}
+button.danger{background:var(--red)}
+header button.ghost{min-height:32px;font-size:17px}
+
+/* Lists */
+.list{list-style:none;padding:0;margin:0 -16px}
+.list li{display:flex;align-items:center;gap:8px;min-height:52px;padding:8px 8px 8px 16px;position:relative}
+.list li+li::before{content:"";position:absolute;top:0;left:16px;right:0;border-top:.5px solid var(--line)}
+.list .main{flex:1;min-width:0}
+.list .main div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list .sub{font-size:13px;color:var(--muted);margin-top:1px}
+.amt{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+.list button.ghost{font-size:15px}
+.list [data-del]{color:var(--muted)}
+.bar{height:6px;background:var(--fill);border-radius:99px;overflow:hidden;margin-top:7px}
+.bar span{display:block;height:100%;background:var(--brand);border-radius:99px}
+.empty{color:var(--muted);font-size:15px}
+
+/* Floating glass tab bar */
+nav{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(10px + env(safe-area-inset-bottom));
+  width:min(560px,calc(100% - 24px));display:flex;padding:5px;border-radius:30px;z-index:10;
+  background:var(--glass);-webkit-backdrop-filter:blur(24px) saturate(1.8);backdrop-filter:blur(24px) saturate(1.8);
+  box-shadow:0 8px 30px rgba(0,0,0,.12),inset 0 0 0 .5px var(--line)}
+nav button{flex:1;background:none;color:var(--muted);border-radius:24px;min-height:54px;padding:4px 2px;
+  font-size:10px;font-weight:600;letter-spacing:.1px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+nav button svg{width:24px;height:24px;pointer-events:none}
+nav button span{pointer-events:none}
+nav button.on{color:var(--brand);background:var(--fill)}
+
+.hidden{display:none!important}
+
+/* Sign-in */
+#login{min-height:75vh;display:grid;place-items:center;text-align:center;padding:0 20px}
+#login h2{font-size:28px;font-weight:700;letter-spacing:.36px}
+#login p{color:var(--muted);margin:10px 0 26px}
+#login button{width:100%;max-width:320px}
+
+/* Alerts (iOS style): centred title, hairline-separated buttons */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);display:grid;place-items:center;z-index:700;padding:16px;
+  animation:fade .2s ease}
+.overlay .card{width:270px;padding:0;margin:0;overflow:hidden;border-radius:14px;text-align:center;
+  background:var(--glass);-webkit-backdrop-filter:blur(30px) saturate(1.8);backdrop-filter:blur(30px) saturate(1.8);
+  animation:pop .2s ease}
+.overlay .card p{padding:20px 16px;font-size:17px;font-weight:600;line-height:1.3}
+.overlay .row{display:flex;margin:0;border-top:.5px solid var(--line)}
+.overlay .row button{flex:1;background:none;border-radius:0;color:var(--brand);font-weight:400;min-height:44px}
+.overlay .row button+button{border-left:.5px solid var(--line)}
+.overlay .row button.danger{color:var(--red);font-weight:600}
+@keyframes fade{from{opacity:0}}
+@keyframes pop{from{transform:scale(1.1);opacity:0}}
+
+/* Segmented control */
+.toggle{display:flex;background:var(--fill);border-radius:9px;padding:2px}
+.toggle button{flex:1;background:none;color:var(--ink);min-height:32px;border-radius:7px;font-size:13px;font-weight:500;padding:0}
+.toggle button.on{background:var(--card);font-weight:600;box-shadow:0 3px 8px rgba(0,0,0,.12),0 3px 1px rgba(0,0,0,.04)}
+@media (prefers-color-scheme:dark){.toggle button.on{background:#636366}}
+
+.badge{font-size:11px;margin-left:4px;font-weight:600;padding:3px 8px;border-radius:99px;background:var(--fill);color:var(--muted);white-space:nowrap}
+.badge.soon{background:var(--red-soft);color:var(--red)}
+.alerts{display:flex;align-items:center;gap:12px;justify-content:space-between}
+.alerts p{font-size:15px;color:var(--muted)}
+.alerts button{min-height:36px;border-radius:99px;font-size:15px;padding:0 14px;white-space:nowrap}
+
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (prefers-reduced-transparency:reduce){header,nav,.overlay .card{background:var(--card);backdrop-filter:none;-webkit-backdrop-filter:none}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1 id="pageTitle">Budget</h1>
+  <span id="syncPill" class="pill">Synced</span>
+  <button id="signOutBtn" class="ghost hidden">Sign out</button>
+</header>
+
+<main>
+  <!-- LOGIN -->
+  <section id="login" class="hidden">
+    <div>
+      <h2>Your budget, on every device</h2>
+      <p>Sign in with Google to keep your phone, laptop and PC in sync.</p>
+      <button id="signInBtn">Sign in with Google</button>
+    </div>
+  </section>
+
+  <!-- DASHBOARD -->
+  <section id="view-home" class="view hidden">
+    <div class="card">
+      <h2 id="periodTitle">This fortnight</h2>
+      <div class="grid">
+        <div class="stat"><small>Income</small><b id="sIncome">$0</b></div>
+        <div class="stat"><small>Spent</small><b id="sSpent">$0</b></div>
+        <div class="stat"><small>Left over</small><b id="sLeft">$0</b></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Recurring bills (per fortnight)</h2>
+      <div class="grid">
+        <div class="stat"><small>Committed</small><b id="sRecurring">$0</b></div>
+        <div class="stat"><small>Savings goals</small><b id="sGoals">$0</b></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Coming up (next 14 days)</h2>
+      <ul class="list" id="upcomingList"></ul>
+    </div>
+    <div class="card">
+      <h2>Spending by category (this fortnight)</h2>
+      <ul class="list" id="catList"></ul>
+    </div>
+  </section>
+
+  <!-- INCOME -->
+  <section id="view-income" class="view hidden">
+    <div class="card">
+      <h2 id="incomeFormTitle">Add income</h2>
+      <form id="incomeForm">
+        <label>Date<input type="date" name="date" required></label>
+        <label>Amount<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
+        <label class="full">Source
+          <select name="source">
+            <option>QR pay</option><option>Zane rent</option><option>Apartment rent</option>
+            <option>Car spot</option><option>Tax refund</option><option>Other</option>
+          </select>
+        </label>
+        <label class="full">Note<input name="note" placeholder="Optional"></label>
+        <button class="full" type="submit">Save income</button>
+      </form>
+    </div>
+    <div class="card"><h2>Income history</h2><ul class="list" id="incomeList"></ul></div>
+  </section>
+
+  <!-- EXPENSES -->
+  <section id="view-expenses" class="view hidden">
+    <div class="card">
+      <h2 id="expenseFormTitle">Add expense</h2>
+      <form id="expenseForm">
+        <label>Date<input type="date" name="date" required></label>
+        <label>Amount<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
+        <label>Category<select name="category" id="catSelect"></select></label>
+        <label>How often
+          <select name="frequency">
+            <option value="once">One-off</option><option value="weekly">Weekly</option>
+            <option value="fortnightly">Fortnightly</option><option value="monthly">Monthly</option>
+            <option value="quarterly">Quarterly</option><option value="yearly">Yearly</option>
+          </select>
+        </label>
+        <label class="full">Description<input name="description" required placeholder="e.g. Woolworths"></label>
+        <button class="full" type="submit">Save expense</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2>Expenses</h2>
+      <div class="toggle" id="expenseFilter">
+        <button data-f="all" class="on">All</button>
+        <button data-f="once">One-off</button>
+        <button data-f="recurring">Recurring</button>
+      </div>
+      <ul class="list" id="expenseList" style="margin-top:8px"></ul>
+    </div>
+  </section>
+
+  <!-- SAVINGS -->
+  <section id="view-savings" class="view hidden">
+    <div class="card">
+      <h2>Move money</h2>
+      <form id="transferForm">
+        <label class="full">Goal<select name="goalId" id="goalSelect" required></select></label>
+        <label>Type
+          <select name="type">
+            <option value="spend">Spent</option>
+            <option value="add">Added</option>
+          </select>
+        </label>
+        <label>Amount<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
+        <label>Date<input type="date" name="date" required></label>
+        <label>Note<input name="note" placeholder="e.g. MacBook"></label>
+        <button class="full" type="submit">Save</button>
+      </form>
+    </div>
+    <div class="card"><h2>Goals</h2><ul class="list" id="goalList"></ul></div>
+    <div class="card">
+      <h2>New goal</h2>
+      <form id="goalForm">
+        <label class="full">Name<input name="name" required placeholder="e.g. Japan trip"></label>
+        <label>Target<input type="number" name="target" step="0.01" min="0" inputmode="decimal" required></label>
+        <label>Starting balance<input type="number" name="opening" step="0.01" min="0" inputmode="decimal" value="0"></label>
+        <button class="full" type="submit">Add goal</button>
+      </form>
+    </div>
+    <div class="card"><h2>Recent moves</h2><ul class="list" id="transferList"></ul></div>
+  </section>
+
+  <!-- SUBSCRIPTIONS & PURCHASES -->
+  <section id="view-subs" class="view hidden">
+    <div class="card alerts">
+      <p id="alertsText">Get a phone alert before things renew.</p>
+      <button id="alertsBtn">Turn on alerts</button>
+    </div>
+    <div class="card">
+      <h2 id="subFormTitle">Add subscription, bill or purchase</h2>
+      <form id="subForm">
+        <label class="full">Name<input name="name" required placeholder="e.g. Spotify"></label>
+        <label>Cost<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
+        <label>Type
+          <select name="type">
+            <option value="subscription">Subscription</option>
+            <option value="bill">Bill</option>
+            <option value="purchase">Planned purchase</option>
+          </select>
+        </label>
+        <label>How often
+          <select name="frequency">
+            <option value="monthly">Monthly</option><option value="weekly">Weekly</option>
+            <option value="fortnightly">Fortnightly</option><option value="quarterly">Quarterly</option>
+            <option value="yearly">Yearly</option><option value="once">One-off</option>
+          </select>
+        </label>
+        <label>Next due<input type="date" name="dueDate" required></label>
+        <label class="full">Remind me (days before)<input type="number" name="remindDays" min="0" max="30" value="3"></label>
+        <button class="full" type="submit">Save</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2>All subscriptions & purchases</h2>
+      <div class="grid" style="margin-bottom:8px">
+        <div class="stat"><small>Recurring per fortnight</small><b id="subsFn">$0</b></div>
+        <div class="stat"><small>Recurring per year</small><b id="subsYr">$0</b></div>
+      </div>
+      <ul class="list" id="subList"></ul>
+    </div>
+  </section>
+</main>
+
+<nav id="tabs" class="hidden">
+  <button data-v="home" class="on" aria-label="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 9.8V20h4.5v-5.5h4V20h4.5V9.8"/></svg><span>Home</span></button>
+  <button data-v="income" aria-label="Income"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v9M8.5 13l3.5 3.5 3.5-3.5"/></svg><span>Income</span></button>
+  <button data-v="expenses" aria-label="Expenses"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M2.5 10h19M6 15h4"/></svg><span>Expenses</span></button>
+  <button data-v="savings" aria-label="Goals"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 8.2a4.3 4.3 0 0 1 7.5 2.6C19.5 16.4 12 21 12 21z"/></svg><span>Goals</span></button>
+  <button data-v="subs" aria-label="Subs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4.5h-4.5"/><path d="M12 8v4.2l2.6 1.6"/></svg><span>Subs</span></button>
+</nav>
+
+<script type="module">
+/* =========================================================
+   1. FIREBASE CONFIG — paste yours from the Firebase console
+   ========================================================= */
+const firebaseConfig = {
+  apiKey: "PASTE_API_KEY",
+  authDomain: "PASTE_PROJECT.firebaseapp.com",
+  projectId: "PASTE_PROJECT_ID",
+  storageBucket: "PASTE_PROJECT.appspot.com",
+  messagingSenderId: "PASTE_SENDER_ID",
+  appId: "PASTE_APP_ID"
+};
+// Public VAPID key from the OptiPlex notifier setup (SETUP.md, part 5).
+const VAPID_PUBLIC_KEY = "PASTE_VAPID_PUBLIC_KEY";
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+// Offline cache in IndexedDB, shared across tabs. Writes made offline queue and sync automatically.
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+});
+
+/* =========================================================
+   2. STATE
+   ========================================================= */
+const ST = { income: [], expenses: [], goals: [], transfers: [], subscriptions: [] };
+const CATEGORIES = ["Groceries","Eating out","Shopping","Clothes","Fuel","Transport","Bills","Subscriptions",
+  "Health","Medication","Gym","Home","Property","Loan","Travel","Tech","Gifts","Kids","Beauty","Other"];
+const DEFAULT_GOALS = [
+  { name: "Emergency fund", target: 10000 },
+  { name: "Holidays", target: 5000 },
+  { name: "Tech", target: 4000 },
+  { name: "Gear", target: 2000 }
+];
+// First QR payday in the new plan; every fortnight from here is a pay period.
+const PAY_ANCHOR = new Date("2026-11-04T00:00:00");
+let uid = null, unsubs = [], editing = { income: null, expenses: null, subscriptions: null }, expenseFilter = "all";
+const pending = { income: false, expenses: false, goals: false, transfers: false, subscriptions: false };
+
+/* =========================================================
+   3. HELPERS
+   ========================================================= */
+const $ = (id) => document.getElementById(id);
+const money = (n) => (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const today = () => new Date().toLocaleDateString("en-CA");
+const fmtDate = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-AU", { day: "numeric", month: "short" });
+const col = (name) => collection(db, "users", uid, name);
+const FREQ_PER_FORTNIGHT = { weekly: 2, fortnightly: 1, monthly: 12 / 26, quarterly: 4 / 26, yearly: 1 / 26, once: 0 };
+
+function currentPeriod() {
+  const dayMs = 86400000, now = new Date(); now.setHours(0, 0, 0, 0);
+  const n = Math.floor((now - PAY_ANCHOR) / (14 * dayMs));
+  const start = new Date(PAY_ANCHOR.getTime() + n * 14 * dayMs);
+  const end = new Date(start.getTime() + 13 * dayMs);
+  return { start: start.toLocaleDateString("en-CA"), end: end.toLocaleDateString("en-CA") };
+}
+const inPeriod = (d, p) => d >= p.start && d <= p.end;
+
+// Renewal scheduler (same rules as the OptiPlex notifier): roll a past due date forward
+// by its billing cycle until it is today or later. One-off purchases never roll.
+function addCycle(dateStr, freq) {
+  const d = new Date(dateStr + "T00:00:00"), day = d.getDate();
+  if (freq === "weekly") d.setDate(day + 7);
+  else if (freq === "fortnightly") d.setDate(day + 14);
+  else {
+    const months = { monthly: 1, quarterly: 3, yearly: 12 }[freq] || 0;
+    d.setDate(1); d.setMonth(d.getMonth() + months);
+    const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    d.setDate(Math.min(day, last));
+  }
+  return d.toLocaleDateString("en-CA");
+}
+function nextDue(s) {
+  let due = s.dueDate;
+  if (s.frequency === "once") return due;
+  for (let i = 0; due < today() && i < 500; i++) due = addCycle(due, s.frequency);
+  return due;
+}
+const daysUntil = (d) => Math.round((new Date(d + "T00:00:00") - new Date(today() + "T00:00:00")) / 86400000);
+
+// Writes are not awaited: offline they resolve only once the server confirms,
+// but the local cache updates instantly and the UI re-renders from the snapshot.
+function save(name, id, data) {
+  const ref = id ? doc(db, "users", uid, name, id) : doc(col(name));
+  const op = id ? updateDoc(ref, data) : setDoc(ref, { ...data, created: serverTimestamp() });
+  op.catch((e) => toast("Save failed: " + e.message));
+}
+function remove(name, id) {
+  deleteDoc(doc(db, "users", uid, name, id)).catch((e) => toast("Delete failed: " + e.message));
+}
+
+// Custom confirm (no window.confirm in PWA context), z-index 700 on document.body.
+function showInlineConfirm(message, onYes) {
+  const wrap = document.createElement("div");
+  wrap.className = "overlay";
+  wrap.innerHTML = '<div class="card"><p>' + esc(message) + '</p><div class="row">' +
+    '<button class="ghost" data-a="no">Cancel</button><button class="danger" data-a="yes">Delete</button></div></div>';
+  wrap.addEventListener("click", (e) => {
+    const a = e.target.dataset.a;
+    if (a === "yes") onYes();
+    if (a || e.target === wrap) wrap.remove();
+  });
+  document.body.appendChild(wrap);
+}
+function toast(msg) {
+  const t = document.createElement("div");
+  t.className = "overlay";
+  t.innerHTML = '<div class="card"><p>' + esc(msg) + '</p><div class="row"><button>OK</button></div></div>';
+  t.addEventListener("click", () => t.remove());
+  document.body.appendChild(t);
+}
+
+/* =========================================================
+   4. SYNC — live listeners per collection
+   ========================================================= */
+function listen(name, orderField, dir = "desc") {
+  const q = query(col(name), orderBy(orderField, dir));
+  return onSnapshot(q, { includeMetadataChanges: true }, (snap) => {
+    ST[name] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    pending[name] = snap.metadata.hasPendingWrites;
+    updateSyncPill(snap.metadata.fromCache);
+    render();
+  }, (e) => toast("Sync error: " + e.message));
+}
+function updateSyncPill(fromCache) {
+  const p = $("syncPill");
+  const waiting = Object.values(pending).some(Boolean);
+  if (!navigator.onLine || fromCache && waiting) { p.textContent = "Offline – saved on device"; p.className = "pill off"; }
+  else if (waiting) { p.textContent = "Syncing…"; p.className = "pill"; }
+  else { p.textContent = "Synced"; p.className = "pill"; }
+}
+window.addEventListener("online", () => updateSyncPill(false));
+window.addEventListener("offline", () => updateSyncPill(true));
+
+function startSync() {
+  unsubs = [
+    listen("income", "date"),
+    listen("expenses", "date"),
+    listen("goals", "name", "asc"),
+    listen("transfers", "date"),
+    listen("subscriptions", "dueDate", "asc")
+  ];
+  refreshAlertsButton();
+  // Seed default goals once, the first time this account has none.
+  setTimeout(() => {
+    if (ST.goals.length === 0 && !localStorage.getItem("seeded-" + uid)) {
+      DEFAULT_GOALS.forEach((g) => save("goals", null, { name: g.name, target: g.target, opening: 0 }));
+      try { localStorage.setItem("seeded-" + uid, "1"); } catch (e) {}
+    }
+  }, 2500);
+}
+
+/* =========================================================
+   5. RENDER
+   ========================================================= */
+function render() {
+  renderHome(); renderIncome(); renderExpenses(); renderSavings(); renderSubs();
+}
+
+function subsSorted() {
+  return ST.subscriptions.map((s) => ({ ...s, next: nextDue(s) })).sort((a, b) => a.next.localeCompare(b.next));
+}
+function dueBadge(next, remindDays) {
+  const n = daysUntil(next);
+  const txt = n < 0 ? "Overdue" : n === 0 ? "Today" : n === 1 ? "Tomorrow" : "In " + n + " days";
+  return '<span class="badge' + (n <= (remindDays ?? 3) ? " soon" : "") + '">' + txt + "</span>";
+}
+function subRow(s) {
+  const freq = s.frequency === "once" ? "One-off" : s.frequency.charAt(0).toUpperCase() + s.frequency.slice(1);
+  return '<li><div class="main"><div>' + esc(s.name) + '</div><div class="sub">' + freq + " · " +
+    fmtDate(s.next) + " " + dueBadge(s.next, s.remindDays) + '</div></div>' +
+    '<span class="amt">' + money(s.amount) + '</span>' +
+    '<button class="ghost" data-edit-sub="' + s.id + '">Edit</button>' +
+    '<button class="ghost" data-del="subscriptions:' + s.id + '">✕</button></li>';
+}
+function upcomingRow(s) {
+  return '<li><div class="main"><div>' + esc(s.name) + '</div><div class="sub">' + fmtDate(s.next) + '</div></div>' +
+    dueBadge(s.next, s.remindDays) + '<span class="amt">' + money(s.amount) + '</span></li>';
+}
+function renderSubs() {
+  const rows = subsSorted();
+  const fn = rows.reduce((t, s) => t + s.amount * (FREQ_PER_FORTNIGHT[s.frequency] || 0), 0);
+  $("subsFn").textContent = money(fn);
+  $("subsYr").textContent = money(fn * 26);
+  $("subList").innerHTML = rows.length ? rows.map(subRow).join("") : '<li class="empty">Nothing added yet.</li>';
+  const soon = rows.filter((s) => daysUntil(s.next) >= 0 && daysUntil(s.next) <= 14);
+  $("upcomingList").innerHTML = soon.length ? soon.map(upcomingRow).join("") : '<li class="empty">Nothing due in the next 14 days.</li>';
+}
+
+function goalBalance(g) {
+  return ST.transfers.filter((t) => t.goalId === g.id)
+    .reduce((s, t) => s + (t.type === "add" ? t.amount : -t.amount), Number(g.opening || 0));
+}
+
+function renderHome() {
+  const p = currentPeriod();
+  $("periodTitle").textContent = "This fortnight · " + fmtDate(p.start) + " – " + fmtDate(p.end);
+  const inc = ST.income.filter((i) => inPeriod(i.date, p)).reduce((s, i) => s + i.amount, 0);
+  const spentRows = ST.expenses.filter((e) => e.frequency === "once" && inPeriod(e.date, p));
+  // Recurring = recurring expenses + subscriptions/bills (one-off planned purchases excluded).
+  const recurring = ST.expenses.concat(ST.subscriptions).reduce((s, e) => s + e.amount * (FREQ_PER_FORTNIGHT[e.frequency] || 0), 0);
+  const spent = spentRows.reduce((s, e) => s + e.amount, 0) + recurring;
+  const left = inc - spent;
+  $("sIncome").textContent = money(inc);
+  $("sSpent").textContent = money(spent);
+  $("sLeft").textContent = money(left);
+  $("sLeft").className = left >= 0 ? "pos" : "neg";
+  $("sRecurring").textContent = money(recurring);
+  $("sGoals").textContent = money(ST.goals.reduce((s, g) => s + goalBalance(g), 0));
+
+  const byCat = {};
+  spentRows.forEach((e) => { byCat[e.category] = (byCat[e.category] || 0) + e.amount; });
+  const rows = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+  $("catList").innerHTML = rows.length ? rows.map(catRow).join("") : '<li class="empty">No one-off spending yet this fortnight.</li>';
+}
+function catRow(r) {
+  return '<li><div class="main"><div>' + esc(r[0]) + '</div></div><span class="amt">' + money(r[1]) + '</span></li>';
+}
+
+function renderIncome() {
+  $("incomeList").innerHTML = ST.income.length ? ST.income.map(incomeRow).join("") : '<li class="empty">No income logged yet.</li>';
+}
+function incomeRow(i) {
+  const note = i.note ? " · " + esc(i.note) : "";
+  return '<li><div class="main"><div>' + esc(i.source) + '</div><div class="sub">' + fmtDate(i.date) + note + '</div></div>' +
+    '<span class="amt pos">' + money(i.amount) + '</span>' +
+    '<button class="ghost" data-edit-income="' + i.id + '">Edit</button>' +
+    '<button class="ghost" data-del="income:' + i.id + '">✕</button></li>';
+}
+
+function renderExpenses() {
+  const sel = $("catSelect");
+  if (!sel.options.length) sel.innerHTML = CATEGORIES.map((c) => "<option>" + c + "</option>").join("");
+  const rows = ST.expenses.filter((e) =>
+    expenseFilter === "all" || (expenseFilter === "once" ? e.frequency === "once" : e.frequency !== "once"));
+  $("expenseList").innerHTML = rows.length ? rows.map(expenseRow).join("") : '<li class="empty">Nothing here yet.</li>';
+}
+function expenseRow(e) {
+  const freq = e.frequency === "once" ? fmtDate(e.date) : e.frequency + " · " + money(e.amount * FREQ_PER_FORTNIGHT[e.frequency]) + "/fn";
+  return '<li><div class="main"><div>' + esc(e.description) + '</div><div class="sub">' + esc(e.category) + " · " + freq + '</div></div>' +
+    '<span class="amt">' + money(e.amount) + '</span>' +
+    '<button class="ghost" data-edit-expense="' + e.id + '">Edit</button>' +
+    '<button class="ghost" data-del="expenses:' + e.id + '">✕</button></li>';
+}
+
+function renderSavings() {
+  const sel = $("goalSelect"), keep = sel.value;
+  sel.innerHTML = ST.goals.map((g) => '<option value="' + g.id + '">' + esc(g.name) + "</option>").join("");
+  if (keep) sel.value = keep;
+  $("goalList").innerHTML = ST.goals.length ? ST.goals.map(goalRow).join("") : '<li class="empty">No goals yet.</li>';
+  const recent = ST.transfers.slice(0, 30);
+  $("transferList").innerHTML = recent.length ? recent.map(transferRow).join("") : '<li class="empty">No moves yet.</li>';
+}
+function goalRow(g) {
+  const bal = goalBalance(g), pct = g.target ? Math.max(0, Math.min(100, (bal / g.target) * 100)) : 0;
+  return '<li><div class="main"><div>' + esc(g.name) + '</div><div class="sub">' + money(bal) + " of " + money(g.target) +
+    '</div><div class="bar"><span style="width:' + pct.toFixed(0) + '%"></span></div></div>' +
+    '<button class="ghost" data-del="goals:' + g.id + '">✕</button></li>';
+}
+function transferRow(t) {
+  const g = ST.goals.find((x) => x.id === t.goalId);
+  const name = g ? g.name : "Deleted goal";
+  const note = t.note ? " · " + esc(t.note) : "";
+  const cls = t.type === "add" ? "pos" : "neg", sign = t.type === "add" ? "+" : "−";
+  return '<li><div class="main"><div>' + esc(name) + '</div><div class="sub">' + fmtDate(t.date) + note + '</div></div>' +
+    '<span class="amt ' + cls + '">' + sign + money(t.amount) + '</span>' +
+    '<button class="ghost" data-del="transfers:' + t.id + '">✕</button></li>';
+}
+
+/* =========================================================
+   6. FORMS & EVENTS
+   ========================================================= */
+function formData(form) {
+  const d = Object.fromEntries(new FormData(form));
+  ["amount", "target", "opening", "remindDays"].forEach((k) => { if (k in d) d[k] = Math.round(parseFloat(d[k] || 0) * 100) / 100; });
+  return d;
+}
+function resetForm(form, kind) {
+  form.reset(); form.date && (form.date.value = today());
+  if (kind) { editing[kind] = null; form.querySelector("button[type=submit]").textContent = kind === "income" ? "Save income" : "Save expense";
+    $(kind === "income" ? "incomeFormTitle" : "expenseFormTitle").textContent = kind === "income" ? "Add income" : "Add expense"; }
+}
+
+$("incomeForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  save("income", editing.income, formData(e.target));
+  resetForm(e.target, "income");
+});
+$("expenseForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  save("expenses", editing.expenses, formData(e.target));
+  resetForm(e.target, "expenses");
+});
+$("subForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const d = formData(e.target);
+  if (editing.subscriptions) d.lastNotified = null; // re-arm the reminder after an edit
+  save("subscriptions", editing.subscriptions, d);
+  editing.subscriptions = null; e.target.reset();
+  e.target.dueDate.value = today();
+  e.target.querySelector("button[type=submit]").textContent = "Save";
+  $("subFormTitle").textContent = "Add subscription, bill or purchase";
+});
+function startEditSub(s) {
+  const form = $("subForm");
+  ["name", "amount", "type", "frequency", "dueDate", "remindDays"].forEach((k) => { form.elements[k].value = s[k] ?? ""; });
+  form.dueDate.value = nextDue(s);
+  editing.subscriptions = s.id;
+  form.querySelector("button[type=submit]").textContent = "Update";
+  $("subFormTitle").textContent = "Editing " + s.name;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+$("goalForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  save("goals", null, formData(e.target));
+  e.target.reset();
+});
+$("transferForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  save("transfers", null, formData(e.target));
+  const keepGoal = e.target.goalId.value; e.target.reset();
+  e.target.goalId.value = keepGoal; e.target.date.value = today();
+});
+
+function startEdit(kind, item) {
+  const form = $(kind === "income" ? "incomeForm" : "expenseForm");
+  Object.keys(item).forEach((k) => { if (form.elements[k]) form.elements[k].value = item[k]; });
+  editing[kind] = item.id;
+  form.querySelector("button[type=submit]").textContent = "Update";
+  $(kind === "income" ? "incomeFormTitle" : "expenseFormTitle").textContent = "Editing";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+document.addEventListener("click", (e) => {
+  const t = e.target;
+  if (t.dataset.del) {
+    const [name, id] = t.dataset.del.split(":");
+    const msg = name === "goals" ? "Delete this goal? Its money moves stay in history." : name === "subscriptions" ? "Delete this item and its reminders?" : "Delete this entry?";
+    showInlineConfirm(msg, () => remove(name, id));
+  }
+  if (t.dataset.editIncome) startEdit("income", ST.income.find((x) => x.id === t.dataset.editIncome));
+  if (t.dataset.editExpense) startEdit("expenses", ST.expenses.find((x) => x.id === t.dataset.editExpense));
+  if (t.dataset.editSub) startEditSub(ST.subscriptions.find((x) => x.id === t.dataset.editSub));
+});
+
+/* =========================================================
+   6b. PUSH ALERTS — register this device with the OptiPlex notifier
+   ========================================================= */
+function b64ToBytes(b64) {
+  const pad = "=".repeat((4 - (b64.length % 4)) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}
+async function deviceId(endpoint) {
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(endpoint));
+  return [...new Uint8Array(hash)].slice(0, 16).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+function deviceName() {
+  const ua = navigator.userAgent;
+  return /Android/.test(ua) ? "Android phone" : /iPhone|iPad/.test(ua) ? "iPhone/iPad" : /Mac/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows PC" : "Device";
+}
+async function refreshAlertsButton() {
+  const btn = $("alertsBtn"), txt = $("alertsText");
+  if (!("PushManager" in window) || !("serviceWorker" in navigator)) {
+    btn.classList.add("hidden"); txt.textContent = "This browser can't receive push alerts."; return;
+  }
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  const on = !!sub && Notification.permission === "granted";
+  btn.textContent = on ? "Turn off" : "Turn on alerts";
+  txt.textContent = on ? "Alerts are on for this " + deviceName() + "." : "Get a phone alert before things renew.";
+}
+$("alertsBtn").addEventListener("click", async () => {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    if (existing && Notification.permission === "granted") {
+      remove("pushDevices", await deviceId(existing.endpoint));
+      await existing.unsubscribe();
+    } else {
+      if ((await Notification.requestPermission()) !== "granted") { toast("Notifications are blocked. Allow them in your browser's site settings."); return; }
+      const sub = existing || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(VAPID_PUBLIC_KEY) });
+      const id = await deviceId(sub.endpoint);
+      setDoc(doc(db, "users", uid, "pushDevices", id), { subscription: JSON.parse(JSON.stringify(sub)), device: deviceName(), added: serverTimestamp() })
+        .catch((e) => toast("Couldn't save device: " + e.message));
+    }
+  } catch (e) { toast("Alerts error: " + e.message); }
+  refreshAlertsButton();
+});
+
+$("expenseFilter").addEventListener("click", (e) => {
+  if (!e.target.dataset.f) return;
+  expenseFilter = e.target.dataset.f;
+  [...$("expenseFilter").children].forEach((b) => b.classList.toggle("on", b === e.target));
+  renderExpenses();
+});
+
+const TITLES = { home: "Budget", income: "Income", expenses: "Expenses", savings: "Goals", subs: "Subscriptions" };
+$("tabs").addEventListener("click", (e) => {
+  const btn = e.target.closest("button"); if (!btn || !btn.dataset.v) return;
+  const v = btn.dataset.v;
+  document.querySelectorAll(".view").forEach((s) => s.classList.toggle("hidden", s.id !== "view-" + v));
+  [...$("tabs").children].forEach((b) => b.classList.toggle("on", b === btn));
+  $("pageTitle").textContent = TITLES[v];
+  window.scrollTo(0, 0);
+});
+
+/* =========================================================
+   7. AUTH
+   ========================================================= */
+$("signInBtn").addEventListener("click", async () => {
+  const provider = new GoogleAuthProvider();
+  try { await signInWithPopup(auth, provider); }
+  catch (err) { if (err.code === "auth/popup-blocked" || err.code === "auth/operation-not-supported-in-this-environment") signInWithRedirect(auth, provider); else toast(err.message); }
+});
+$("signOutBtn").addEventListener("click", () => signOut(auth));
+
+onAuthStateChanged(auth, (user) => {
+  unsubs.forEach((u) => u()); unsubs = [];
+  uid = user ? user.uid : null;
+  $("login").classList.toggle("hidden", !!user);
+  $("tabs").classList.toggle("hidden", !user);
+  $("signOutBtn").classList.toggle("hidden", !user);
+  $("view-home").classList.toggle("hidden", !user);
+  if (!user) { document.querySelectorAll(".view").forEach((s) => s.classList.add("hidden")); return; }
+  document.querySelectorAll("form input[type=date]").forEach((i) => (i.value = today()));
+  startSync();
+  if (location.hash === "#subs") document.querySelector('nav [data-v="subs"]').click();
+});
+
+/* =========================================================
+   8. SERVICE WORKER
+   ========================================================= */
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+</script>
+</body>
+</html>
