@@ -49,8 +49,12 @@ const store = {
     { name: "Property 1 rent", amount: 310, frequency: "fortnightly", nextDate: day(3) },
     { name: "Property 2 rent", amount: 1350, frequency: "monthly", nextDate: day(12) }
   ],
-  wishlist: [{ name: "MacBook Pro", cost: 3500, kind: "want", perPay: 250, saved: 750 }],
-  settings: [],
+  wishlist: [
+    { name: "MacBook Pro", cost: 3500, kind: "want", perPay: 250, saved: 750, order: 0 },
+    { name: "Japan trip", cost: 5000, kind: "want", perPay: 200, saved: 1200, order: 10 },
+    { name: "Standing desk", cost: 900, kind: "want", perPay: 100, saved: 100, order: 20 }
+  ],
+  settings: [{ id: "pay", baseline: 2450, updated: 1 }],
   pushDevices: [], billFiles: []
 };
 let counter = 0;
