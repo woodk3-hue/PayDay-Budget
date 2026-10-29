@@ -1,11 +1,12 @@
 // Budget Sync service worker — caches the app shell and Firebase SDK so the app opens offline.
 // Firestore data itself is cached by Firebase (IndexedDB), not here.
 // Bump VERSION whenever you change index.html so devices pick up the new copy.
-const VERSION = "budget-v4";
+const VERSION = "budget-v6";
 const SHELL = [
   "./",
   "./index.html",
   "./manifest.json",
+  "./demo-firebase.js",
   "./icon-192.png",
   "./icon-512.png",
   "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js",
