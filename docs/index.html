@@ -257,33 +257,17 @@ input[type=file]{padding:9px 12px}
   <!-- DASHBOARD -->
   <section id="view-home" class="view hidden">
     <div class="card">
-      <h2>Cashflow summary</h2>
-      <div class="toggle" id="cashView">
-        <button data-f="fortnight" class="on">Fortnight</button>
-        <button data-f="month">Month</button>
-        <button data-f="year">Year</button>
-      </div>
-      <div class="grid" style="margin-top:10px">
+      <h2 id="periodTitle">This fortnight</h2>
+      <div class="grid">
         <div class="stat"><small>Income</small><b id="cIncome">$0</b></div>
         <div class="stat"><small>Bill allocations</small><b id="cBills">$0</b></div>
         <div class="stat"><small>Safe to spend</small><b id="cSafe">$0</b></div>
-      </div>
-      <p class="note" id="cNote" style="margin-top:8px"></p>
-    </div>
-    <div class="card" id="homeAccounts" role="button" tabindex="0" style="cursor:pointer">
-      <h2>Accounts · tap to open</h2>
-      <div class="grid"><div class="stat"><small id="hAcctN">0 accounts</small><b id="hAcctTotal">$0</b></div></div>
-    </div>
-    <div class="card hidden" id="manualCard"><h2>Bills you pay yourself</h2><ul class="list" id="manualList"></ul></div>
-    <div class="card">
-      <h2 id="periodTitle">This fortnight</h2>
-      <div class="grid">
-        <div class="stat"><small>Income</small><b id="sIncome">$0</b></div>
-        <div class="stat"><small>Spent</small><b id="sSpent">$0</b></div>
         <div class="stat"><small>Left over</small><b id="sLeft">$0</b></div>
       </div>
-      <p class="note" id="periodNote" style="margin-top:8px"></p>
+      <p class="note" id="cNote" style="margin-top:8px"></p>
+      <p class="note" id="periodNote"></p>
     </div>
+    <div class="card hidden" id="manualCard"><h2>Bills you pay yourself</h2><ul class="list" id="manualList"></ul></div>
     <div class="card">
       <h2>Recurring bills (per fortnight)</h2>
       <div class="grid">
@@ -303,6 +287,10 @@ input[type=file]{padding:9px 12px}
 
   <!-- INCOME -->
   <section id="view-income" class="view hidden">
+    <div class="card" id="homeAccounts" role="button" tabindex="0" style="cursor:pointer">
+      <h2>Accounts · tap to open</h2>
+      <div class="grid"><div class="stat"><small id="hAcctN">0 accounts</small><b id="hAcctTotal">$0</b></div></div>
+    </div>
     <div class="card" id="quickCard">
       <h2>Enter income when you get it</h2>
       <label>Received on<input type="date" id="qDate" data-blank></label>
@@ -889,8 +877,6 @@ function renderHome() {
   const payDay = isoFromDay(dayNum(p.end) + 3), paid = ST.income.some((i) => isWages(i) && inPeriod(incomePeriodDate(i), p));
   $("periodNote").textContent = paid ? "Pay for this fortnight is in." : "Pay for this fortnight is due " +
     new Date(payDay + "T00:00:00").toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "short" }) + ".";
-  $("sIncome").textContent = money(inc);
-  $("sSpent").textContent = money(spent);
   $("sLeft").textContent = money(left);
   $("sLeft").className = left >= 0 ? "pos" : "neg";
   $("sRecurring").textContent = money(recurring);
@@ -1780,12 +1766,6 @@ $("schedFilter").addEventListener("click", (e) => {
   schedFilter = e.target.dataset.f;
   [...$("schedFilter").children].forEach((b) => b.classList.toggle("on", b === e.target));
   renderSchedule();
-});
-$("cashView").addEventListener("click", (e) => {
-  if (!e.target.dataset.f) return;
-  cashView = e.target.dataset.f;
-  [...$("cashView").children].forEach((b) => b.classList.toggle("on", b === e.target));
-  renderCashflow();
 });
 document.addEventListener("click", (e) => {
   const t = e.target;
