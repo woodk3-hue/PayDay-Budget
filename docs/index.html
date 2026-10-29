@@ -155,6 +155,20 @@ nav button.on{color:var(--brand)}
 .overlay .row button+button{border-left:.5px solid var(--line)}
 .overlay .row button.danger{color:var(--red);font-weight:600}
 @keyframes fade{from{opacity:0}}
+@keyframes rise{from{transform:translateY(48px);opacity:0}}
+.overlay.sheet{align-items:end;padding:0}
+.overlay.sheet .card{width:min(560px,100%);max-height:90vh;overflow:auto;text-align:left;padding:18px 18px calc(18px + env(safe-area-inset-bottom));
+  border-radius:28px 28px 0 0;background:var(--card);animation:rise .38s cubic-bezier(.2,.9,.3,1)}
+.sheet h3{font-size:24px;font-weight:700;letter-spacing:.3px;margin-bottom:4px}
+.sheet .lede{font-size:15px;color:var(--muted);margin-bottom:12px}
+.sheet .sec{margin-top:12px}
+.overlay.sheet input{text-align:right}
+.sheet input.amtin{width:104px;flex:none}
+.sheet .list{margin:0 -18px}
+.sheet .toggle button,.sheet .chips button{min-height:40px}
+.sheet .actions{display:flex;gap:10px;margin-top:14px;position:sticky;bottom:0;padding:10px 0 2px;background:var(--card)}
+.sheet .actions button{flex:1}
+.sheet .actions button.plain{background:var(--fill);color:var(--ink);box-shadow:none}
 .overlay input{text-align:center}
 @keyframes pop{from{transform:scale(1.1);opacity:0}}
 
@@ -250,6 +264,13 @@ input[type=file]{padding:9px 12px}
   <!-- INCOME -->
   <section id="view-income" class="view hidden">
     <div class="card">
+      <h2>Surplus detection</h2>
+      <form id="payForm">
+        <label class="full">Baseline expected pay (QR pay, net per fortnight)<input type="number" name="baseline" step="0.01" min="0" inputmode="decimal" placeholder="e.g. 2450"></label>
+      </form>
+      <p class="note" style="margin-top:8px">When a new QR pay entry is above this, I'll offer to put the extra toward your wishlist.</p>
+    </div>
+    <div class="card">
       <h2>Income sources (normalised per fortnight)</h2>
       <ul class="list" id="srcList"></ul>
     </div>
@@ -298,7 +319,7 @@ input[type=file]{padding:9px 12px}
         <div class="stat"><small id="schedCount">0 bills</small><b id="schedYr">$0</b></div>
       </div>
       <ul class="list" id="schedList"></ul>
-      <p class="note">Each bill's allocation = amount × times per year ÷ 26. One-off purchases aren't listed.</p>
+      <p class="note">Each bill's allocation = amount × times per year ÷ 26. Includes recurring property and personal bills. One-offs aren't listed.</p>
     </div>
     <div class="card">
       <h2 id="expenseFormTitle">Add expense</h2>
@@ -452,6 +473,12 @@ input[type=file]{padding:9px 12px}
         </label>
         <label class="full" id="billPropWrap">Property<select name="propertyId" id="billProp"></select></label>
         <label class="full">Vendor<input name="vendor" required placeholder="e.g. Council"></label>
+        <label class="full" id="billFreqWrap">How often is it billed?
+          <select name="frequency">
+            <option value="once">One-off</option><option value="weekly">Weekly</option><option value="fortnightly">Fortnightly</option>
+            <option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option>
+          </select>
+        </label>
         <label>Total<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
         <label><span id="billDateLabel">Due date</span><input type="date" name="dueDate" required></label>
         <button class="full" type="submit" id="billSubmit">Save bill</button>
@@ -647,7 +674,7 @@ function startSync() {
    5. RENDER
    ========================================================= */
 function render() {
-  renderHome(); renderIncome(); renderExpenses(); renderSavings(); renderSubs(); renderProperty(); syncBufferField(); renderAfford(); renderWishlist(); renderCashflow(); renderSources(); renderSchedule();
+  renderHome(); renderIncome(); renderExpenses(); renderSavings(); renderSubs(); renderProperty(); syncBufferField(); renderAfford(); renderWishlist(); renderCashflow(); renderSources(); renderSchedule(); syncBaselineField();
 }
 
 function subsSorted() {
@@ -687,7 +714,7 @@ function goalBalance(g) {
 
 // Recurring = recurring expenses + subscriptions/bills (one-off planned purchases excluded).
 function recurringPerFortnight() {
-  return ST.expenses.concat(ST.subscriptions).reduce((s, e) => s + e.amount * (FREQ_PER_FORTNIGHT[e.frequency] || 0), 0);
+  return ST.expenses.concat(ST.subscriptions, ST.bills.filter(isRecurringBill)).reduce((s, e) => s + e.amount * (FREQ_PER_FORTNIGHT[e.frequency] || 0), 0);
 }
 function periodStats() {
   const p = currentPeriod();
@@ -783,8 +810,10 @@ function resetForm(form, kind) {
 
 $("incomeForm").addEventListener("submit", (e) => {
   e.preventDefault();
-  save("income", editing.income, formData(e.target));
+  const d = formData(e.target), isNew = !editing.income;
+  save("income", editing.income, d);
   resetForm(e.target, "income");
+  if (isNew) checkSurplus(d);
 });
 $("expenseForm").addEventListener("submit", (e) => {
   e.preventDefault();
@@ -937,8 +966,11 @@ function paysBefore(due) {
   const first = anchor + 14 * Math.ceil((now - anchor) / 14);
   return first > end ? 0 : Math.floor((end - first) / 14) + 1;
 }
-const billExtra = (b) => b.amount / Math.max(1, paysBefore(b.dueDate));
-const openBill = (b) => !b.paid && b.category !== "maintenance";
+// Recurring bills (monthly, quarterly, yearly...) are set aside at their fortnightly share; one-offs are spread over the pays left.
+const isRecurringBill = (b) => b.category !== "maintenance" && !!b.frequency && b.frequency !== "once";
+const billExtra = (b) => isRecurringBill(b) ? toFortnight(b.amount, b.frequency) : b.amount / Math.max(1, paysBefore(b.dueDate));
+const openBill = (b) => b.category !== "maintenance" && (isRecurringBill(b) || !b.paid);
+const billDue = (b) => isRecurringBill(b) ? nextDue({ dueDate: b.dueDate, frequency: b.frequency }) : b.dueDate;
 
 function propSetAside(id) {
   const p = propData(id), yearly = PROP_COSTS.reduce((t, k) => t + Number(p[k] || 0), 0);
@@ -955,17 +987,19 @@ function summaryRow(label, base, extra) {
 function billSubLine(b) {
   const parts = [BILL_LABEL[b.category] || "Bill"];
   if (b.category !== "personal") parts.push(esc(propName(b.propertyId)));
-  let when = fmtDate(b.dueDate);
+  const due = billDue(b);
+  let when = fmtDate(due);
   if (b.category === "maintenance") when += " · FY " + taxYear(b.dueDate);
-  else if (b.paid) when += ' <span class="badge">Paid</span>';
-  else when += " " + dueBadge(b.dueDate, 7) + " · set aside " + money(billExtra(b)) + "/pay";
+  else if (!isRecurringBill(b) && b.paid) when += ' <span class="badge">Paid</span>';
+  else when += " " + dueBadge(due, 7) + " · set aside " + money(billExtra(b)) + "/pay";
+  if (isRecurringBill(b)) parts.push(cap(b.frequency));
   parts.push(when);
   if (b.fileStatus === "pending") parts.push("Filing…");
   if (b.fileStatus === "filed") parts.push("Filed ✓");
   return parts.join(" · ");
 }
 function billRow(b) {
-  const paidBtn = b.category === "maintenance" ? "" :
+  const paidBtn = b.category === "maintenance" || isRecurringBill(b) ? "" :
     '<button class="ghost" data-bill-paid="' + b.id + '" aria-label="' + (b.paid ? "Mark unpaid" : "Mark paid") + '">' + (b.paid ? "↺" : "✓") + '</button>';
   return '<li><div class="main"><div>' + esc(b.vendor) + '</div><div class="sub">' + billSubLine(b) + '</div></div>' +
     '<span class="amt">' + money(b.amount) + '</span>' + paidBtn +
@@ -993,8 +1027,10 @@ function renderProperty() {
     summaryRow("Personal bills", null, personal);
 
   const rows = ST.bills.filter((b) => billFilter === "all" || b.category === billFilter)
-    .sort((a, b) => (Number(!!a.paid) - Number(!!b.paid)) ||
-      (a.paid ? b.dueDate.localeCompare(a.dueDate) : a.dueDate.localeCompare(b.dueDate)));
+    .sort((a, b) => {
+      const pa = !isRecurringBill(a) && !!a.paid, pb = !isRecurringBill(b) && !!b.paid;
+      return (Number(pa) - Number(pb)) || (pa ? billDue(b).localeCompare(billDue(a)) : billDue(a).localeCompare(billDue(b)));
+    });
   $("billList").innerHTML = rows.length ? rows.map(billRow).join("") : '<li class="empty">Nothing here yet.</li>';
 
   const groups = {};
@@ -1127,8 +1163,17 @@ function findVendor(lines) {
   const pick = top.find((l) => VENDOR_HINT.test(l)) || top[0] || "";
   return pick.replace(/\s+ABN.*$/i, "").trim().slice(0, 60);
 }
+function findFrequency(lines) {
+  const text = lines.join(" ").toLowerCase();
+  if (/\bquarterly\b|\bper quarter\b/.test(text)) return "quarterly";
+  if (/\bannual(ly)?\b|\byearly\b|\bper year\b|\bper annum\b/.test(text)) return "yearly";
+  if (/\bfortnightly\b/.test(text)) return "fortnightly";
+  if (/\bmonthly\b/.test(text)) return "monthly";
+  if (/\bweekly\b/.test(text)) return "weekly";
+  return "once";
+}
 function parseBill(lines) {
-  return { vendor: findVendor(lines), amount: findTotal(lines), dueDate: findDueDate(lines) };
+  return { vendor: findVendor(lines), amount: findTotal(lines), dueDate: findDueDate(lines), frequency: findFrequency(lines) };
 }
 /* PARSE-END */
 
@@ -1153,9 +1198,10 @@ $("billFile").addEventListener("change", async (e) => {
     if (found.vendor) form.vendor.value = found.vendor;
     if (found.amount) form.amount.value = found.amount.toFixed(2);
     if (found.dueDate) form.dueDate.value = found.dueDate;
+    if (form.category.value !== "maintenance") form.frequency.value = found.frequency;
     const missing = [!found.vendor && "vendor", !found.amount && "total", !found.dueDate && "date"].filter(Boolean);
     setScanMsg(missing.length ? "Couldn't find the " + missing.join(", ") + ". Please check and fill it in."
-      : "Read it. Please check the details before saving.");
+      : "Read it. Please check the details and how often it's billed before saving.");
   } catch (err) {
     setScanMsg("Couldn't read this PDF automatically. Fill in the details by hand." + (pendingFile ? " The file will still be filed." : ""));
   }
@@ -1164,6 +1210,7 @@ $("billFile").addEventListener("change", async (e) => {
 function syncBillForm() {
   const cat = $("billCat").value;
   $("billPropWrap").classList.toggle("hidden", cat === "personal");
+  $("billFreqWrap").classList.toggle("hidden", cat === "maintenance");
   $("billDateLabel").textContent = cat === "maintenance" ? "Receipt date" : "Due date";
 }
 $("billCat").addEventListener("change", syncBillForm);
@@ -1183,6 +1230,7 @@ function startEditBill(b) {
   form.category.value = b.category; syncBillForm();
   if (b.propertyId) form.propertyId.value = b.propertyId;
   form.vendor.value = b.vendor; form.amount.value = b.amount; form.dueDate.value = b.dueDate;
+  form.frequency.value = b.frequency || "once";
   editing.bills = b.id; pendingFile = null;
   $("billFile").disabled = true;
   $("billFormTitle").textContent = "Editing " + b.vendor;
@@ -1194,6 +1242,7 @@ $("billForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const d = formData(e.target);
   if (d.category === "personal") d.propertyId = "";
+  if (d.category === "maintenance") d.frequency = "once";
   d.paid = d.category === "maintenance";
   const batch = writeBatch(db);
   if (editing.bills) {
@@ -1292,23 +1341,41 @@ $("affordForm").elements.buffer.addEventListener("change", (e) => {
 $("wishSaveBtn").addEventListener("click", () => {
   const c = affordCalc();
   if (!c.cost || !c.perPay) { toast("Enter a cost and a fortnightly amount (or number of pays) first."); return; }
-  save("wishlist", null, { name: c.name, cost: c.cost, kind: c.kind, perPay: c.perPay, saved: 0 });
+  const top = ST.wishlist.reduce((m, w) => Math.max(m, w.order ?? -1), -1);
+  save("wishlist", null, { name: c.name, cost: c.cost, kind: c.kind, perPay: c.perPay, saved: 0, order: top + 1 });
   $("affordForm").reset(); affordLast = "perPay"; syncBufferField(); renderAfford();
 });
 
-function wishRow(w) {
+const wishDone = (w) => w.cost - (w.saved || 0) <= 0.005;
+// Manual priority: lowest `order` first; funded items drop to the bottom.
+function wishSorted() {
+  return ST.wishlist.slice().sort((a, b) => Number(wishDone(a)) - Number(wishDone(b)) ||
+    (a.order ?? 1e9) - (b.order ?? 1e9) || a.name.localeCompare(b.name));
+}
+const wishOpen = () => wishSorted().filter((w) => !wishDone(w));
+function moveWish(id, dir) {
+  const list = wishOpen(), i = list.findIndex((w) => w.id === id), j = i + dir;
+  if (i < 0 || j < 0 || j >= list.length) return;
+  [list[i], list[j]] = [list[j], list[i]];
+  const batch = writeBatch(db);
+  list.forEach((w, n) => batch.update(doc(db, "users", uid, "wishlist", w.id), { order: n * 10 }));
+  batch.commit().catch((err) => toast("Couldn't reorder: " + err.message));
+}
+function wishRow(w, pos, n) {
   const left = Math.max(0, w.cost - w.saved), done = left <= 0.005;
   const pct = w.cost ? Math.max(0, Math.min(100, (w.saved / w.cost) * 100)) : 0;
   const togo = done ? "Funded ✓" : Math.ceil(left / (w.perPay || left)) + " pays to go · ready by " + fmtLong(readyDate(Math.ceil(left / (w.perPay || left))));
-  const kind = w.kind === "need" ? "Need" : "Want";
+  const kind = (w.kind === "need" ? "Need" : "Want") + (pos >= 0 ? " · Priority " + (pos + 1) : "");
+  const up = pos > 0 ? '<button class="ghost" data-wish-move="' + w.id + ':-1" aria-label="Move up">▲</button>' : "";
+  const down = pos >= 0 && pos < n - 1 ? '<button class="ghost" data-wish-move="' + w.id + ':1" aria-label="Move down">▼</button>' : "";
   return '<li><div class="main"><div>' + esc(w.name) + '</div><div class="sub wrap">' + kind + " · " + money(w.saved) + " of " + money(w.cost) +
     " · " + money(w.perPay) + "/fortnight</div><div class=\"sub\">" + togo + '</div><div class="bar"><span style="width:' + pct.toFixed(0) + '%"></span></div></div>' +
-    '<button class="ghost" data-wish-add="' + w.id + '">Add</button>' +
+    up + down + '<button class="ghost" data-wish-add="' + w.id + '">Add</button>' +
     '<button class="ghost" data-del="wishlist:' + w.id + '">✕</button></li>';
 }
 function renderWishlist() {
-  const rows = ST.wishlist.slice().sort((a, b) => Number(a.saved >= a.cost) - Number(b.saved >= b.cost));
-  $("wishList").innerHTML = rows.length ? rows.map(wishRow).join("") : '<li class="empty">Nothing on your wishlist yet.</li>';
+  const rows = wishSorted(), open = wishOpen();
+  $("wishList").innerHTML = rows.length ? rows.map((w) => wishRow(w, open.indexOf(w), open.length)).join("") : '<li class="empty">Nothing on your wishlist yet.</li>';
 }
 function showAmountPrompt(title, value, onSave) {
   const wrap = document.createElement("div");
@@ -1323,6 +1390,7 @@ function showAmountPrompt(title, value, onSave) {
   document.body.appendChild(wrap);
 }
 document.addEventListener("click", (e) => {
+  if (e.target.dataset.wishMove) { const [id, dir] = e.target.dataset.wishMove.split(":"); moveWish(id, Number(dir)); return; }
   if (!e.target.dataset.wishAdd) return;
   const w = ST.wishlist.find((x) => x.id === e.target.dataset.wishAdd);
   showAmountPrompt("Add to " + w.name, w.perPay, (v) => save("wishlist", w.id, { saved: Math.round((w.saved + v) * 100) / 100 }));
@@ -1384,7 +1452,9 @@ function scheduleItems() {
     ({ kind: "expenses", id: e.id, name: e.description, frequency: e.frequency, amount: e.amount, due: nextDue({ dueDate: e.date, frequency: e.frequency }) }));
   const su = ST.subscriptions.filter((s) => s.frequency !== "once").map((s) =>
     ({ kind: "subscriptions", id: s.id, name: s.name, frequency: s.frequency, amount: s.amount, due: nextDue(s) }));
-  return ex.concat(su).map((b) => ({ ...b, fn: toFortnight(b.amount, b.frequency) })).sort((a, b) => a.due.localeCompare(b.due));
+  const bl = ST.bills.filter(isRecurringBill).map((b) =>
+    ({ kind: "bills", id: b.id, name: b.vendor, frequency: b.frequency, amount: b.amount, due: billDue(b) }));
+  return ex.concat(su, bl).map((b) => ({ ...b, fn: toFortnight(b.amount, b.frequency) })).sort((a, b) => a.due.localeCompare(b.due));
 }
 function schedRow(b) {
   return '<li><div class="main"><div>' + esc(b.name) + '</div><div class="sub wrap">' + cap(b.frequency) + " " + money(b.amount) + " · due " + fmtDate(b.due) + '</div></div>' +
@@ -1417,9 +1487,150 @@ document.addEventListener("click", (e) => {
   if (t.dataset.schedEdit) {
     const [kind, id] = t.dataset.schedEdit.split(":");
     if (kind === "expenses") startEdit("expenses", ST.expenses.find((x) => x.id === id));
+    else if (kind === "bills") { document.querySelector('nav [data-v="property"]').click(); startEditBill(ST.bills.find((x) => x.id === id)); }
     else { document.querySelector('nav [data-v="subs"]').click(); startEditSub(ST.subscriptions.find((x) => x.id === id)); }
   }
 });
+
+/* =========================================================
+   6f. SURPLUS PAY ALLOCATOR — extra pay above baseline → wishlist / goals
+   ========================================================= */
+let sp = null, spWrap = null; // sp = { surplus, pay, baseline, mode, pct, amounts }
+const paySetting = () => ST.settings.find((x) => x.id === "pay") || {};
+const round2 = (n) => Math.round(n * 100) / 100;
+const wishLeft = (w) => Math.max(0, w.cost - (w.saved || 0));
+const paysToGo = (w, extra) => { const l = Math.max(0, wishLeft(w) - extra); return l <= 0.005 ? 0 : Math.ceil(l / (w.perPay || l)); };
+function effectText(w, add) {
+  const before = paysToGo(w, 0), after = paysToGo(w, add);
+  if (add <= 0) return "";
+  if (after === 0) return "fully funds it!";
+  const d = before - after;
+  return d > 0 ? "brings it " + d + (d === 1 ? " fortnight" : " fortnights") + " closer (" + before + " → " + after + " pays)" : "gets it a little closer";
+}
+
+function syncBaselineField() {
+  const f = $("payForm").elements.baseline;
+  if (document.activeElement !== f) f.value = paySetting().baseline != null ? paySetting().baseline : "";
+}
+$("payForm").addEventListener("submit", (e) => e.preventDefault());
+$("payForm").elements.baseline.addEventListener("change", (e) => {
+  const v = e.target.value === "" ? null : Math.max(0, parseFloat(e.target.value) || 0);
+  setDoc(doc(db, "users", uid, "settings", "pay"), { baseline: v, updated: serverTimestamp() }, { merge: true })
+    .catch((err) => toast("Save failed: " + err.message));
+});
+
+// Only a new QR pay entry above the baseline triggers the allocator.
+function checkSurplus(d) {
+  const baseline = Number(paySetting().baseline || 0);
+  if (d.source !== "QR pay" || !baseline || !(d.amount > baseline + 0.005)) return;
+  openSurplus(round2(d.amount - baseline), d.amount, baseline);
+}
+function spTargets() {
+  return wishOpen().map((w) => ({ key: "w:" + w.id, type: "wish", item: w, name: w.name }))
+    .concat(ST.goals.map((g) => ({ key: "g:" + g.id, type: "goal", item: g, name: g.name })));
+}
+function spEvenly(keys) {
+  const each = keys.length ? Math.floor((sp.surplus / keys.length) * 100) / 100 : 0;
+  sp.amounts = {};
+  keys.forEach((k) => { sp.amounts[k] = each; });
+}
+function openSurplus(surplus, pay, baseline) {
+  sp = { surplus: surplus, pay: pay, baseline: baseline, mode: wishOpen().length ? "top" : "keep", pct: 100, amounts: {} };
+  spEvenly(wishOpen().map((w) => "w:" + w.id));
+  spWrap = document.createElement("div");
+  spWrap.className = "overlay sheet";
+  spWrap.addEventListener("click", spClick);
+  spWrap.addEventListener("input", spInput);
+  document.body.appendChild(spWrap);
+  spRender();
+}
+function spClose() { if (spWrap) spWrap.remove(); spWrap = null; sp = null; }
+
+function spTopAmount() { return round2(sp.surplus * Math.min(100, Math.max(0, sp.pct)) / 100); }
+function spTopHtml() {
+  const top = wishOpen()[0];
+  if (!top) return '<div class="sec lede">No active wishlist items yet. Add one on the Goals tab, or keep the money in checking.</div>';
+  const chips = [25, 50, 75, 100].map((n) => '<button data-sp-pct="' + n + '"' + (sp.pct === n ? ' class="on"' : "") + ">" + n + "%</button>").join("");
+  return '<div class="sec"><div class="lede">Top priority: <b>' + esc(top.name) + "</b> (" + money(top.saved || 0) + " of " + money(top.cost) + ")</div>" +
+    '<div class="toggle chips">' + chips + '</div>' +
+    '<label class="sec">Custom % of the surplus<input type="number" id="spPct" min="0" max="100" step="1" inputmode="numeric" value="' + sp.pct + '"></label>' +
+    '<div class="opt" id="spPreview"></div></div>';
+}
+function spSplitRow(t) {
+  const v = sp.amounts[t.key] || 0;
+  return '<li><div class="main"><div>' + esc(t.name) + '</div><div class="sub wrap" id="fx-' + t.key + '"></div></div>' +
+    '<input class="amtin" type="number" min="0" step="0.01" inputmode="decimal" data-sp-amt="' + t.key + '" value="' + (v || "") + '" placeholder="$0"></li>';
+}
+function spSplitHtml() {
+  const targets = spTargets();
+  return '<div class="sec"><div class="toggle chips"><button data-sp-even="wish">Even: wishlist</button><button data-sp-even="all">Even: all</button><button data-sp-even="clear">Clear</button></div>' +
+    '<ul class="list" style="margin-top:6px">' + targets.map(spSplitRow).join("") + '</ul><div class="opt" id="spTotal"></div></div>';
+}
+function spRender() {
+  const modes = [["top", "Top goal"], ["split", "Split"], ["keep", "Keep"]].map((m) =>
+    '<button data-sp-mode="' + m[0] + '"' + (sp.mode === m[0] ? ' class="on"' : "") + ">" + m[1] + "</button>").join("");
+  const body = sp.mode === "top" ? spTopHtml() : sp.mode === "split" ? spSplitHtml()
+    : '<div class="sec lede">Leave the full ' + money(sp.pay) + " in your everyday account. Nothing changes.</div>";
+  const apply = sp.mode === "keep" ? '<button data-sp-keep>Keep in checking</button>' :
+    '<button class="plain" data-sp-keep>Not now</button><button data-sp-apply id="spApply">Allocate</button>';
+  spWrap.innerHTML = '<div class="card"><h3>Surplus detected!</h3><div class="lede">' + money(sp.pay) + " is " + money(sp.surplus) +
+    " above your " + money(sp.baseline) + " baseline.</div><div class=\"toggle\">" + modes + "</div>" + body + '<div class="actions">' + apply + "</div></div>";
+  spPreview();
+}
+// Live numbers only; text inputs keep focus because the sheet is not re-rendered.
+function spPreview() {
+  if (sp.mode === "top") {
+    const top = wishOpen()[0], box = $("spPreview"), amt = spTopAmount();
+    if (!top || !box) return;
+    const fx = effectText(top, amt);
+    box.textContent = amt > 0 ? "This " + money(amt) + " " + (fx || "goes toward " + top.name) + (fx ? " — " + top.name : "") : "Choose how much of the surplus to use.";
+  } else if (sp.mode === "split") {
+    const total = Object.values(sp.amounts).reduce((t, v) => t + (v || 0), 0), over = total > sp.surplus + 0.005;
+    spTargets().forEach((t) => {
+      const el = $("fx-" + t.key), v = sp.amounts[t.key] || 0;
+      if (el) el.textContent = t.type === "wish" ? (v ? "This " + money(v) + " " + effectText(t.item, v) : money(t.item.saved || 0) + " of " + money(t.item.cost))
+        : money(goalBalance(t.item)) + " saved" + (v ? " → " + money(goalBalance(t.item) + v) : "");
+    });
+    const box = $("spTotal");
+    box.className = "opt" + (over ? " bad" : "");
+    box.textContent = over ? "That's " + money(total - sp.surplus) + " more than the surplus."
+      : "Allocated " + money(total) + " of " + money(sp.surplus) + " · " + money(sp.surplus - total) + " stays in checking.";
+  }
+}
+function spInput(e) {
+  if (e.target.id === "spPct") { sp.pct = Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)); spWrap.querySelectorAll("[data-sp-pct]").forEach((b) => b.classList.remove("on")); }
+  else if (e.target.dataset.spAmt) sp.amounts[e.target.dataset.spAmt] = Math.max(0, parseFloat(e.target.value) || 0);
+  spPreview();
+}
+function spApply() {
+  const batch = writeBatch(db);
+  let total = 0;
+  const give = (t, amt) => {
+    if (!(amt > 0)) return;
+    total += amt;
+    if (t.type === "wish") batch.update(doc(db, "users", uid, "wishlist", t.item.id), { saved: round2((t.item.saved || 0) + amt) });
+    else batch.set(doc(col("transfers")), { goalId: t.item.id, type: "add", amount: round2(amt), date: today(), note: "Surplus pay", created: serverTimestamp() });
+  };
+  if (sp.mode === "top") give(spTargets().find((t) => t.type === "wish"), spTopAmount());
+  else spTargets().forEach((t) => give(t, sp.amounts[t.key] || 0));
+  if (!(total > 0)) { toast("Enter an amount to allocate first."); return; }
+  if (total > sp.surplus + 0.005) { toast("That's more than the surplus of " + money(sp.surplus) + "."); return; }
+  batch.commit().catch((err) => toast("Save failed: " + err.message));
+  spClose();
+  toast("Allocated " + money(total) + " from your surplus.");
+}
+function spClick(e) {
+  const d = e.target.dataset;
+  if (e.target === spWrap || d.spKeep !== undefined) { spClose(); return; }
+  if (d.spMode) { sp.mode = d.spMode; spRender(); }
+  else if (d.spPct) { sp.pct = Number(d.spPct); spRender(); }
+  else if (d.spEven) {
+    if (d.spEven === "clear") sp.amounts = {};
+    else spEvenly(spTargets().filter((t) => d.spEven === "all" || t.type === "wish").map((t) => t.key));
+    spRender();
+  }
+  else if (d.spApply !== undefined) spApply();
+}
 
 /* =========================================================
    7. AUTH

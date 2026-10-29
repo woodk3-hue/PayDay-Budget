@@ -39,18 +39,22 @@ const store = {
     { id: "B", name: "4/8 Park Rd", rates: 1400, water: 700, insurance: 1100, landTax: 0 }
   ],
   bills: [
-    { category: "property", propertyId: "A", vendor: "Brisbane City Council", amount: 550, dueDate: day(12), paid: false, fileStatus: "filed" },
+    { category: "property", propertyId: "A", vendor: "Brisbane City Council", amount: 550, dueDate: day(12), frequency: "quarterly", paid: false, fileStatus: "filed" },
     { category: "property", propertyId: "B", vendor: "Allianz Insurance", amount: 1100, dueDate: day(25), paid: false, fileStatus: "pending" },
     { category: "maintenance", propertyId: "A", vendor: "Smith Plumbing", amount: 340, dueDate: day(-8), paid: true, fileStatus: "filed" },
-    { category: "personal", propertyId: "", vendor: "Telstra", amount: 129, dueDate: day(5), paid: false, fileStatus: "none" }
+    { category: "personal", propertyId: "", vendor: "Telstra", amount: 129, dueDate: day(5), frequency: "monthly", paid: false, fileStatus: "none" }
   ],
   incomeSources: [
     { name: "Job", amount: 2450, frequency: "fortnightly", nextDate: day(5) },
     { name: "Property 1 rent", amount: 310, frequency: "fortnightly", nextDate: day(3) },
     { name: "Property 2 rent", amount: 1350, frequency: "monthly", nextDate: day(12) }
   ],
-  wishlist: [{ name: "MacBook Pro", cost: 3500, kind: "want", perPay: 250, saved: 750 }],
-  settings: [],
+  wishlist: [
+    { name: "MacBook Pro", cost: 3500, kind: "want", perPay: 250, saved: 750, order: 0 },
+    { name: "Japan trip", cost: 5000, kind: "want", perPay: 200, saved: 1200, order: 10 },
+    { name: "Standing desk", cost: 900, kind: "want", perPay: 100, saved: 100, order: 20 }
+  ],
+  settings: [{ id: "pay", baseline: 2450, updated: 1 }],
   pushDevices: [], billFiles: []
 };
 let counter = 0;
