@@ -40,6 +40,8 @@ const store = {
     { category: "maintenance", propertyId: "A", vendor: "Smith Plumbing", amount: 340, dueDate: day(-8), paid: true, fileStatus: "filed" },
     { category: "personal", propertyId: "", vendor: "Telstra", amount: 129, dueDate: day(5), paid: false, fileStatus: "none" }
   ],
+  wishlist: [{ name: "MacBook Pro", cost: 3500, kind: "want", perPay: 250, saved: 750 }],
+  settings: [],
   pushDevices: [], billFiles: []
 };
 let counter = 0;

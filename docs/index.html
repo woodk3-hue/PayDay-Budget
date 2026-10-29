@@ -113,6 +113,7 @@ header button.ghost{min-height:32px;font-size:17px}
 .list .main{flex:1;min-width:0}
 .list .main div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .list .sub{font-size:13px;color:var(--muted);margin-top:1px}
+.list .main div.wrap{white-space:normal}
 .amt{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
 .list button.ghost{font-size:15px}
 .list [data-del]{color:var(--muted)}
@@ -150,10 +151,11 @@ nav button.on{color:var(--brand)}
   animation:pop .2s ease}
 .overlay .card p{padding:20px 16px;font-size:17px;font-weight:600;line-height:1.3}
 .overlay .row{display:flex;margin:0;border-top:.5px solid var(--line)}
-.overlay .row button{flex:1;background:none;border-radius:0;color:var(--brand);font-weight:400;min-height:44px}
+.overlay .row button{flex:1;background:none;box-shadow:none;border-radius:0;color:var(--brand);font-weight:400;min-height:44px}
 .overlay .row button+button{border-left:.5px solid var(--line)}
 .overlay .row button.danger{color:var(--red);font-weight:600}
 @keyframes fade{from{opacity:0}}
+.overlay input{text-align:center}
 @keyframes pop{from{transform:scale(1.1);opacity:0}}
 
 /* Segmented control */
@@ -167,6 +169,16 @@ nav button.on{color:var(--brand)}
 .alerts p{font-size:15px;color:var(--muted)}
 .alerts button{min-height:36px;border-radius:99px;font-size:15px;padding:0 14px;white-space:nowrap}
 .note{font-size:13px;color:var(--muted)}
+.opt{background:var(--tile);border-radius:16px;padding:12px 14px;margin-top:10px;box-shadow:inset 0 1px 0 var(--edge),inset 0 0 0 .5px var(--line)}
+.opt .head{font-size:13px;color:var(--muted);margin-bottom:2px}
+.opt .big{font-family:var(--rounded);font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;white-space:normal}
+.opt .sub{font-size:14px;color:var(--muted);margin-top:3px;white-space:normal}
+.opt .msg{font-size:15px;font-weight:600;margin-top:6px}
+.opt .bar.ok span{background:linear-gradient(90deg,#63e6a0,var(--green))}
+.opt .bar.warn span{background:linear-gradient(90deg,#ffd60a,var(--amber))}
+.opt .bar.bad span{background:var(--red)}
+.ok{color:var(--green)}.warn{color:var(--amber)}.bad{color:var(--red)}
+.opt.summary{background:var(--brand-soft);font-size:15px}
 input[type=file]{padding:9px 12px}
 
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
@@ -270,6 +282,21 @@ input[type=file]{padding:9px 12px}
 
   <!-- SAVINGS -->
   <section id="view-savings" class="view hidden">
+    <div class="card">
+      <h2>Can I afford it?</h2>
+      <form id="affordForm">
+        <label class="full">Item<input name="name" placeholder="e.g. MacBook Pro"></label>
+        <label>Total cost<input type="number" name="cost" step="0.01" min="0" inputmode="decimal"></label>
+        <label>Is it a<select name="kind"><option value="want">Want</option><option value="need">Need</option></select></label>
+        <label>Save per fortnight<input type="number" name="perPay" step="0.01" min="0" inputmode="decimal" placeholder="e.g. 250"></label>
+        <label>or in how many pays<input type="number" name="pays" step="1" min="1" inputmode="numeric" placeholder="e.g. 14"></label>
+        <label class="full">Savings buffer to protect<input type="number" name="buffer" step="1" min="0" inputmode="decimal"></label>
+        <p class="note full" id="bufferNote"></p>
+      </form>
+      <div id="affordResult"></div>
+      <button class="full" id="wishSaveBtn" style="width:100%;margin-top:12px">Save to wishlist</button>
+    </div>
+    <div class="card"><h2>Wishlist</h2><ul class="list" id="wishList"></ul></div>
     <div class="card">
       <h2>Move money</h2>
       <form id="transferForm">
@@ -433,7 +460,7 @@ const db = initializeFirestore(app, {
 /* =========================================================
    2. STATE
    ========================================================= */
-const ST = { income: [], expenses: [], goals: [], transfers: [], subscriptions: [], properties: [], bills: [] };
+const ST = { income: [], expenses: [], goals: [], transfers: [], subscriptions: [], properties: [], bills: [], wishlist: [], settings: [] };
 const CATEGORIES = ["Groceries","Eating out","Shopping","Clothes","Fuel","Transport","Bills","Subscriptions",
   "Health","Medication","Gym","Home","Property","Loan","Travel","Tech","Gifts","Kids","Beauty","Other"];
 const DEFAULT_GOALS = [
@@ -445,7 +472,7 @@ const DEFAULT_GOALS = [
 // First QR payday in the new plan; every fortnight from here is a pay period.
 const PAY_ANCHOR = new Date("2026-11-04T00:00:00");
 let uid = null, unsubs = [], editing = { income: null, expenses: null, subscriptions: null, bills: null }, expenseFilter = "all", billFilter = "all", pendingFile = null;
-const pending = { income: false, expenses: false, goals: false, transfers: false, subscriptions: false, properties: false, bills: false };
+const pending = { income: false, expenses: false, goals: false, transfers: false, subscriptions: false, properties: false, bills: false, wishlist: false, settings: false };
 
 /* =========================================================
    3. HELPERS
@@ -553,7 +580,9 @@ function startSync() {
     listen("transfers", "date"),
     listen("subscriptions", "dueDate", "asc"),
     listen("properties", "name", "asc"),
-    listen("bills", "dueDate", "asc")
+    listen("bills", "dueDate", "asc"),
+    listen("wishlist", "name", "asc"),
+    listen("settings", "updated", "asc")
   ];
   refreshAlertsButton();
   // Seed default goals once, the first time this account has none.
@@ -569,7 +598,7 @@ function startSync() {
    5. RENDER
    ========================================================= */
 function render() {
-  renderHome(); renderIncome(); renderExpenses(); renderSavings(); renderSubs(); renderProperty();
+  renderHome(); renderIncome(); renderExpenses(); renderSavings(); renderSubs(); renderProperty(); syncBufferField(); renderAfford(); renderWishlist();
 }
 
 function subsSorted() {
@@ -607,15 +636,21 @@ function goalBalance(g) {
     .reduce((s, t) => s + (t.type === "add" ? t.amount : -t.amount), Number(g.opening || 0));
 }
 
-function renderHome() {
+// Recurring = recurring expenses + subscriptions/bills (one-off planned purchases excluded).
+function recurringPerFortnight() {
+  return ST.expenses.concat(ST.subscriptions).reduce((s, e) => s + e.amount * (FREQ_PER_FORTNIGHT[e.frequency] || 0), 0);
+}
+function periodStats() {
   const p = currentPeriod();
-  $("periodTitle").textContent = "This fortnight · " + fmtDate(p.start) + " – " + fmtDate(p.end);
   const inc = ST.income.filter((i) => inPeriod(i.date, p)).reduce((s, i) => s + i.amount, 0);
   const spentRows = ST.expenses.filter((e) => e.frequency === "once" && inPeriod(e.date, p));
-  // Recurring = recurring expenses + subscriptions/bills (one-off planned purchases excluded).
-  const recurring = ST.expenses.concat(ST.subscriptions).reduce((s, e) => s + e.amount * (FREQ_PER_FORTNIGHT[e.frequency] || 0), 0);
+  const recurring = recurringPerFortnight();
   const spent = spentRows.reduce((s, e) => s + e.amount, 0) + recurring;
-  const left = inc - spent;
+  return { p: p, inc: inc, spentRows: spentRows, recurring: recurring, spent: spent, left: inc - spent };
+}
+function renderHome() {
+  const { p, inc, spentRows, recurring, spent, left } = periodStats();
+  $("periodTitle").textContent = "This fortnight · " + fmtDate(p.start) + " – " + fmtDate(p.end);
   $("sIncome").textContent = money(inc);
   $("sSpent").textContent = money(spent);
   $("sLeft").textContent = money(left);
@@ -1131,6 +1166,117 @@ $("billFilter").addEventListener("click", (e) => {
   billFilter = e.target.dataset.f;
   [...$("billFilter").children].forEach((b) => b.classList.toggle("on", b === e.target));
   renderProperty();
+});
+
+/* =========================================================
+   6d. CAN I AFFORD IT? — save-up vs draw-from-savings, plus the wishlist
+   ========================================================= */
+let affordLast = "perPay";
+const isoFromDay = (n) => new Date(n * 86400000).toISOString().slice(0, 10);
+const fmtLong = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
+const savingsAvailable = () => ST.goals.reduce((t, g) => t + goalBalance(g), 0);
+const defaultBuffer = () => Math.round(recurringPerFortnight() * 26 / 12 * 3); // 3 months of regular costs
+function nextPayday() {
+  const anchor = dayNum(PAY_ANCHOR.toLocaleDateString("en-CA")), now = dayNum(today());
+  return anchor + 14 * Math.ceil((now - anchor) / 14);
+}
+function readyDate(pays) { return isoFromDay(nextPayday() + 14 * (Math.max(1, pays) - 1)); }
+
+function affordCalc() {
+  const f = $("affordForm").elements;
+  const cost = parseFloat(f.cost.value) || 0;
+  let perPay = parseFloat(f.perPay.value) || 0, pays = parseInt(f.pays.value, 10) || 0;
+  if (affordLast === "pays" && pays > 0 && cost > 0) perPay = Math.ceil((cost / pays) * 100) / 100;
+  else if (perPay > 0 && cost > 0) pays = Math.ceil(cost / perPay);
+  else if (pays > 0 && cost > 0) perPay = Math.ceil((cost / pays) * 100) / 100;
+  else { perPay = 0; pays = 0; }
+  const buffer = f.buffer.value === "" ? defaultBuffer() : Math.max(0, parseFloat(f.buffer.value) || 0);
+  return { name: f.name.value.trim() || "This item", cost: cost, kind: f.kind.value, perPay: perPay, pays: pays,
+    ready: pays ? readyDate(pays) : "", buffer: buffer, available: savingsAvailable(), left: periodStats().left };
+}
+
+function optionAHtml(c) {
+  const head = '<div class="head">Option A · Save up</div>';
+  if (!c.perPay) return '<div class="opt">' + head + '<div class="sub">Enter an amount per fortnight, or how many pays, to see the plan.</div></div>';
+  const used = c.left > 0 ? Math.round((c.perPay / c.left) * 100) : null;
+  const fit = used === null ? "More than this fortnight's left-over" : used + "% of this fortnight's left-over (" + money(c.left) + ")";
+  return '<div class="opt">' + head + '<div class="big">' + money(c.perPay) + "/fortnight × " + c.pays + (c.pays === 1 ? " pay" : " pays") +
+    '</div><div class="sub">Ready by ' + fmtLong(c.ready) + " · " + fit + "</div></div>";
+}
+function optionBHtml(c, rem) {
+  let cls = "ok", msg = "Stays above your " + money(c.buffer) + " buffer.";
+  if (rem < 0) { cls = "bad"; msg = "Savings can't cover this. Short by " + money(-rem) + "."; }
+  else if (rem < c.buffer) { cls = "warn"; msg = "Drops " + money(c.buffer - rem) + " below your " + money(c.buffer) + " buffer."; }
+  const pct = c.buffer > 0 ? Math.max(0, Math.min(100, (rem / c.buffer) * 100)) : 100;
+  let advice = "";
+  if (cls !== "ok") advice = c.kind === "want" ? "As a want, saving up (Option A) keeps your buffer safe."
+    : "It's a need, so using savings is reasonable. Plan to rebuild the buffer afterwards.";
+  return '<div class="opt"><div class="head">Option B · Draw from savings</div><div class="big ' + (rem < 0 ? "bad" : "") + '">Leaves ' + money(rem) +
+    '</div><div class="bar ' + cls + '"><span style="width:' + pct.toFixed(0) + '%"></span></div><div class="msg ' + cls + '">' + msg + '</div>' +
+    '<div class="sub">Savings now ' + money(c.available) + (advice ? " · " + advice : "") + "</div></div>";
+}
+function renderAfford() {
+  const c = affordCalc(), f = $("affordForm").elements;
+  f.buffer.placeholder = "3 months: " + defaultBuffer();
+  $("bufferNote").textContent = "Default is 3 months of your regular bills (" + money(defaultBuffer()) + "). Type your own to override it.";
+  if (!c.cost) { $("affordResult").innerHTML = '<p class="note" style="margin-top:10px">Enter a cost to compare your options.</p>'; return; }
+  const rem = c.available - c.cost;
+  const plan = c.perPay ? money(c.perPay) + "/fortnight for " + c.pays + " pay cycles" : "saving up over time";
+  $("affordResult").innerHTML = optionAHtml(c) + optionBHtml(c, rem) +
+    '<div class="opt summary">' + esc(c.name) + " (" + money(c.cost) + ") = " + plan + " OR draw from savings leaving " + money(rem) + ".</div>";
+}
+function syncBufferField() {
+  const field = $("affordForm").elements.buffer, s = ST.settings.find((x) => x.id === "afford");
+  if (document.activeElement !== field) field.value = s && s.buffer != null ? s.buffer : "";
+}
+$("affordForm").addEventListener("submit", (e) => e.preventDefault());
+$("affordForm").addEventListener("input", (e) => {
+  if (e.target.name === "perPay") affordLast = "perPay";
+  if (e.target.name === "pays") affordLast = "pays";
+  renderAfford();
+});
+$("affordForm").elements.buffer.addEventListener("change", (e) => {
+  const v = e.target.value === "" ? null : Math.max(0, parseFloat(e.target.value) || 0);
+  setDoc(doc(db, "users", uid, "settings", "afford"), { buffer: v, updated: serverTimestamp() }, { merge: true })
+    .catch((err) => toast("Save failed: " + err.message));
+});
+$("wishSaveBtn").addEventListener("click", () => {
+  const c = affordCalc();
+  if (!c.cost || !c.perPay) { toast("Enter a cost and a fortnightly amount (or number of pays) first."); return; }
+  save("wishlist", null, { name: c.name, cost: c.cost, kind: c.kind, perPay: c.perPay, saved: 0 });
+  $("affordForm").reset(); affordLast = "perPay"; syncBufferField(); renderAfford();
+});
+
+function wishRow(w) {
+  const left = Math.max(0, w.cost - w.saved), done = left <= 0.005;
+  const pct = w.cost ? Math.max(0, Math.min(100, (w.saved / w.cost) * 100)) : 0;
+  const togo = done ? "Funded ✓" : Math.ceil(left / (w.perPay || left)) + " pays to go · ready by " + fmtLong(readyDate(Math.ceil(left / (w.perPay || left))));
+  const kind = w.kind === "need" ? "Need" : "Want";
+  return '<li><div class="main"><div>' + esc(w.name) + '</div><div class="sub wrap">' + kind + " · " + money(w.saved) + " of " + money(w.cost) +
+    " · " + money(w.perPay) + "/fortnight</div><div class=\"sub\">" + togo + '</div><div class="bar"><span style="width:' + pct.toFixed(0) + '%"></span></div></div>' +
+    '<button class="ghost" data-wish-add="' + w.id + '">Add</button>' +
+    '<button class="ghost" data-del="wishlist:' + w.id + '">✕</button></li>';
+}
+function renderWishlist() {
+  const rows = ST.wishlist.slice().sort((a, b) => Number(a.saved >= a.cost) - Number(b.saved >= b.cost));
+  $("wishList").innerHTML = rows.length ? rows.map(wishRow).join("") : '<li class="empty">Nothing on your wishlist yet.</li>';
+}
+function showAmountPrompt(title, value, onSave) {
+  const wrap = document.createElement("div");
+  wrap.className = "overlay";
+  wrap.innerHTML = '<div class="card"><p>' + esc(title) + '</p><div style="padding:0 16px 16px"><input type="number" step="0.01" min="0" inputmode="decimal" value="' +
+    esc(value) + '"></div><div class="row"><button class="ghost" data-a="no">Cancel</button><button data-a="yes">Add</button></div></div>';
+  wrap.addEventListener("click", (e) => {
+    const a = e.target.dataset.a;
+    if (a === "yes") { const v = parseFloat(wrap.querySelector("input").value); if (v > 0) onSave(v); }
+    if (a || e.target === wrap) wrap.remove();
+  });
+  document.body.appendChild(wrap);
+}
+document.addEventListener("click", (e) => {
+  if (!e.target.dataset.wishAdd) return;
+  const w = ST.wishlist.find((x) => x.id === e.target.dataset.wishAdd);
+  showAmountPrompt("Add to " + w.name, w.perPay, (v) => save("wishlist", w.id, { saved: Math.round((w.saved + v) * 100) / 100 }));
 });
 
 /* =========================================================
