@@ -67,6 +67,7 @@ const store = {
     { name: "Up bills", fromId: "acc1", toId: "acc2", externalName: "", amount: 305, frequency: "fortnightly", nextApply: day(-1) },
     { name: "Rent to Cat", fromId: "acc1", toId: "", externalName: "Cat ING", amount: 400, frequency: "fortnightly", nextApply: day(6) }
   ],
+  allotments: [],
   pushDevices: [], billFiles: []
 };
 let counter = 0;
