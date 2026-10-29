@@ -45,9 +45,9 @@ const store = {
     { category: "personal", propertyId: "", vendor: "Telstra", amount: 129, dueDate: day(5), frequency: "monthly", paid: false, fileStatus: "none" }
   ],
   incomeSources: [
-    { name: "Job", amount: 2450, frequency: "fortnightly", nextDate: day(5) },
-    { name: "Property 1 rent", amount: 310, frequency: "fortnightly", nextDate: day(3) },
-    { name: "Property 2 rent", amount: 1350, frequency: "monthly", nextDate: day(12) }
+    { name: "QR pay", amount: 3000, frequency: "fortnightly", nextDate: day(5), accountId: "acc2", wages: true, fixed: false },
+    { name: "Rent 1", amount: 1100, frequency: "fortnightly", nextDate: day(3), accountId: "acc3", wages: false, fixed: true },
+    { name: "Rent 2", amount: 3791.67, frequency: "monthly", nextDate: day(12), accountId: "acc4", wages: false, fixed: false }
   ],
   wishlist: [
     { name: "MacBook Pro", cost: 3500, kind: "want", perPay: 250, saved: 750, order: 0 },

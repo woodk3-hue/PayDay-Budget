@@ -136,6 +136,8 @@ nav button span{pointer-events:none}
 nav button.on{color:var(--brand)}
 
 .hidden{display:none!important}
+.list input.amtin{width:104px;flex:none;text-align:right}
+button.small{min-height:44px;padding:0 16px;font-size:15px;flex:none}
 .bankhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
 .bankhead b{font-size:19px}
 .bankbtns{display:flex;flex-wrap:wrap;gap:2px;margin:2px -6px 4px}
@@ -301,13 +303,11 @@ input[type=file]{padding:9px 12px}
 
   <!-- INCOME -->
   <section id="view-income" class="view hidden">
-    <div class="card">
-      <h2>Surplus detection</h2>
-      <form id="payForm">
-        <label class="full">Baseline expected pay (QR pay, net per fortnight)<input type="number" name="baseline" step="0.01" min="0" inputmode="decimal" placeholder="e.g. 2450"></label>
-        <button class="full" type="submit" id="baselineSave">Save baseline</button>
-      </form>
-      <p class="note" style="margin-top:8px">When a new QR pay entry is above this, I'll offer to put the extra toward your wishlist.</p>
+    <div class="card" id="quickCard">
+      <h2>Enter income when you get it</h2>
+      <label>Received on<input type="date" id="qDate" data-blank></label>
+      <ul class="list" id="quickList" style="margin-top:8px"></ul>
+      <p class="note">Type the amount and tap Save. It goes straight into the account that income is paid into.</p>
     </div>
     <div class="card">
       <h2>Income sources (normalised per fortnight)</h2>
@@ -318,7 +318,7 @@ input[type=file]{padding:9px 12px}
       <h2 id="srcFormTitle">Add income source</h2>
       <form id="srcForm">
         <label class="full">Name<input name="name" required placeholder="e.g. Job, Property 1 rent"></label>
-        <label>Amount<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
+        <label>Usual amount<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
         <label>Paid
           <select name="frequency">
             <option value="fortnightly">Fortnightly</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option>
@@ -326,6 +326,8 @@ input[type=file]{padding:9px 12px}
         </label>
         <label class="full">Next pay date<input type="date" name="nextDate" required></label>
         <label class="full">Paid into<select name="accountId" class="acctSel"></select></label>
+        <label class="check full"><input type="checkbox" name="wages"> This is my wages (counts for the fortnight it was earned in, and flags extra pay)</label>
+        <label class="check full"><input type="checkbox" name="fixed"> Same amount every time (pre-fill it when I enter it)</label>
         <button class="full" type="submit" id="srcSubmit">Save source</button>
       </form>
     </div>
@@ -690,7 +692,8 @@ const DEFAULT_GOALS = [
 const PAY_ANCHOR = new Date("2026-11-04T00:00:00");
 // Fortnights run Monday to Sunday from here (19 Oct – 1 Nov, 2 – 15 Nov, ...). Pay counts for the fortnight it was earned in.
 const PERIOD_ANCHOR = new Date("2026-10-19T00:00:00");
-const PAY_SOURCE = "QR pay";
+const PAY_SOURCE = "QR pay"; // older entries; new income sources carry a "wages" flag instead
+const isWages = (i) => !!i.wages || i.source === PAY_SOURCE;
 let uid = null, unsubs = [], editing = { income: null, expenses: null, subscriptions: null, bills: null, incomeSources: null, accounts: null, acctTransfers: null, banks: null }, expenseFilter = "all", schedFilter = "all", cashView = "fortnight", billFilter = "all", pendingFile = null;
 const pending = { income: false, expenses: false, goals: false, transfers: false, subscriptions: false, properties: false, bills: false, wishlist: false, settings: false, incomeSources: false, accounts: false, acctTransfers: false, banks: false };
 
@@ -715,7 +718,7 @@ function currentPeriod() {
 const inPeriod = (d, p) => d >= p.start && d <= p.end;
 // A pay entry belongs to the fortnight that ended just before it landed, so a holiday-shifted payday still counts for the right one.
 const periodStartDay = (d) => { const a = dayNum(PERIOD_ANCHOR.toLocaleDateString("en-CA")); return a + 14 * Math.floor((dayNum(d) - a) / 14); };
-const incomePeriodDate = (i) => (i.source === PAY_SOURCE ? isoFromDay(periodStartDay(i.date) - 1) : i.date);
+const incomePeriodDate = (i) => (isWages(i) ? isoFromDay(periodStartDay(i.date) - 1) : i.date);
 
 // Renewal scheduler (same rules as the OptiPlex notifier): roll a past due date forward
 // by its billing cycle until it is today or later. One-off purchases never roll.
@@ -827,7 +830,7 @@ function startSync() {
    5. RENDER
    ========================================================= */
 function render() {
-  renderHome(); renderIncome(); renderExpenses(); renderSavings(); renderSubs(); renderProperty(); syncBufferField(); renderAfford(); renderWishlist(); renderCashflow(); renderSources(); renderSchedule(); syncBaselineField();
+  renderHome(); renderIncome(); renderExpenses(); renderSavings(); renderSubs(); renderProperty(); syncBufferField(); renderAfford(); renderWishlist(); renderCashflow(); renderSources(); renderSchedule(); renderQuickIncome();
   if (currentView === "stats") renderStats();
   renderAccountSelects(); renderAccounts(); scheduleApply();
 }
@@ -883,7 +886,7 @@ function periodStats() {
 function renderHome() {
   const { p, inc, spentRows, recurring, spent, left } = periodStats();
   $("periodTitle").textContent = "This fortnight · " + fmtDate(p.start) + " – " + fmtDate(p.end);
-  const payDay = isoFromDay(dayNum(p.end) + 3), paid = ST.income.some((i) => i.source === PAY_SOURCE && inPeriod(incomePeriodDate(i), p));
+  const payDay = isoFromDay(dayNum(p.end) + 3), paid = ST.income.some((i) => isWages(i) && inPeriod(incomePeriodDate(i), p));
   $("periodNote").textContent = paid ? "Pay for this fortnight is in." : "Pay for this fortnight is due " +
     new Date(payDay + "T00:00:00").toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "short" }) + ".";
   $("sIncome").textContent = money(inc);
@@ -944,7 +947,7 @@ function incomeRow(i) {
   const usual = ST.incomeSources.find((x) => x.name === i.source), diff = usual ? round2(i.amount - usual.amount) : 0;
   const vs = Math.abs(diff) >= 0.01 ? " · " + (diff > 0 ? "+" : "−") + money(Math.abs(diff)) + " vs usual" : "";
   const note = i.note ? " · " + esc(i.note) : "";
-  const earned = i.source === PAY_SOURCE ? " · for fortnight ending " + fmtDate(incomePeriodDate(i)) : "";
+  const earned = isWages(i) ? " · for fortnight ending " + fmtDate(incomePeriodDate(i)) : "";
   return '<li><div class="main"><div>' + esc(i.source) + '</div><div class="sub wrap">' + fmtLong(i.date) + earned + vs + note + '</div></div>' +
     '<span class="amt pos">' + money(i.amount) + '</span>' +
     '<button class="ghost" data-edit-income="' + i.id + '">Edit</button>' +
@@ -1027,7 +1030,9 @@ $("incomeForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const d = formData(e.target), isNew = !editing.income;
   d.accountId = d.accountId || "";
-  adjustIncomeAccount(isNew ? null : ST.income.find((x) => x.id === editing.income), d);
+  const old = isNew ? null : ST.income.find((x) => x.id === editing.income), src = ST.incomeSources.find((x) => x.name === d.source);
+  d.wages = src ? !!src.wages : old ? isWages(old) : d.source === PAY_SOURCE;
+  adjustIncomeAccount(old, d);
   save("income", editing.income, d);
   resetForm(e.target, "income");
   closeSheets(false);
@@ -1109,7 +1114,7 @@ document.addEventListener("click", (e) => {
   const t = e.target;
   if (t.dataset.del) {
     const [name, id] = t.dataset.del.split(":");
-    const msg = name === "goals" ? "Delete this goal? Its money moves stay in history." : name === "subscriptions" ? "Delete this item and its reminders?" : name === "bills" ? "Delete this bill? A PDF already filed in Seafile stays there." : "Delete this entry?";
+    const msg = name === "goals" ? "Delete this goal? Its money moves stay in history." : name === "subscriptions" ? "Delete this item and its reminders?" : name === "bills" ? "Delete this bill? A PDF already filed in Seafile stays there." : name === "incomeSources" ? "Delete this income source? Payments you logged stay." : "Delete this entry?";
     showInlineConfirm(msg, () => remove(name, id));
   }
   if (t.dataset.editIncome) startEdit("income", ST.income.find((x) => x.id === t.dataset.editIncome));
@@ -1728,7 +1733,7 @@ function renderSources() {
 $("srcForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const d = formData(e.target);
-  d.accountId = d.accountId || "";
+  d.accountId = d.accountId || ""; d.wages = !!d.wages; d.fixed = !!d.fixed;
   save("incomeSources", editing.incomeSources, d);
   editing.incomeSources = null; e.target.reset();
   e.target.nextDate.value = today();
@@ -1740,7 +1745,7 @@ function startEditSrc(s) {
   const f = $("srcForm").elements;
   ["name", "amount", "frequency", "nextDate"].forEach((k) => { f[k].value = s[k] ?? ""; });
   f.nextDate.value = nextDue({ dueDate: s.nextDate, frequency: s.frequency });
-  f.accountId.value = s.accountId || "";
+  f.accountId.value = s.accountId || ""; f.wages.checked = !!s.wages; f.fixed.checked = !!s.fixed;
   editing.incomeSources = s.id;
   $("srcSubmit").textContent = "Update";
   $("srcFormTitle").textContent = "Editing " + s.name;
@@ -1797,7 +1802,6 @@ document.addEventListener("click", (e) => {
    6f. SURPLUS PAY ALLOCATOR — extra pay above baseline → wishlist / goals
    ========================================================= */
 let sp = null, spWrap = null; // sp = { surplus, pay, baseline, mode, pct, amounts }
-const paySetting = () => ST.settings.find((x) => x.id === "pay") || {};
 const round2 = (n) => Math.round(n * 100) / 100;
 const wishLeft = (w) => Math.max(0, w.cost - (w.saved || 0));
 const paysToGo = (w, extra) => { const l = Math.max(0, wishLeft(w) - extra); return l <= 0.005 ? 0 : Math.ceil(l / (w.perPay || l)); };
@@ -1809,32 +1813,17 @@ function effectText(w, add) {
   return d > 0 ? "brings it " + d + (d === 1 ? " fortnight" : " fortnights") + " closer (" + before + " → " + after + " pays)" : "gets it a little closer";
 }
 
-function syncBaselineField() {
-  const f = $("payForm").elements.baseline;
-  if (document.activeElement !== f) f.value = paySetting().baseline != null ? paySetting().baseline : "";
-}
 // Briefly show "Saved ✓" on a button so it is clear the change went through.
 function flashSaved(btn, label) {
   btn.textContent = "Saved ✓";
   setTimeout(() => { btn.textContent = label; }, 1600);
 }
-function saveBaseline() {
-  const raw = $("payForm").elements.baseline.value, v = raw === "" ? null : Math.max(0, parseFloat(raw) || 0);
-  setDoc(doc(db, "users", uid, "settings", "pay"), { baseline: v, updated: serverTimestamp() }, { merge: true })
-    .catch((err) => toast("Save failed: " + err.message));
-}
-$("payForm").addEventListener("submit", (e) => {
-  e.preventDefault();
-  saveBaseline();
-  flashSaved($("baselineSave"), "Save baseline");
-});
-$("payForm").elements.baseline.addEventListener("change", saveBaseline);
 
-// Only a new QR pay entry above the baseline triggers the allocator.
+// New wages above the income source's usual amount trigger the allocator.
 function checkSurplus(d) {
-  const baseline = Number(paySetting().baseline || 0);
-  if (d.source !== "QR pay" || !baseline || !(d.amount > baseline + 0.005)) return;
-  openSurplus(round2(d.amount - baseline), d.amount, baseline);
+  const src = ST.incomeSources.find((x) => x.name === d.source), usual = src ? Number(src.amount) : 0;
+  if (!isWages(d) || !(usual > 0) || !(d.amount > usual + 0.005)) return;
+  openSurplus(round2(d.amount - usual), d.amount, usual);
 }
 function spTargets() {
   return wishOpen().map((w) => ({ key: "w:" + w.id, type: "wish", item: w, name: w.name }))
@@ -1885,7 +1874,7 @@ function spRender() {
   const apply = sp.mode === "keep" ? '<button data-sp-keep>Keep in checking</button>' :
     '<button class="plain" data-sp-keep>Not now</button><button data-sp-apply id="spApply">Allocate</button>';
   spWrap.innerHTML = '<div class="card"><h3>Surplus detected!</h3><div class="lede">' + money(sp.pay) + " is " + money(sp.surplus) +
-    " above your " + money(sp.baseline) + " baseline.</div><div class=\"toggle\">" + modes + "</div>" + body + '<div class="actions">' + apply + "</div></div>";
+    " above your usual " + money(sp.baseline) + ".</div><div class=\"toggle\">" + modes + "</div>" + body + '<div class="actions">' + apply + "</div></div>";
   spPreview();
 }
 // Live numbers only; text inputs keep focus because the sheet is not re-rendered.
@@ -2284,6 +2273,40 @@ document.addEventListener("click", (e) => {
     const [coll, id] = t.dataset.payManual.split(":"), item = LINKED[coll]().find((x) => x.id === id);
     if (item) applySpec(coll, item, "one").catch((err) => toast("Couldn't mark it paid: " + err.message));
   }
+});
+
+/* =========================================================
+   6j. QUICK INCOME — type the amount when it arrives; it lands in the right account
+   ========================================================= */
+let quickSig = "";
+function quickRow(x) {
+  const into = x.accountId ? "→ " + esc(acctName(x.accountId)) : "no account yet";
+  return '<li><div class="main"><div>' + esc(x.name) + '</div><div class="sub wrap">' + into + " · " + cap(x.frequency) + (x.fixed ? "" : " · usual " + money(x.amount)) + '</div></div>' +
+    '<input class="amtin" type="number" step="0.01" min="0" inputmode="decimal" data-q-amt="' + x.id + '" value="' + (x.fixed ? x.amount : "") + '" placeholder="$">' +
+    '<button class="small" data-q-save="' + x.id + '">Save</button></li>';
+}
+// Rebuilt only when the sources change, so snapshots never wipe an amount you are typing.
+function renderQuickIncome() {
+  if (!$("qDate").value) $("qDate").value = today();
+  const sig = JSON.stringify(ST.incomeSources.map((x) => [x.id, x.name, x.amount, x.fixed, x.frequency, x.accountId])) + ST.accounts.map((a) => a.id + a.name + a.bank).join();
+  if (sig === quickSig) return;
+  quickSig = sig;
+  $("quickList").innerHTML = ST.incomeSources.length ? ST.incomeSources.map(quickRow).join("")
+    : '<li class="empty">Add your income first: + → Add income source (for example Pay, Rent 1, Rent 2).</li>';
+}
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-q-save]");
+  if (!btn || btn.disabled) return;
+  const src = ST.incomeSources.find((x) => x.id === btn.dataset.qSave), input = document.querySelector('[data-q-amt="' + btn.dataset.qSave + '"]');
+  const amount = parseFloat(input.value);
+  if (!src || !(amount > 0)) { toast("Enter the amount first."); return; }
+  const d = { date: $("qDate").value || today(), amount: round2(amount), source: src.name, note: "", accountId: src.accountId || "", wages: !!src.wages };
+  adjustIncomeAccount(null, d);
+  save("income", null, d);
+  input.value = src.fixed ? src.amount : "";
+  btn.disabled = true; flashSaved(btn, "Save");
+  setTimeout(() => { btn.disabled = false; }, 1600);
+  checkSurplus(d);
 });
 
 /* =========================================================
