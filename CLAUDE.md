@@ -17,7 +17,7 @@ Separate from FinCommand (Kim's older offline-only finance PWA).
 `income`, `expenses` (frequency: once/weekly/fortnightly/monthly/quarterly/yearly), `goals`, `transfers`
 (type add/spend, goalId), `subscriptions` (name, amount, type subscription/bill/purchase, frequency,
 dueDate YYYY-MM-DD, remindDays, lastNotified), `pushDevices` (Web Push subscription JSON).
-Pay periods are fortnights anchored to Wed 2026-11-04 (`PAY_ANCHOR`).
+Fortnights run Mon–Sun, anchored to Mon 2026-10-19 (`PERIOD_ANCHOR`); payday is the Wednesday after a fortnight ends (`PAY_ANCHOR` = Wed 2026-11-04, every 14 days). QR pay counts for the fortnight it was earned in (`incomePeriodDate`).
 
 ## Rules — do not break
 - Never use `window.confirm()`/`alert()` — use `showInlineConfirm()` / `toast()` (z-index 700 on document.body).
