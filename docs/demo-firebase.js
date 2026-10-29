@@ -39,10 +39,10 @@ const store = {
     { id: "B", name: "4/8 Park Rd", rates: 1400, water: 700, insurance: 1100, landTax: 0 }
   ],
   bills: [
-    { category: "property", propertyId: "A", vendor: "Brisbane City Council", amount: 550, dueDate: day(12), paid: false, fileStatus: "filed" },
+    { category: "property", propertyId: "A", vendor: "Brisbane City Council", amount: 550, dueDate: day(12), frequency: "quarterly", paid: false, fileStatus: "filed" },
     { category: "property", propertyId: "B", vendor: "Allianz Insurance", amount: 1100, dueDate: day(25), paid: false, fileStatus: "pending" },
     { category: "maintenance", propertyId: "A", vendor: "Smith Plumbing", amount: 340, dueDate: day(-8), paid: true, fileStatus: "filed" },
-    { category: "personal", propertyId: "", vendor: "Telstra", amount: 129, dueDate: day(5), paid: false, fileStatus: "none" }
+    { category: "personal", propertyId: "", vendor: "Telstra", amount: 129, dueDate: day(5), frequency: "monthly", paid: false, fileStatus: "none" }
   ],
   incomeSources: [
     { name: "Job", amount: 2450, frequency: "fortnightly", nextDate: day(5) },
