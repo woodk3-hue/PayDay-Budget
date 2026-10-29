@@ -94,6 +94,8 @@ input,select{font:inherit;font-size:17px;letter-spacing:-.41px;padding:11px 12px
   box-shadow:inset 0 0 0 .5px var(--line),inset 0 1px 2px rgba(0,0,0,.05)}
 select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238e8e93' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
+textarea{font:inherit;font-size:15px;padding:11px 12px;border:0;border-radius:10px;background:var(--tile);color:var(--ink);width:100%;
+  outline:none;resize:vertical;box-shadow:inset 0 0 0 .5px var(--line)}
 input:focus,select:focus{box-shadow:0 0 0 3px var(--brand-soft),inset 0 0 0 .5px var(--brand)}
 input::placeholder{color:var(--muted)}
 
@@ -304,6 +306,13 @@ input[type=file]{padding:9px 12px}
       </form>
     </div>
     <div class="card"><h2>Income history</h2><ul class="list" id="incomeList"></ul></div>
+    <div class="card">
+      <h2>Import data</h2>
+      <label>Import file (.json)<input type="file" id="importFile" accept=".json,application/json"></label>
+      <label style="margin-top:10px">or paste it here<textarea id="importText" rows="4" placeholder="Paste the import text"></textarea></label>
+      <button id="importBtn" style="width:100%;margin-top:12px">Import</button>
+      <p class="note" style="margin-top:8px">Adds everything in the file to your account. Run it once.</p>
+    </div>
   </section>
 
   <!-- EXPENSES -->
@@ -359,15 +368,16 @@ input[type=file]{padding:9px 12px}
         <label>Is it a<select name="kind"><option value="want">Want</option><option value="need">Need</option></select></label>
         <label>Save per fortnight<input type="number" name="perPay" step="0.01" min="0" inputmode="decimal" placeholder="e.g. 250"></label>
         <label>or in how many pays<input type="number" name="pays" step="1" min="1" inputmode="numeric" placeholder="e.g. 14"></label>
+        <label class="full">Needed by (optional)<input type="date" name="neededBy" data-blank></label>
         <label class="full">Savings buffer to protect<input type="number" name="buffer" step="1" min="0" inputmode="decimal"></label>
         <p class="note full" id="bufferNote"></p>
       </form>
       <div id="affordResult"></div>
       <button class="full" id="wishSaveBtn" style="width:100%;margin-top:12px">Save to wishlist</button>
     </div>
-    <div class="card"><h2>Wishlist</h2><ul class="list" id="wishList"></ul></div>
+    <div class="card"><h2>Wishlist · tap an item to edit</h2><ul class="list" id="wishList"></ul></div>
     <div class="card">
-      <h2>Move money</h2>
+      <h2 id="transferFormTitle">Move money</h2>
       <form id="transferForm">
         <label class="full">Goal<select name="goalId" id="goalSelect" required></select></label>
         <label>Type
@@ -379,17 +389,18 @@ input[type=file]{padding:9px 12px}
         <label>Amount<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
         <label>Date<input type="date" name="date" required></label>
         <label>Note<input name="note" placeholder="e.g. MacBook"></label>
-        <button class="full" type="submit">Save</button>
+        <button class="full" type="submit" id="transferSubmit">Save</button>
       </form>
     </div>
     <div class="card"><h2>Goals</h2><ul class="list" id="goalList"></ul></div>
     <div class="card">
-      <h2>New goal</h2>
+      <h2 id="goalFormTitle">New goal</h2>
       <form id="goalForm">
         <label class="full">Name<input name="name" required placeholder="e.g. Japan trip"></label>
         <label>Target<input type="number" name="target" step="0.01" min="0" inputmode="decimal" required></label>
         <label>Starting balance<input type="number" name="opening" step="0.01" min="0" inputmode="decimal" value="0"></label>
-        <button class="full" type="submit">Add goal</button>
+        <label class="full">Needed by (optional)<input type="date" name="targetDate" data-blank></label>
+        <button class="full" type="submit" id="goalSubmit">Add goal</button>
       </form>
     </div>
     <div class="card"><h2>Recent moves</h2><ul class="list" id="transferList"></ul></div>
@@ -556,7 +567,7 @@ const $ = (id) => document.getElementById(id);
 const money = (n) => (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 const today = () => new Date().toLocaleDateString("en-CA");
-const fmtDate = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-AU", { day: "numeric", month: "short" });
+const fmtDate = (d) => d ? new Date(d + "T00:00:00").toLocaleDateString("en-AU", { day: "numeric", month: "short" }) : "no date";
 const col = (name) => collection(db, "users", uid, name);
 const FREQ_PER_FORTNIGHT = { weekly: 2, fortnightly: 1, monthly: 12 / 26, quarterly: 4 / 26, yearly: 1 / 26, once: 0 };
 
@@ -585,6 +596,7 @@ function addCycle(dateStr, freq) {
 }
 function nextDue(s) {
   let due = s.dueDate;
+  if (!due) return ""; // imported items can have no date yet
   if (s.frequency === "once") return due;
   for (let i = 0; due < today() && i < 500; i++) due = addCycle(due, s.frequency);
   return due;
@@ -604,11 +616,11 @@ function remove(name, id) {
 }
 
 // Custom confirm (no window.confirm in PWA context), z-index 700 on document.body.
-function showInlineConfirm(message, onYes) {
+function showInlineConfirm(message, onYes, yesLabel = "Delete") {
   const wrap = document.createElement("div");
   wrap.className = "overlay";
   wrap.innerHTML = '<div class="card"><p>' + esc(message) + '</p><div class="row">' +
-    '<button class="ghost" data-a="no">Cancel</button><button class="danger" data-a="yes">Delete</button></div></div>';
+    '<button class="ghost" data-a="no">Cancel</button><button class="' + (yesLabel === "Delete" ? "danger" : "ghost") + '" data-a="yes">' + esc(yesLabel) + '</button></div></div>';
   wrap.addEventListener("click", (e) => {
     const a = e.target.dataset.a;
     if (a === "yes") onYes();
@@ -678,9 +690,10 @@ function render() {
 }
 
 function subsSorted() {
-  return ST.subscriptions.map((s) => ({ ...s, next: nextDue(s) })).sort((a, b) => a.next.localeCompare(b.next));
+  return ST.subscriptions.map((s) => ({ ...s, next: nextDue(s) })).sort((a, b) => (a.next || "9999").localeCompare(b.next || "9999"));
 }
 function dueBadge(next, remindDays) {
+  if (!next) return '<span class="badge">No date</span>';
   const n = daysUntil(next);
   const txt = n < 0 ? "Overdue" : n === 0 ? "Today" : n === 1 ? "Tomorrow" : "In " + n + " days";
   return '<span class="badge' + (n <= (remindDays ?? 3) ? " soon" : "") + '">' + txt + "</span>";
@@ -688,7 +701,7 @@ function dueBadge(next, remindDays) {
 function subRow(s) {
   const freq = s.frequency === "once" ? "One-off" : s.frequency.charAt(0).toUpperCase() + s.frequency.slice(1);
   return '<li><div class="main"><div>' + esc(s.name) + '</div><div class="sub">' + freq + " · " +
-    fmtDate(s.next) + " " + dueBadge(s.next, s.remindDays) + '</div></div>' +
+    (s.next ? fmtDate(s.next) + " " : "") + dueBadge(s.next, s.remindDays) + '</div></div>' +
     '<span class="amt">' + money(s.amount) + '</span>' +
     '<button class="ghost" data-edit-sub="' + s.id + '">Edit</button>' +
     '<button class="ghost" data-del="subscriptions:' + s.id + '">✕</button></li>';
@@ -778,10 +791,28 @@ function renderSavings() {
   const recent = ST.transfers.slice(0, 30);
   $("transferList").innerHTML = recent.length ? recent.map(transferRow).join("") : '<li class="empty">No moves yet.</li>';
 }
+// Spare cash per pay: Safe to Spend when income sources are set, otherwise this fortnight's left-over.
+const spareFortnight = () => ST.incomeSources.length ? incomePerFortnight() - recurringPerFortnight() : periodStats().left;
+// What it takes to have `remaining` by a date: pays left, amount per pay, and whether it fits the spare cash.
+function datePlan(remaining, dateStr) {
+  if (!dateStr || remaining <= 0.005) return null;
+  const late = dayNum(dateStr) < dayNum(today()), pays = Math.max(1, paysBefore(dateStr)), spare = spareFortnight();
+  const perPay = Math.ceil((remaining / pays) * 100) / 100;
+  return { late: late, pays: pays, perPay: perPay, spare: spare, fits: perPay <= spare };
+}
+function planHtml(plan, dateStr) {
+  if (plan.late) return '<span class="bad">The date ' + fmtLong(dateStr) + " has passed. Set a new one.</span>";
+  const note = plan.spare <= 0 ? "no spare cash per pay right now" : plan.fits ? "fits your spare " + money(plan.spare) + "/pay" : "more than your spare " + money(plan.spare) + "/pay";
+  return "By " + fmtLong(dateStr) + ": set aside " + money(plan.perPay) + "/pay × " + plan.pays + ' · <span class="' + (plan.fits ? "ok" : "warn") + '">' + note + "</span>";
+}
 function goalRow(g) {
   const bal = goalBalance(g), pct = g.target ? Math.max(0, Math.min(100, (bal / g.target) * 100)) : 0;
+  const plan = datePlan(Math.max(0, g.target - bal), g.targetDate);
+  const planLine = plan ? '<div class="sub wrap">' + planHtml(plan, g.targetDate) + "</div>" : "";
   return '<li><div class="main"><div>' + esc(g.name) + '</div><div class="sub">' + money(bal) + " of " + money(g.target) +
-    '</div><div class="bar"><span style="width:' + pct.toFixed(0) + '%"></span></div></div>' +
+    '</div>' + planLine + '<div class="bar"><span style="width:' + pct.toFixed(0) + '%"></span></div></div>' +
+    '<button class="ghost" data-goal-add="' + g.id + '">Add</button>' +
+    '<button class="ghost" data-edit-goal="' + g.id + '">Edit</button>' +
     '<button class="ghost" data-del="goals:' + g.id + '">✕</button></li>';
 }
 function transferRow(t) {
@@ -791,6 +822,7 @@ function transferRow(t) {
   const cls = t.type === "add" ? "pos" : "neg", sign = t.type === "add" ? "+" : "−";
   return '<li><div class="main"><div>' + esc(name) + '</div><div class="sub">' + fmtDate(t.date) + note + '</div></div>' +
     '<span class="amt ' + cls + '">' + sign + money(t.amount) + '</span>' +
+    '<button class="ghost" data-edit-transfer="' + t.id + '">Edit</button>' +
     '<button class="ghost" data-del="transfers:' + t.id + '">✕</button></li>';
 }
 
@@ -842,12 +874,29 @@ function startEditSub(s) {
 
 $("goalForm").addEventListener("submit", (e) => {
   e.preventDefault();
-  save("goals", null, formData(e.target));
-  e.target.reset();
+  save("goals", editing.goals || null, formData(e.target));
+  editing.goals = null; e.target.reset();
+  $("goalFormTitle").textContent = "New goal"; $("goalSubmit").textContent = "Add goal";
 });
+function startEditGoal(g) {
+  const f = $("goalForm").elements;
+  f.name.value = g.name; f.target.value = g.target; f.opening.value = g.opening ?? 0; f.targetDate.value = g.targetDate || "";
+  editing.goals = g.id;
+  $("goalFormTitle").textContent = "Editing " + g.name; $("goalSubmit").textContent = "Update goal";
+  window.scrollTo({ top: $("goalForm").offsetTop - 80, behavior: "smooth" });
+}
+function startEditTransfer(t) {
+  const f = $("transferForm").elements;
+  f.goalId.value = t.goalId; f.type.value = t.type; f.amount.value = t.amount; f.date.value = t.date; f.note.value = t.note || "";
+  editing.transfers = t.id;
+  $("transferFormTitle").textContent = "Editing a move"; $("transferSubmit").textContent = "Update";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
 $("transferForm").addEventListener("submit", (e) => {
   e.preventDefault();
-  save("transfers", null, formData(e.target));
+  save("transfers", editing.transfers || null, formData(e.target));
+  editing.transfers = null;
+  $("transferFormTitle").textContent = "Move money"; $("transferSubmit").textContent = "Save";
   const keepGoal = e.target.goalId.value; e.target.reset();
   e.target.goalId.value = keepGoal; e.target.date.value = today();
 });
@@ -871,6 +920,13 @@ document.addEventListener("click", (e) => {
   if (t.dataset.editIncome) startEdit("income", ST.income.find((x) => x.id === t.dataset.editIncome));
   if (t.dataset.editExpense) startEdit("expenses", ST.expenses.find((x) => x.id === t.dataset.editExpense));
   if (t.dataset.editSub) startEditSub(ST.subscriptions.find((x) => x.id === t.dataset.editSub));
+  if (t.dataset.editGoal) startEditGoal(ST.goals.find((x) => x.id === t.dataset.editGoal));
+  if (t.dataset.goalAdd) {
+    const g = ST.goals.find((x) => x.id === t.dataset.goalAdd), plan = datePlan(Math.max(0, g.target - goalBalance(g)), g.targetDate);
+    showAmountPrompt("Add extra to " + g.name, plan ? plan.perPay : "", (v) =>
+      save("transfers", null, { goalId: g.id, type: "add", amount: round2(v), date: today(), note: "Extra" }));
+  }
+  if (t.dataset.editTransfer) startEditTransfer(ST.transfers.find((x) => x.id === t.dataset.editTransfer));
   if (t.dataset.editBill) startEditBill(ST.bills.find((x) => x.id === t.dataset.editBill));
   if (t.dataset.billPaid) {
     const b = ST.bills.find((x) => x.id === t.dataset.billPaid);
@@ -988,7 +1044,7 @@ function billSubLine(b) {
   const parts = [BILL_LABEL[b.category] || "Bill"];
   if (b.category !== "personal") parts.push(esc(propName(b.propertyId)));
   const due = billDue(b);
-  let when = fmtDate(due);
+  let when = due ? fmtDate(due) : "";
   if (b.category === "maintenance") when += " · FY " + taxYear(b.dueDate);
   else if (!isRecurringBill(b) && b.paid) when += ' <span class="badge">Paid</span>';
   else when += " " + dueBadge(due, 7) + " · set aside " + money(billExtra(b)) + "/pay";
@@ -1284,18 +1340,20 @@ function affordCalc() {
   const f = $("affordForm").elements;
   const cost = parseFloat(f.cost.value) || 0;
   let perPay = parseFloat(f.perPay.value) || 0, pays = parseInt(f.pays.value, 10) || 0;
-  if (affordLast === "pays" && pays > 0 && cost > 0) perPay = Math.ceil((cost / pays) * 100) / 100;
+  const needed = f.neededBy.value;
+  if (affordLast === "date" && needed && cost > 0) { pays = Math.max(1, paysBefore(needed)); perPay = Math.ceil((cost / pays) * 100) / 100; }
+  else if (affordLast === "pays" && pays > 0 && cost > 0) perPay = Math.ceil((cost / pays) * 100) / 100;
   else if (perPay > 0 && cost > 0) pays = Math.ceil(cost / perPay);
   else if (pays > 0 && cost > 0) perPay = Math.ceil((cost / pays) * 100) / 100;
   else { perPay = 0; pays = 0; }
   const buffer = f.buffer.value === "" ? defaultBuffer() : Math.max(0, parseFloat(f.buffer.value) || 0);
-  return { name: f.name.value.trim() || "This item", cost: cost, kind: f.kind.value, perPay: perPay, pays: pays,
+  return { name: f.name.value.trim() || "This item", cost: cost, kind: f.kind.value, perPay: perPay, pays: pays, neededBy: needed,
     ready: pays ? readyDate(pays) : "", buffer: buffer, available: savingsAvailable(), left: periodStats().left };
 }
 
 function optionAHtml(c) {
   const head = '<div class="head">Option A · Save up</div>';
-  if (!c.perPay) return '<div class="opt">' + head + '<div class="sub">Enter an amount per fortnight, or how many pays, to see the plan.</div></div>';
+  if (!c.perPay) return '<div class="opt">' + head + '<div class="sub">Enter an amount per fortnight, how many pays, or a needed-by date to see the plan.</div></div>';
   const used = c.left > 0 ? Math.round((c.perPay / c.left) * 100) : null;
   const fit = used === null ? "More than this fortnight's left-over" : used + "% of this fortnight's left-over (" + money(c.left) + ")";
   return '<div class="opt">' + head + '<div class="big">' + money(c.perPay) + "/fortnight × " + c.pays + (c.pays === 1 ? " pay" : " pays") +
@@ -1331,6 +1389,7 @@ $("affordForm").addEventListener("submit", (e) => e.preventDefault());
 $("affordForm").addEventListener("input", (e) => {
   if (e.target.name === "perPay") affordLast = "perPay";
   if (e.target.name === "pays") affordLast = "pays";
+  if (e.target.name === "neededBy") affordLast = "date";
   renderAfford();
 });
 $("affordForm").elements.buffer.addEventListener("change", (e) => {
@@ -1342,7 +1401,7 @@ $("wishSaveBtn").addEventListener("click", () => {
   const c = affordCalc();
   if (!c.cost || !c.perPay) { toast("Enter a cost and a fortnightly amount (or number of pays) first."); return; }
   const top = ST.wishlist.reduce((m, w) => Math.max(m, w.order ?? -1), -1);
-  save("wishlist", null, { name: c.name, cost: c.cost, kind: c.kind, perPay: c.perPay, saved: 0, order: top + 1 });
+  save("wishlist", null, { name: c.name, cost: c.cost, kind: c.kind, perPay: c.perPay, saved: 0, neededBy: c.neededBy || "", order: top + 1 });
   $("affordForm").reset(); affordLast = "perPay"; syncBufferField(); renderAfford();
 });
 
@@ -1361,6 +1420,10 @@ function moveWish(id, dir) {
   list.forEach((w, n) => batch.update(doc(db, "users", uid, "wishlist", w.id), { order: n * 10 }));
   batch.commit().catch((err) => toast("Couldn't reorder: " + err.message));
 }
+function wishPlanLine(w, left) {
+  const plan = datePlan(left, w.neededBy);
+  return plan ? '<div class="sub wrap">' + planHtml(plan, w.neededBy) + "</div>" : "";
+}
 function wishRow(w, pos, n) {
   const left = Math.max(0, w.cost - w.saved), done = left <= 0.005;
   const pct = w.cost ? Math.max(0, Math.min(100, (w.saved / w.cost) * 100)) : 0;
@@ -1368,14 +1431,33 @@ function wishRow(w, pos, n) {
   const kind = (w.kind === "need" ? "Need" : "Want") + (pos >= 0 ? " · Priority " + (pos + 1) : "");
   const up = pos > 0 ? '<button class="ghost" data-wish-move="' + w.id + ':-1" aria-label="Move up">▲</button>' : "";
   const down = pos >= 0 && pos < n - 1 ? '<button class="ghost" data-wish-move="' + w.id + ':1" aria-label="Move down">▼</button>' : "";
-  return '<li><div class="main"><div>' + esc(w.name) + '</div><div class="sub wrap">' + kind + " · " + money(w.saved) + " of " + money(w.cost) +
-    " · " + money(w.perPay) + "/fortnight</div><div class=\"sub\">" + togo + '</div><div class="bar"><span style="width:' + pct.toFixed(0) + '%"></span></div></div>' +
+  return '<li><div class="main" data-wish-edit="' + w.id + '" style="cursor:pointer"><div>' + esc(w.name) + '</div><div class="sub wrap">' + kind + " · " + money(w.saved) + " of " + money(w.cost) +
+    " · " + money(w.perPay) + "/fortnight</div><div class=\"sub\">" + togo + '</div>' + wishPlanLine(w, left) + '<div class="bar"><span style="width:' + pct.toFixed(0) + '%"></span></div></div>' +
     up + down + '<button class="ghost" data-wish-add="' + w.id + '">Add</button>' +
     '<button class="ghost" data-del="wishlist:' + w.id + '">✕</button></li>';
 }
 function renderWishlist() {
   const rows = wishSorted(), open = wishOpen();
   $("wishList").innerHTML = rows.length ? rows.map((w) => wishRow(w, open.indexOf(w), open.length)).join("") : '<li class="empty">Nothing on your wishlist yet.</li>';
+}
+function showWishEdit(w) {
+  const wrap = document.createElement("div");
+  wrap.className = "overlay sheet";
+  const num = (id, label, v, step) => '<label class="sec">' + label + '<input id="' + id + '" type="number" min="0" step="' + step + '" inputmode="decimal" value="' + v + '"></label>';
+  wrap.innerHTML = '<div class="card"><h3>Edit wishlist item</h3><label class="sec">Name<input id="weName" style="text-align:left" value="' + esc(w.name) + '"></label>' +
+    num("weCost", "Total cost", w.cost, "0.01") + num("wePerPay", "Save per fortnight", w.perPay, "0.01") + num("weSaved", "Saved so far", w.saved || 0, "0.01") +
+    '<label class="sec">Needed by (optional)<input id="weDate" type="date" value="' + esc(w.neededBy || "") + '"></label>' +
+    '<div class="actions"><button class="plain" data-a="no">Cancel</button><button data-a="yes">Save</button></div></div>';
+  wrap.addEventListener("click", (e) => {
+    const a = e.target.dataset.a;
+    if (a === "yes") {
+      const name = $("weName").value.trim(), cost = parseFloat($("weCost").value), perPay = parseFloat($("wePerPay").value), saved = parseFloat($("weSaved").value) || 0;
+      if (!name || !(cost > 0) || !(perPay > 0)) { toast("Enter a name, a cost and a fortnightly amount."); return; }
+      save("wishlist", w.id, { name: name, cost: round2(cost), perPay: round2(perPay), saved: round2(saved), neededBy: $("weDate").value });
+    }
+    if (a || e.target === wrap) wrap.remove();
+  });
+  document.body.appendChild(wrap);
 }
 function showAmountPrompt(title, value, onSave) {
   const wrap = document.createElement("div");
@@ -1390,6 +1472,8 @@ function showAmountPrompt(title, value, onSave) {
   document.body.appendChild(wrap);
 }
 document.addEventListener("click", (e) => {
+  const tap = e.target.closest("[data-wish-edit]");
+  if (tap && !e.target.closest("button")) { showWishEdit(ST.wishlist.find((x) => x.id === tap.dataset.wishEdit)); return; }
   if (e.target.dataset.wishMove) { const [id, dir] = e.target.dataset.wishMove.split(":"); moveWish(id, Number(dir)); return; }
   if (!e.target.dataset.wishAdd) return;
   const w = ST.wishlist.find((x) => x.id === e.target.dataset.wishAdd);
@@ -1419,7 +1503,7 @@ function renderCashflow() {
 function srcRow(s) {
   const when = nextDue({ dueDate: s.nextDate, frequency: s.frequency });
   const orig = s.frequency === "fortnightly" ? "" : cap(s.frequency) + " " + money(s.amount) + " · ";
-  return '<li><div class="main"><div>' + esc(s.name) + '</div><div class="sub wrap">' + orig + "next " + fmtDate(when) + '</div></div>' +
+  return '<li><div class="main"><div>' + esc(s.name) + '</div><div class="sub wrap">' + orig + (when ? "next " + fmtDate(when) : "no pay date yet") + '</div></div>' +
     '<span class="amt pos">' + money(toFortnight(s.amount, s.frequency)) + '/fn</span>' +
     '<button class="ghost" data-edit-src="' + s.id + '">Edit</button>' +
     '<button class="ghost" data-del="incomeSources:' + s.id + '">✕</button></li>';
@@ -1454,10 +1538,10 @@ function scheduleItems() {
     ({ kind: "subscriptions", id: s.id, name: s.name, frequency: s.frequency, amount: s.amount, due: nextDue(s) }));
   const bl = ST.bills.filter(isRecurringBill).map((b) =>
     ({ kind: "bills", id: b.id, name: b.vendor, frequency: b.frequency, amount: b.amount, due: billDue(b) }));
-  return ex.concat(su, bl).map((b) => ({ ...b, fn: toFortnight(b.amount, b.frequency) })).sort((a, b) => a.due.localeCompare(b.due));
+  return ex.concat(su, bl).map((b) => ({ ...b, fn: toFortnight(b.amount, b.frequency) })).sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
 }
 function schedRow(b) {
-  return '<li><div class="main"><div>' + esc(b.name) + '</div><div class="sub wrap">' + cap(b.frequency) + " " + money(b.amount) + " · due " + fmtDate(b.due) + '</div></div>' +
+  return '<li><div class="main"><div>' + esc(b.name) + '</div><div class="sub wrap">' + cap(b.frequency) + " " + money(b.amount) + (b.due ? " · due " + fmtDate(b.due) : " · no due date") + '</div></div>' +
     '<span class="amt">' + money(b.fn) + '/fn</span>' +
     '<button class="ghost" data-sched-edit="' + b.kind + ":" + b.id + '">Edit</button></li>';
 }
@@ -1633,6 +1717,66 @@ function spClick(e) {
 }
 
 /* =========================================================
+   6g. IMPORT — load a prepared plan (income, bills, properties) into this account
+   ========================================================= */
+const IMPORT_FREQ = ["once", "weekly", "fortnightly", "monthly", "quarterly", "yearly"];
+const IMPORT_COLS = {
+  incomeSources: ["name", "amount", "frequency", "nextDate"],
+  expenses: ["date", "amount", "category", "frequency", "description"],
+  subscriptions: ["name", "amount", "type", "frequency", "dueDate", "remindDays"],
+  bills: ["category", "propertyId", "vendor", "amount", "dueDate", "frequency", "paid", "fileStatus"]
+};
+function importRow(cols, row) {
+  if (!row || typeof row !== "object" || !(Number(row.amount) >= 0) || !IMPORT_FREQ.includes(row.frequency)) return null;
+  const out = {};
+  cols.forEach((k) => {
+    if (row[k] === undefined) return;
+    out[k] = typeof row[k] === "number" ? round2(row[k]) : typeof row[k] === "boolean" ? row[k] : String(row[k]).slice(0, 120);
+  });
+  return out;
+}
+function importPlan(text) {
+  const data = JSON.parse(text), plan = { rows: {}, skipped: 0 };
+  Object.keys(IMPORT_COLS).forEach((name) => {
+    plan.rows[name] = [];
+    (Array.isArray(data[name]) ? data[name] : []).forEach((r) => {
+      const clean = importRow(IMPORT_COLS[name], r);
+      if (clean) plan.rows[name].push(clean); else plan.skipped++;
+    });
+  });
+  plan.properties = (Array.isArray(data.properties) ? data.properties : []).filter((p) => p && PROP_IDS.includes(p.id)).map((p) =>
+    ({ id: p.id, name: String(p.name || "").slice(0, 80), rates: Number(p.rates) || 0, water: Number(p.water) || 0, insurance: Number(p.insurance) || 0, landTax: Number(p.landTax) || 0 }));
+  const base = data.settings && data.settings.pay && Number(data.settings.pay.baseline);
+  plan.baseline = base > 0 ? base : null;
+  return plan;
+}
+function importSummary(plan) {
+  const r = plan.rows, n = (x, w) => x.length + " " + w;
+  return "Import " + [n(r.incomeSources, "income sources"), n(r.expenses, "recurring expenses"), n(r.subscriptions, "bills & subscriptions"),
+    n(r.bills, "property bills"), n(plan.properties, "properties")].join(", ") + "? Only do this once.";
+}
+function runImport(plan) {
+  const batch = writeBatch(db);
+  Object.keys(IMPORT_COLS).forEach((name) => plan.rows[name].forEach((row) =>
+    batch.set(doc(col(name)), { ...row, created: serverTimestamp() })));
+  plan.properties.forEach((p) => { const { id, ...rest } = p; batch.set(doc(db, "users", uid, "properties", id), rest, { merge: true }); });
+  if (plan.baseline) batch.set(doc(db, "users", uid, "settings", "pay"), { baseline: plan.baseline, updated: serverTimestamp() }, { merge: true });
+  batch.commit().then(() => toast("Imported. Everything is in your account now.")).catch((err) => toast("Import failed: " + err.message));
+  $("importText").value = ""; $("importFile").value = "";
+}
+$("importFile").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (f) $("importText").value = await f.text();
+});
+$("importBtn").addEventListener("click", () => {
+  let plan;
+  try { plan = importPlan($("importText").value); } catch (err) { toast("That doesn't look like an import file."); return; }
+  const total = Object.values(plan.rows).reduce((t, r) => t + r.length, 0) + plan.properties.length;
+  if (!total) { toast("Nothing to import in that file."); return; }
+  showInlineConfirm(importSummary(plan) + (plan.skipped ? " (" + plan.skipped + " rows skipped.)" : ""), () => runImport(plan), "Import");
+});
+
+/* =========================================================
    7. AUTH
    ========================================================= */
 $("signInBtn").addEventListener("click", async () => {
@@ -1650,7 +1794,7 @@ onAuthStateChanged(auth, (user) => {
   $("signOutBtn").classList.toggle("hidden", !user);
   $("view-home").classList.toggle("hidden", !user);
   if (!user) { document.querySelectorAll(".view").forEach((s) => s.classList.add("hidden")); return; }
-  document.querySelectorAll("form input[type=date]").forEach((i) => (i.value = today()));
+  document.querySelectorAll("form input[type=date]:not([data-blank])").forEach((i) => (i.value = today()));
   startSync();
   if (location.hash === "#subs") document.querySelector('nav [data-v="subs"]').click();
 });
