@@ -374,9 +374,9 @@ input[type=file]{padding:9px 12px}
       <div id="affordResult"></div>
       <button class="full" id="wishSaveBtn" style="width:100%;margin-top:12px">Save to wishlist</button>
     </div>
-    <div class="card"><h2>Wishlist</h2><ul class="list" id="wishList"></ul></div>
+    <div class="card"><h2>Wishlist · tap an item to edit</h2><ul class="list" id="wishList"></ul></div>
     <div class="card">
-      <h2>Move money</h2>
+      <h2 id="transferFormTitle">Move money</h2>
       <form id="transferForm">
         <label class="full">Goal<select name="goalId" id="goalSelect" required></select></label>
         <label>Type
@@ -388,17 +388,17 @@ input[type=file]{padding:9px 12px}
         <label>Amount<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
         <label>Date<input type="date" name="date" required></label>
         <label>Note<input name="note" placeholder="e.g. MacBook"></label>
-        <button class="full" type="submit">Save</button>
+        <button class="full" type="submit" id="transferSubmit">Save</button>
       </form>
     </div>
     <div class="card"><h2>Goals</h2><ul class="list" id="goalList"></ul></div>
     <div class="card">
-      <h2>New goal</h2>
+      <h2 id="goalFormTitle">New goal</h2>
       <form id="goalForm">
         <label class="full">Name<input name="name" required placeholder="e.g. Japan trip"></label>
         <label>Target<input type="number" name="target" step="0.01" min="0" inputmode="decimal" required></label>
         <label>Starting balance<input type="number" name="opening" step="0.01" min="0" inputmode="decimal" value="0"></label>
-        <button class="full" type="submit">Add goal</button>
+        <button class="full" type="submit" id="goalSubmit">Add goal</button>
       </form>
     </div>
     <div class="card"><h2>Recent moves</h2><ul class="list" id="transferList"></ul></div>
@@ -793,6 +793,7 @@ function goalRow(g) {
   const bal = goalBalance(g), pct = g.target ? Math.max(0, Math.min(100, (bal / g.target) * 100)) : 0;
   return '<li><div class="main"><div>' + esc(g.name) + '</div><div class="sub">' + money(bal) + " of " + money(g.target) +
     '</div><div class="bar"><span style="width:' + pct.toFixed(0) + '%"></span></div></div>' +
+    '<button class="ghost" data-edit-goal="' + g.id + '">Edit</button>' +
     '<button class="ghost" data-del="goals:' + g.id + '">✕</button></li>';
 }
 function transferRow(t) {
@@ -802,6 +803,7 @@ function transferRow(t) {
   const cls = t.type === "add" ? "pos" : "neg", sign = t.type === "add" ? "+" : "−";
   return '<li><div class="main"><div>' + esc(name) + '</div><div class="sub">' + fmtDate(t.date) + note + '</div></div>' +
     '<span class="amt ' + cls + '">' + sign + money(t.amount) + '</span>' +
+    '<button class="ghost" data-edit-transfer="' + t.id + '">Edit</button>' +
     '<button class="ghost" data-del="transfers:' + t.id + '">✕</button></li>';
 }
 
@@ -853,12 +855,29 @@ function startEditSub(s) {
 
 $("goalForm").addEventListener("submit", (e) => {
   e.preventDefault();
-  save("goals", null, formData(e.target));
-  e.target.reset();
+  save("goals", editing.goals || null, formData(e.target));
+  editing.goals = null; e.target.reset();
+  $("goalFormTitle").textContent = "New goal"; $("goalSubmit").textContent = "Add goal";
 });
+function startEditGoal(g) {
+  const f = $("goalForm").elements;
+  f.name.value = g.name; f.target.value = g.target; f.opening.value = g.opening ?? 0;
+  editing.goals = g.id;
+  $("goalFormTitle").textContent = "Editing " + g.name; $("goalSubmit").textContent = "Update goal";
+  window.scrollTo({ top: $("goalForm").offsetTop - 80, behavior: "smooth" });
+}
+function startEditTransfer(t) {
+  const f = $("transferForm").elements;
+  f.goalId.value = t.goalId; f.type.value = t.type; f.amount.value = t.amount; f.date.value = t.date; f.note.value = t.note || "";
+  editing.transfers = t.id;
+  $("transferFormTitle").textContent = "Editing a move"; $("transferSubmit").textContent = "Update";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
 $("transferForm").addEventListener("submit", (e) => {
   e.preventDefault();
-  save("transfers", null, formData(e.target));
+  save("transfers", editing.transfers || null, formData(e.target));
+  editing.transfers = null;
+  $("transferFormTitle").textContent = "Move money"; $("transferSubmit").textContent = "Save";
   const keepGoal = e.target.goalId.value; e.target.reset();
   e.target.goalId.value = keepGoal; e.target.date.value = today();
 });
@@ -882,6 +901,8 @@ document.addEventListener("click", (e) => {
   if (t.dataset.editIncome) startEdit("income", ST.income.find((x) => x.id === t.dataset.editIncome));
   if (t.dataset.editExpense) startEdit("expenses", ST.expenses.find((x) => x.id === t.dataset.editExpense));
   if (t.dataset.editSub) startEditSub(ST.subscriptions.find((x) => x.id === t.dataset.editSub));
+  if (t.dataset.editGoal) startEditGoal(ST.goals.find((x) => x.id === t.dataset.editGoal));
+  if (t.dataset.editTransfer) startEditTransfer(ST.transfers.find((x) => x.id === t.dataset.editTransfer));
   if (t.dataset.editBill) startEditBill(ST.bills.find((x) => x.id === t.dataset.editBill));
   if (t.dataset.billPaid) {
     const b = ST.bills.find((x) => x.id === t.dataset.billPaid);
@@ -1379,7 +1400,7 @@ function wishRow(w, pos, n) {
   const kind = (w.kind === "need" ? "Need" : "Want") + (pos >= 0 ? " · Priority " + (pos + 1) : "");
   const up = pos > 0 ? '<button class="ghost" data-wish-move="' + w.id + ':-1" aria-label="Move up">▲</button>' : "";
   const down = pos >= 0 && pos < n - 1 ? '<button class="ghost" data-wish-move="' + w.id + ':1" aria-label="Move down">▼</button>' : "";
-  return '<li><div class="main"><div>' + esc(w.name) + '</div><div class="sub wrap">' + kind + " · " + money(w.saved) + " of " + money(w.cost) +
+  return '<li><div class="main" data-wish-edit="' + w.id + '" style="cursor:pointer"><div>' + esc(w.name) + '</div><div class="sub wrap">' + kind + " · " + money(w.saved) + " of " + money(w.cost) +
     " · " + money(w.perPay) + "/fortnight</div><div class=\"sub\">" + togo + '</div><div class="bar"><span style="width:' + pct.toFixed(0) + '%"></span></div></div>' +
     up + down + '<button class="ghost" data-wish-add="' + w.id + '">Add</button>' +
     '<button class="ghost" data-del="wishlist:' + w.id + '">✕</button></li>';
@@ -1387,6 +1408,24 @@ function wishRow(w, pos, n) {
 function renderWishlist() {
   const rows = wishSorted(), open = wishOpen();
   $("wishList").innerHTML = rows.length ? rows.map((w) => wishRow(w, open.indexOf(w), open.length)).join("") : '<li class="empty">Nothing on your wishlist yet.</li>';
+}
+function showWishEdit(w) {
+  const wrap = document.createElement("div");
+  wrap.className = "overlay sheet";
+  const num = (id, label, v, step) => '<label class="sec">' + label + '<input id="' + id + '" type="number" min="0" step="' + step + '" inputmode="decimal" value="' + v + '"></label>';
+  wrap.innerHTML = '<div class="card"><h3>Edit wishlist item</h3><label class="sec">Name<input id="weName" style="text-align:left" value="' + esc(w.name) + '"></label>' +
+    num("weCost", "Total cost", w.cost, "0.01") + num("wePerPay", "Save per fortnight", w.perPay, "0.01") + num("weSaved", "Saved so far", w.saved || 0, "0.01") +
+    '<div class="actions"><button class="plain" data-a="no">Cancel</button><button data-a="yes">Save</button></div></div>';
+  wrap.addEventListener("click", (e) => {
+    const a = e.target.dataset.a;
+    if (a === "yes") {
+      const name = $("weName").value.trim(), cost = parseFloat($("weCost").value), perPay = parseFloat($("wePerPay").value), saved = parseFloat($("weSaved").value) || 0;
+      if (!name || !(cost > 0) || !(perPay > 0)) { toast("Enter a name, a cost and a fortnightly amount."); return; }
+      save("wishlist", w.id, { name: name, cost: round2(cost), perPay: round2(perPay), saved: round2(saved) });
+    }
+    if (a || e.target === wrap) wrap.remove();
+  });
+  document.body.appendChild(wrap);
 }
 function showAmountPrompt(title, value, onSave) {
   const wrap = document.createElement("div");
@@ -1401,6 +1440,8 @@ function showAmountPrompt(title, value, onSave) {
   document.body.appendChild(wrap);
 }
 document.addEventListener("click", (e) => {
+  const tap = e.target.closest("[data-wish-edit]");
+  if (tap && !e.target.closest("button")) { showWishEdit(ST.wishlist.find((x) => x.id === tap.dataset.wishEdit)); return; }
   if (e.target.dataset.wishMove) { const [id, dir] = e.target.dataset.wishMove.split(":"); moveWish(id, Number(dir)); return; }
   if (!e.target.dataset.wishAdd) return;
   const w = ST.wishlist.find((x) => x.id === e.target.dataset.wishAdd);
