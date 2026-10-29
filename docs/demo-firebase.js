@@ -20,7 +20,7 @@ const store = {
   ],
   goals: [
     { id: "g1", name: "Emergency fund", target: 10000, opening: 4200 },
-    { id: "g2", name: "Holidays", target: 5000, opening: 1800 },
+    { id: "g2", name: "Holidays", target: 5000, opening: 1800, targetDate: day(400) },
     { id: "g3", name: "Tech", target: 4000, opening: 900 },
     { id: "g4", name: "Gear", target: 2000, opening: 300 }
   ],
@@ -52,7 +52,8 @@ const store = {
   wishlist: [
     { name: "MacBook Pro", cost: 3500, kind: "want", perPay: 250, saved: 750, order: 0 },
     { name: "Japan trip", cost: 5000, kind: "want", perPay: 200, saved: 1200, order: 10 },
-    { name: "Standing desk", cost: 900, kind: "want", perPay: 100, saved: 100, order: 20 }
+    { name: "Standing desk", cost: 900, kind: "want", perPay: 100, saved: 100, order: 20 },
+    { name: "New phone", cost: 1800, kind: "want", perPay: 80, saved: 0, order: 30, neededBy: day(430) }
   ],
   settings: [{ id: "pay", baseline: 2450, updated: 1 }],
   pushDevices: [], billFiles: []
