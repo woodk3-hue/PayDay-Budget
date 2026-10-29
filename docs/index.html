@@ -260,12 +260,12 @@ input[type=file]{padding:9px 12px}
       <h2 id="periodTitle">This fortnight</h2>
       <div class="grid">
         <div class="stat"><small>Income</small><b id="cIncome">$0</b></div>
-        <div class="stat"><small>Bill allocations</small><b id="cBills">$0</b></div>
-        <div class="stat"><small>Safe to spend</small><b id="cSafe">$0</b></div>
+        <div class="stat"><small id="cBillsLbl">Bills</small><b id="cBills">$0</b></div>
         <div class="stat"><small>Left over</small><b id="sLeft">$0</b></div>
       </div>
       <p class="note" id="cNote" style="margin-top:8px"></p>
       <p class="note" id="periodNote"></p>
+      <button class="full" id="allotBtn" style="width:100%;margin-top:10px">Allot left over</button>
     </div>
     <div class="card hidden" id="manualCard"><h2>Bills you pay yourself</h2><ul class="list" id="manualList"></ul></div>
     <div class="card">
@@ -591,6 +591,11 @@ input[type=file]{padding:9px 12px}
       <p class="note" style="margin-top:8px">Balances move by themselves when a bill, transfer or logged payment hits an account. Edit a balance any time to match your bank.</p>
     </div>
     <div id="bankGroups"></div>
+    <div class="card">
+      <h2>Payday transfers (optional)</h2>
+      <label class="check"><input type="checkbox" id="paydayOn"> Run my payday transfers when I log my pay</label>
+      <p class="note" style="margin-top:8px">Off by default and personal to you. When on, a transfer set to "On payday" runs each time you save your wages, instead of on a fixed date.</p>
+    </div>
     <div class="card"><h2>Transfers</h2><ul class="list" id="xferList"></ul></div>
     <div class="card addcard" id="bankCard">
       <button type="button" class="ghost x" data-close-sheet>Close</button>
@@ -619,14 +624,17 @@ input[type=file]{padding:9px 12px}
         <label>To<select name="toId" class="acctExt"></select></label>
         <label class="full">Other bank or person (if one side is outside)<input name="externalName" placeholder="e.g. Cat ING"></label>
         <label>Amount<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
-        <label>How often
+        <label class="hidden" id="xferTrigWrap">When
+          <select name="trigger"><option value="date">On a date</option><option value="payday">On payday (when I log my pay)</option></select>
+        </label>
+        <label id="xferFreqWrap">How often
           <select name="frequency">
             <option value="fortnightly">Fortnightly</option><option value="once">One-off</option><option value="weekly">Weekly</option>
             <option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option>
           </select>
         </label>
-        <label class="full">Next transfer date<input type="date" name="nextApply" required></label>
-        <p class="note full">Anything dated today or earlier is applied straight away.</p>
+        <label class="full" id="xferDateWrap">Next transfer date<input type="date" name="nextApply" required></label>
+        <p class="note full" id="xferNote">Anything dated today or earlier is applied straight away.</p>
         <button class="full" type="submit" id="xferSubmit">Save transfer</button>
       </form>
     </div>
@@ -667,7 +675,7 @@ const db = initializeFirestore(app, {
 /* =========================================================
    2. STATE
    ========================================================= */
-const ST = { income: [], expenses: [], goals: [], transfers: [], subscriptions: [], properties: [], bills: [], wishlist: [], settings: [], incomeSources: [], accounts: [], acctTransfers: [], banks: [] };
+const ST = { income: [], expenses: [], goals: [], transfers: [], subscriptions: [], properties: [], bills: [], wishlist: [], settings: [], incomeSources: [], accounts: [], acctTransfers: [], banks: [], allotments: [], paydayMoves: [] };
 const CATEGORIES = ["Groceries","Eating out","Shopping","Clothes","Fuel","Transport","Bills","Subscriptions",
   "Health","Medication","Gym","Home","Property","Loan","Travel","Tech","Gifts","Kids","Beauty","Other"];
 const DEFAULT_GOALS = [
@@ -682,8 +690,8 @@ const PAY_ANCHOR = new Date("2026-11-04T00:00:00");
 const PERIOD_ANCHOR = new Date("2026-10-19T00:00:00");
 const PAY_SOURCE = "QR pay"; // older entries; new income sources carry a "wages" flag instead
 const isWages = (i) => !!i.wages || i.source === PAY_SOURCE;
-let uid = null, unsubs = [], editing = { income: null, expenses: null, subscriptions: null, bills: null, incomeSources: null, accounts: null, acctTransfers: null, banks: null }, expenseFilter = "all", schedFilter = "all", cashView = "fortnight", billFilter = "all", pendingFile = null;
-const pending = { income: false, expenses: false, goals: false, transfers: false, subscriptions: false, properties: false, bills: false, wishlist: false, settings: false, incomeSources: false, accounts: false, acctTransfers: false, banks: false };
+let uid = null, unsubs = [], editing = { income: null, expenses: null, subscriptions: null, bills: null, incomeSources: null, accounts: null, acctTransfers: null, banks: null }, expenseFilter = "all", schedFilter = "all", billFilter = "all", pendingFile = null;
+const pending = { income: false, expenses: false, goals: false, transfers: false, subscriptions: false, properties: false, bills: false, wishlist: false, settings: false, incomeSources: false, accounts: false, acctTransfers: false, banks: false, allotments: false, paydayMoves: false };
 
 /* =========================================================
    3. HELPERS
@@ -802,7 +810,9 @@ function startSync() {
     listen("incomeSources", "name", "asc"),
     listen("accounts", "name", "asc"),
     listen("acctTransfers", "name", "asc"),
-    listen("banks", "name", "asc")
+    listen("banks", "name", "asc"),
+    listen("allotments", "date", "desc"),
+    listen("paydayMoves", "date", "desc")
   ];
   refreshAlertsButton();
   // Seed default goals once, the first time this account has none.
@@ -820,7 +830,7 @@ function startSync() {
 function render() {
   renderHome(); renderIncome(); renderExpenses(); renderSavings(); renderSubs(); renderProperty(); syncBufferField(); renderAfford(); renderWishlist(); renderCashflow(); renderSources(); renderSchedule(); renderQuickIncome();
   if (currentView === "stats") renderStats();
-  renderAccountSelects(); renderAccounts(); scheduleApply();
+  renderAccountSelects(); renderAccounts(); renderPaydaySetting(); scheduleApply();
 }
 
 function subsSorted() {
@@ -869,7 +879,11 @@ function periodStats() {
   const spentRows = ST.expenses.filter((e) => e.frequency === "once" && inPeriod(e.date, p));
   const recurring = recurringPerFortnight();
   const spent = spentRows.reduce((s, e) => s + e.amount, 0) + recurring;
-  return { p: p, inc: inc, spentRows: spentRows, recurring: recurring, spent: spent, left: inc - spent };
+  const allotted = ST.allotments.filter((a) => inPeriod(a.date, p)).reduce((t, a) => t + a.amount, 0);
+  // With payday transfers on, bills are paid from the accounts those transfers fund, so left over is pay minus what was sent out.
+  const sent = ST.paydayMoves.filter((m) => inPeriod(isoFromDay(periodStartDay(m.date) - 1), p)).reduce((t, m) => t + m.amount, 0);
+  const left = paydayOn() ? inc - sent - allotted : inc - spent - allotted;
+  return { p: p, inc: inc, spentRows: spentRows, recurring: recurring, spent: spent, allotted: allotted, sent: sent, left: left };
 }
 function renderHome() {
   const { p, inc, spentRows, recurring, spent, left } = periodStats();
@@ -877,8 +891,6 @@ function renderHome() {
   const payDay = isoFromDay(dayNum(p.end) + 3), paid = ST.income.some((i) => isWages(i) && inPeriod(incomePeriodDate(i), p));
   $("periodNote").textContent = paid ? "Pay for this fortnight is in." : "Pay for this fortnight is due " +
     new Date(payDay + "T00:00:00").toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "short" }) + ".";
-  $("sLeft").textContent = money(left);
-  $("sLeft").className = left >= 0 ? "pos" : "neg";
   $("sRecurring").textContent = money(recurring);
   $("sGoals").textContent = money(ST.goals.reduce((s, g) => s + goalBalance(g), 0));
 
@@ -1022,6 +1034,7 @@ $("incomeForm").addEventListener("submit", (e) => {
   save("income", editing.income, d);
   resetForm(e.target, "income");
   closeSheets(false);
+  if (isNew && d.wages) runPaydayTransfers(d.date);
   if (isNew) checkSurplus(d);
 });
 $("expenseForm").addEventListener("submit", (e) => {
@@ -1689,19 +1702,19 @@ document.addEventListener("click", (e) => {
    ========================================================= */
 // Weekly ×2, fortnightly ×1, monthly ×12/26, quarterly ×4/26, yearly ÷26 (see FREQ_PER_FORTNIGHT).
 const toFortnight = (amount, frequency) => amount * (FREQ_PER_FORTNIGHT[frequency] || 0);
-const CASH_SCALE = { fortnight: 1, month: 26 / 12, year: 26 };
 const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);
 const incomePerFortnight = () => ST.incomeSources.reduce((t, s) => t + toFortnight(s.amount, s.frequency), 0);
 
 function renderCashflow() {
-  const k = CASH_SCALE[cashView], inc = incomePerFortnight() * k, bills = recurringPerFortnight() * k, safe = inc - bills;
-  $("cIncome").textContent = money(inc);
-  $("cBills").textContent = money(bills);
-  $("cSafe").textContent = money(safe);
-  $("cSafe").className = safe >= 0 ? "pos" : "neg";
-  $("cNote").textContent = ST.incomeSources.length
-    ? "Income from " + ST.incomeSources.length + (ST.incomeSources.length === 1 ? " source" : " sources") + " minus every recurring bill's share of a pay."
-    : "Add your income sources on the Income tab to see what's safe to spend.";
+  const st = periodStats();
+  $("cIncome").textContent = money(st.inc);
+  $("cBillsLbl").textContent = paydayOn() ? "Sent to accounts" : "Bills";
+  $("cBills").textContent = money(paydayOn() ? st.sent : st.recurring);
+  $("sLeft").textContent = money(st.left);
+  $("sLeft").className = st.left >= 0 ? "pos" : "neg";
+  $("cNote").textContent = (paydayOn() ? "Left over = pay received − payday transfers sent" : "Left over = pay received − bills − " + money(st.spent - st.recurring) + " spent") +
+    (st.allotted ? " − " + money(st.allotted) + " already allotted" : "") + ".";
+  $("allotBtn").classList.toggle("hidden", !(st.left > 0.005 && ST.accounts.length > 1));
 }
 
 function srcRow(s) {
@@ -1949,7 +1962,7 @@ function resetAddForms() {
   resetBillForm();
   editing.accounts = null; $("acctForm").reset(); $("acctSubmit").textContent = "Save account"; $("acctFormTitle").textContent = "Add account";
   editing.banks = null; $("bankForm").reset(); $("bankSubmit").textContent = "Save bank"; $("bankFormTitle").textContent = "Add bank";
-  editing.acctTransfers = null; $("xferForm").reset(); $("xferForm").nextApply.value = today();
+  editing.acctTransfers = null; $("xferForm").reset(); $("xferForm").nextApply.value = today(); syncXferForm();
   $("xferSubmit").textContent = "Save transfer"; $("xferFormTitle").textContent = "Add transfer";
 }
 document.addEventListener("click", (e) => { if (e.target.closest("[data-close-sheet]")) closeSheets(true); });
@@ -2156,7 +2169,7 @@ function acctRow(a) {
 function xferRow(t) {
   const kind = t.fromId && t.toId ? "internal" : "external";
   return '<li><div class="main"><div>' + esc(t.name) + '</div><div class="sub wrap">' + esc(acctName(t.fromId, t.externalName)) + " → " + esc(acctName(t.toId, t.externalName)) +
-    " · " + kind + " · " + cap(t.frequency) + (t.nextApply ? " · next " + fmtDate(t.nextApply) : "") + '</div></div><span class="amt">' + money(t.amount) + '</span>' +
+    " · " + kind + " · " + (t.trigger === "payday" ? "on payday" : cap(t.frequency)) + (t.nextApply ? " · next " + fmtDate(t.nextApply) : "") + '</div></div><span class="amt">' + money(t.amount) + '</span>' +
     '<button class="ghost" data-edit-xfer="' + t.id + '">Edit</button><button class="ghost" data-del="acctTransfers:' + t.id + '">✕</button></li>';
 }
 // Accounts sit under their bank. Older accounts that only have a bank name are grouped by that name.
@@ -2217,8 +2230,10 @@ $("xferForm").addEventListener("submit", (e) => {
   const d = formData(e.target);
   if (!d.fromId && !d.toId) { toast("Pick at least one of your accounts."); return; }
   if (d.fromId === d.toId) { toast("From and To are the same account."); return; }
+  d.trigger = paydayOn() && d.trigger === "payday" ? "payday" : "date";
+  if (d.trigger === "payday") { d.frequency = "fortnightly"; d.nextApply = ""; }
   save("acctTransfers", editing.acctTransfers, d);
-  editing.acctTransfers = null; e.target.reset(); e.target.nextApply.value = today();
+  editing.acctTransfers = null; e.target.reset(); e.target.nextApply.value = today(); syncXferForm();
   $("xferSubmit").textContent = "Save transfer"; $("xferFormTitle").textContent = "Add transfer";
   closeSheets(false);
 });
@@ -2246,6 +2261,7 @@ document.addEventListener("click", (e) => {
   if (t.dataset.editXfer) {
     const x = ST.acctTransfers.find((y) => y.id === t.dataset.editXfer), f = $("xferForm").elements;
     ["name", "fromId", "toId", "externalName", "amount", "frequency", "nextApply"].forEach((k) => { f[k].value = x[k] ?? ""; });
+    f.trigger.value = x.trigger === "payday" ? "payday" : "date"; syncXferForm();
     editing.acctTransfers = x.id; $("xferSubmit").textContent = "Update"; $("xferFormTitle").textContent = "Editing " + x.name;
     openSheet("xferCard");
   }
@@ -2286,8 +2302,123 @@ document.addEventListener("click", (e) => {
   input.value = src.fixed ? src.amount : "";
   btn.disabled = true; flashSaved(btn, "Save");
   setTimeout(() => { btn.disabled = false; }, 1600);
+  if (d.wages) runPaydayTransfers(d.date);
   checkSurplus(d);
 });
+
+/* =========================================================
+   6k. ALLOT LEFT OVER — move what's left after bills into your accounts
+   ========================================================= */
+let al = null, alWrap = null; // al = { total, from, amounts }
+function openAllot() {
+  const total = Math.max(0, round2(periodStats().left)), wages = ST.incomeSources.find((x) => x.wages && x.accountId);
+  al = { total: total, from: wages ? wages.accountId : ST.accounts[0].id, amounts: {} };
+  alWrap = document.createElement("div");
+  alWrap.className = "overlay sheet";
+  alWrap.addEventListener("click", alClick);
+  alWrap.addEventListener("input", alInput);
+  alWrap.addEventListener("change", alChange);
+  document.body.appendChild(alWrap);
+  alRender();
+}
+function alClose() { if (alWrap) alWrap.remove(); alWrap = null; al = null; }
+const alTargets = () => ST.accounts.filter((a) => a.id !== al.from);
+function alRow(a) {
+  const v = al.amounts[a.id] || "";
+  return '<li><div class="main"><div>' + esc(a.name) + '</div><div class="sub wrap">' + esc(a.bank || "") + " · " + money(a.balance || 0) + '</div></div>' +
+    '<input class="amtin" type="number" min="0" step="0.01" inputmode="decimal" data-al-amt="' + a.id + '" value="' + v + '" placeholder="$0"></li>';
+}
+function alRender() {
+  const opts = ST.accounts.map((a) => '<option value="' + a.id + '"' + (a.id === al.from ? " selected" : "") + ">" + esc(acctLabel(a)) + "</option>").join("");
+  alWrap.innerHTML = '<div class="card"><h3>Allot your left over</h3><div class="lede">You have ' + money(al.total) + ' left over after bills.</div>' +
+    '<label class="sec">It is sitting in<select data-al-from style="text-align:left">' + opts + '</select></label>' +
+    '<div class="sec toggle chips"><button data-al-even>Split evenly</button><button data-al-clear>Clear</button></div>' +
+    '<ul class="list" style="margin-top:6px">' + alTargets().map(alRow).join("") + '</ul><div class="opt" id="alTotal"></div>' +
+    '<div class="actions"><button class="plain" data-al-cancel>Cancel</button><button data-al-apply>Allot</button></div></div>';
+  alPreview();
+}
+function alSum() { return alTargets().reduce((t, a) => t + (al.amounts[a.id] || 0), 0); }
+function alPreview() {
+  const sum = alSum(), over = sum > al.total + 0.005, box = $("alTotal");
+  box.className = "opt" + (over ? " bad" : "");
+  box.textContent = over ? "That's " + money(sum - al.total) + " more than you have left over."
+    : "Allotted " + money(sum) + " of " + money(al.total) + " · " + money(al.total - sum) + " stays where it is.";
+}
+function alInput(e) {
+  if (!e.target.dataset.alAmt) return;
+  al.amounts[e.target.dataset.alAmt] = Math.max(0, parseFloat(e.target.value) || 0);
+  alPreview();
+}
+function alChange(e) {
+  if (e.target.dataset.alFrom === undefined) return;
+  al.from = e.target.value; al.amounts = {}; alRender();
+}
+function alApply() {
+  const sum = round2(alSum());
+  if (!(sum > 0)) { toast("Enter an amount for at least one account."); return; }
+  if (sum > al.total + 0.005) { toast("That's more than your left over of " + money(al.total) + "."); return; }
+  const batch = writeBatch(db), from = al.from;
+  alTargets().forEach((a) => {
+    const v = round2(al.amounts[a.id] || 0);
+    if (!(v > 0)) return;
+    batch.update(doc(db, "users", uid, "accounts", a.id), { balance: increment(v) });
+    batch.set(doc(col("allotments")), { date: today(), amount: v, fromId: from, toId: a.id, created: serverTimestamp() });
+  });
+  batch.update(doc(db, "users", uid, "accounts", from), { balance: increment(-sum) });
+  batch.commit().catch((err) => toast("Save failed: " + err.message));
+  alClose();
+  toast("Allotted " + money(sum) + " to your accounts.");
+}
+function alClick(e) {
+  const d = e.target.dataset;
+  if (e.target === alWrap || d.alCancel !== undefined) { alClose(); return; }
+  if (d.alClear !== undefined) { al.amounts = {}; alRender(); }
+  else if (d.alEven !== undefined) {
+    const t = alTargets(), each = t.length ? Math.floor((al.total / t.length) * 100) / 100 : 0;
+    al.amounts = {}; t.forEach((a) => { al.amounts[a.id] = each; }); alRender();
+  }
+  else if (d.alApply !== undefined) alApply();
+}
+$("allotBtn").addEventListener("click", openAllot);
+
+/* =========================================================
+   6l. PAYDAY TRANSFERS — optional, per user: logging wages runs the transfers marked "On payday"
+   ========================================================= */
+const paydayOn = () => !!(ST.settings.find((x) => x.id === "payday") || {}).enabled;
+function syncXferForm() {
+  const f = $("xferForm").elements, payday = paydayOn() && f.trigger.value === "payday";
+  $("xferTrigWrap").classList.toggle("hidden", !paydayOn());
+  $("xferFreqWrap").classList.toggle("hidden", payday);
+  $("xferDateWrap").classList.toggle("hidden", payday);
+  $("xferNote").classList.toggle("hidden", payday);
+  f.nextApply.required = !payday;
+}
+$("xferForm").elements.trigger.addEventListener("change", syncXferForm);
+function renderPaydaySetting() {
+  $("paydayOn").checked = paydayOn();
+  syncXferForm();
+}
+$("paydayOn").addEventListener("change", (e) => {
+  setDoc(doc(db, "users", uid, "settings", "payday"), { enabled: e.target.checked, updated: serverTimestamp() }, { merge: true })
+    .catch((err) => toast("Save failed: " + err.message));
+});
+function runPaydayTransfers(date) {
+  if (!paydayOn()) return;
+  const list = ST.acctTransfers.filter((t) => t.trigger === "payday" && (t.fromId || t.toId));
+  if (!list.length) return;
+  const delta = {}, batch = writeBatch(db);
+  let total = 0;
+  list.forEach((t) => {
+    const amt = round2(Number(t.amount) || 0);
+    if (t.fromId) delta[t.fromId] = (delta[t.fromId] || 0) - amt;
+    if (t.toId) delta[t.toId] = (delta[t.toId] || 0) + amt;
+    batch.set(doc(col("paydayMoves")), { date: date, amount: amt, name: t.name, fromId: t.fromId || "", toId: t.toId || "", created: serverTimestamp() });
+    total += amt;
+  });
+  Object.keys(delta).forEach((id) => batch.update(doc(db, "users", uid, "accounts", id), { balance: increment(round2(delta[id])) }));
+  batch.commit().catch((err) => toast("Payday transfers failed: " + err.message));
+  toast("Ran " + list.length + " payday transfers (" + money(total) + ").");
+}
 
 /* =========================================================
    7. AUTH
