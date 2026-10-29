@@ -305,6 +305,7 @@ input[type=file]{padding:9px 12px}
       <h2>Surplus detection</h2>
       <form id="payForm">
         <label class="full">Baseline expected pay (QR pay, net per fortnight)<input type="number" name="baseline" step="0.01" min="0" inputmode="decimal" placeholder="e.g. 2450"></label>
+        <button class="full" type="submit" id="baselineSave">Save baseline</button>
       </form>
       <p class="note" style="margin-top:8px">When a new QR pay entry is above this, I'll offer to put the extra toward your wishlist.</p>
     </div>
@@ -415,6 +416,7 @@ input[type=file]{padding:9px 12px}
         <label>or in how many pays<input type="number" name="pays" step="1" min="1" inputmode="numeric" placeholder="e.g. 14"></label>
         <label class="full">Needed by (optional)<input type="date" name="neededBy" data-blank></label>
         <label class="full">Savings buffer to protect<input type="number" name="buffer" step="1" min="0" inputmode="decimal"></label>
+        <button type="button" class="full" id="bufferSave">Save buffer</button>
         <p class="note full" id="bufferNote"></p>
       </form>
       <div id="affordResult"></div>
@@ -1601,11 +1603,13 @@ $("affordForm").addEventListener("input", (e) => {
   if (e.target.name === "neededBy") affordLast = "date";
   renderAfford();
 });
-$("affordForm").elements.buffer.addEventListener("change", (e) => {
-  const v = e.target.value === "" ? null : Math.max(0, parseFloat(e.target.value) || 0);
+function saveBuffer() {
+  const raw = $("affordForm").elements.buffer.value, v = raw === "" ? null : Math.max(0, parseFloat(raw) || 0);
   setDoc(doc(db, "users", uid, "settings", "afford"), { buffer: v, updated: serverTimestamp() }, { merge: true })
     .catch((err) => toast("Save failed: " + err.message));
-});
+}
+$("affordForm").elements.buffer.addEventListener("change", saveBuffer);
+$("bufferSave").addEventListener("click", () => { saveBuffer(); flashSaved($("bufferSave"), "Save buffer"); });
 $("wishSaveBtn").addEventListener("click", () => {
   const c = affordCalc();
   if (!c.cost || !c.perPay) { toast("Enter a cost and a fortnightly amount (or number of pays) first."); return; }
@@ -1809,12 +1813,22 @@ function syncBaselineField() {
   const f = $("payForm").elements.baseline;
   if (document.activeElement !== f) f.value = paySetting().baseline != null ? paySetting().baseline : "";
 }
-$("payForm").addEventListener("submit", (e) => e.preventDefault());
-$("payForm").elements.baseline.addEventListener("change", (e) => {
-  const v = e.target.value === "" ? null : Math.max(0, parseFloat(e.target.value) || 0);
+// Briefly show "Saved ✓" on a button so it is clear the change went through.
+function flashSaved(btn, label) {
+  btn.textContent = "Saved ✓";
+  setTimeout(() => { btn.textContent = label; }, 1600);
+}
+function saveBaseline() {
+  const raw = $("payForm").elements.baseline.value, v = raw === "" ? null : Math.max(0, parseFloat(raw) || 0);
   setDoc(doc(db, "users", uid, "settings", "pay"), { baseline: v, updated: serverTimestamp() }, { merge: true })
     .catch((err) => toast("Save failed: " + err.message));
+}
+$("payForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  saveBaseline();
+  flashSaved($("baselineSave"), "Save baseline");
 });
+$("payForm").elements.baseline.addEventListener("change", saveBaseline);
 
 // Only a new QR pay entry above the baseline triggers the allocator.
 function checkSurplus(d) {
