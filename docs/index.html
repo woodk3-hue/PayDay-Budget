@@ -279,13 +279,6 @@ input[type=file]{padding:9px 12px}
     </div>
     <div class="card hidden" id="manualCard"><h2>Bills you pay yourself</h2><ul class="list" id="manualList"></ul></div>
     <div class="card">
-      <h2>Recurring bills (per fortnight)</h2>
-      <div class="grid">
-        <div class="stat"><small>Committed</small><b id="sRecurring">$0</b></div>
-        <div class="stat"><small>Savings goals</small><b id="sGoals">$0</b></div>
-      </div>
-    </div>
-    <div class="card">
       <h2>Coming up (next 14 days)</h2>
       <ul class="list" id="upcomingList"></ul>
     </div>
@@ -922,8 +915,6 @@ function renderHome() {
   const payDay = isoFromDay(dayNum(p.end) + 3), paid = ST.income.some((i) => isWages(i) && inPeriod(incomePeriodDate(i), p));
   $("periodNote").textContent = paid ? "Pay for this fortnight is in." : "Pay for this fortnight is due " +
     new Date(payDay + "T00:00:00").toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "short" }) + ".";
-  $("sRecurring").textContent = money(recurring);
-  $("sGoals").textContent = money(ST.goals.reduce((s, g) => s + goalBalance(g), 0));
 
   const byCat = {};
   spentRows.forEach((e) => { byCat[e.category] = (byCat[e.category] || 0) + e.amount; });
