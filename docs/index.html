@@ -134,6 +134,8 @@ nav button.on{color:var(--brand);background:var(--fill)}
 .alerts{display:flex;align-items:center;gap:12px;justify-content:space-between}
 .alerts p{font-size:15px;color:var(--muted)}
 .alerts button{min-height:36px;border-radius:99px;font-size:15px;padding:0 14px;white-space:nowrap}
+.note{font-size:13px;color:var(--muted)}
+input[type=file]{padding:9px 12px}
 
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 @media (prefers-reduced-transparency:reduce){header,nav,.overlay .card{background:var(--card);backdrop-filter:none;-webkit-backdrop-filter:none}}
@@ -304,6 +306,65 @@ nav button.on{color:var(--brand);background:var(--fill)}
       <ul class="list" id="subList"></ul>
     </div>
   </section>
+
+  <!-- PROPERTY & BILLS -->
+  <section id="view-property" class="view hidden">
+    <div class="card">
+      <h2>Set aside every pay</h2>
+      <div class="grid">
+        <div class="stat"><small>Fixed costs</small><b id="pFixed">$0</b></div>
+        <div class="stat"><small>Extra for bills</small><b id="pExtra">$0</b></div>
+        <div class="stat"><small>Total per pay</small><b id="pTotal">$0</b></div>
+      </div>
+      <ul class="list" id="propSummaryList" style="margin-top:8px"></ul>
+      <p class="note">Fixed = yearly rates, water, insurance and land tax ÷ 26 pays. Extra = each unpaid bill ÷ the pays left before it's due.</p>
+    </div>
+    <div class="card">
+      <h2>Property details (yearly costs)</h2>
+      <form id="propForm">
+        <label class="full">Property<select name="id" id="propSelect"></select></label>
+        <label class="full">Name or address<input name="name" required placeholder="e.g. 12 Smith St"></label>
+        <label>Rates<input type="number" name="rates" step="0.01" min="0" inputmode="decimal" value="0"></label>
+        <label>Water<input type="number" name="water" step="0.01" min="0" inputmode="decimal" value="0"></label>
+        <label>Insurance<input type="number" name="insurance" step="0.01" min="0" inputmode="decimal" value="0"></label>
+        <label>Land tax<input type="number" name="landTax" step="0.01" min="0" inputmode="decimal" value="0"></label>
+        <button class="full" type="submit">Save property</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2 id="billFormTitle">Add a bill or receipt</h2>
+      <form id="billForm">
+        <label class="full">PDF (optional)<input type="file" id="billFile" accept="application/pdf,.pdf"></label>
+        <p class="note full" id="scanMsg">Pick a PDF and I'll read the vendor, total and due date. It's filed to Seafile afterwards.</p>
+        <label class="full">Type
+          <select name="category" id="billCat">
+            <option value="property">Fixed property bill</option>
+            <option value="maintenance">Property maintenance receipt (tax)</option>
+            <option value="personal">General personal bill</option>
+          </select>
+        </label>
+        <label class="full" id="billPropWrap">Property<select name="propertyId" id="billProp"></select></label>
+        <label class="full">Vendor<input name="vendor" required placeholder="e.g. Council"></label>
+        <label>Total<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
+        <label><span id="billDateLabel">Due date</span><input type="date" name="dueDate" required></label>
+        <button class="full" type="submit" id="billSubmit">Save bill</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2>Bills & receipts</h2>
+      <div class="toggle" id="billFilter">
+        <button data-f="all" class="on">All</button>
+        <button data-f="property">Property</button>
+        <button data-f="maintenance">Receipts</button>
+        <button data-f="personal">Personal</button>
+      </div>
+      <ul class="list" id="billList" style="margin-top:8px"></ul>
+    </div>
+    <div class="card">
+      <h2>Maintenance receipts by tax year (Jul–Jun)</h2>
+      <ul class="list" id="receiptList"></ul>
+    </div>
+  </section>
 </main>
 
 <nav id="tabs" class="hidden">
@@ -312,6 +373,7 @@ nav button.on{color:var(--brand);background:var(--fill)}
   <button data-v="expenses" aria-label="Expenses"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M2.5 10h19M6 15h4"/></svg><span>Expenses</span></button>
   <button data-v="savings" aria-label="Goals"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 8.2a4.3 4.3 0 0 1 7.5 2.6C19.5 16.4 12 21 12 21z"/></svg><span>Goals</span></button>
   <button data-v="subs" aria-label="Subs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4.5h-4.5"/><path d="M12 8v4.2l2.6 1.6"/></svg><span>Subs</span></button>
+  <button data-v="property" aria-label="Property"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V9l8-5 8 5v12"/><path d="M9 21v-6h6v6M2.5 21h19"/></svg><span>Property</span></button>
 </nav>
 
 <script type="module">
@@ -333,7 +395,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp }
+  collection, doc, setDoc, updateDoc, deleteDoc, writeBatch, onSnapshot, query, orderBy, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const app = initializeApp(firebaseConfig);
@@ -346,7 +408,7 @@ const db = initializeFirestore(app, {
 /* =========================================================
    2. STATE
    ========================================================= */
-const ST = { income: [], expenses: [], goals: [], transfers: [], subscriptions: [] };
+const ST = { income: [], expenses: [], goals: [], transfers: [], subscriptions: [], properties: [], bills: [] };
 const CATEGORIES = ["Groceries","Eating out","Shopping","Clothes","Fuel","Transport","Bills","Subscriptions",
   "Health","Medication","Gym","Home","Property","Loan","Travel","Tech","Gifts","Kids","Beauty","Other"];
 const DEFAULT_GOALS = [
@@ -357,8 +419,8 @@ const DEFAULT_GOALS = [
 ];
 // First QR payday in the new plan; every fortnight from here is a pay period.
 const PAY_ANCHOR = new Date("2026-11-04T00:00:00");
-let uid = null, unsubs = [], editing = { income: null, expenses: null, subscriptions: null }, expenseFilter = "all";
-const pending = { income: false, expenses: false, goals: false, transfers: false, subscriptions: false };
+let uid = null, unsubs = [], editing = { income: null, expenses: null, subscriptions: null, bills: null }, expenseFilter = "all", billFilter = "all", pendingFile = null;
+const pending = { income: false, expenses: false, goals: false, transfers: false, subscriptions: false, properties: false, bills: false };
 
 /* =========================================================
    3. HELPERS
@@ -411,6 +473,7 @@ function save(name, id, data) {
 }
 function remove(name, id) {
   deleteDoc(doc(db, "users", uid, name, id)).catch((e) => toast("Delete failed: " + e.message));
+  if (name === "bills") deleteDoc(doc(db, "users", uid, "billFiles", id)).catch(() => {});
 }
 
 // Custom confirm (no window.confirm in PWA context), z-index 700 on document.body.
@@ -462,7 +525,9 @@ function startSync() {
     listen("expenses", "date"),
     listen("goals", "name", "asc"),
     listen("transfers", "date"),
-    listen("subscriptions", "dueDate", "asc")
+    listen("subscriptions", "dueDate", "asc"),
+    listen("properties", "name", "asc"),
+    listen("bills", "dueDate", "asc")
   ];
   refreshAlertsButton();
   // Seed default goals once, the first time this account has none.
@@ -478,7 +543,7 @@ function startSync() {
    5. RENDER
    ========================================================= */
 function render() {
-  renderHome(); renderIncome(); renderExpenses(); renderSavings(); renderSubs();
+  renderHome(); renderIncome(); renderExpenses(); renderSavings(); renderSubs(); renderProperty();
 }
 
 function subsSorted() {
@@ -596,7 +661,7 @@ function transferRow(t) {
    ========================================================= */
 function formData(form) {
   const d = Object.fromEntries(new FormData(form));
-  ["amount", "target", "opening", "remindDays"].forEach((k) => { if (k in d) d[k] = Math.round(parseFloat(d[k] || 0) * 100) / 100; });
+  ["amount", "target", "opening", "remindDays", "rates", "water", "insurance", "landTax"].forEach((k) => { if (k in d) d[k] = Math.round(parseFloat(d[k] || 0) * 100) / 100; });
   return d;
 }
 function resetForm(form, kind) {
@@ -660,12 +725,17 @@ document.addEventListener("click", (e) => {
   const t = e.target;
   if (t.dataset.del) {
     const [name, id] = t.dataset.del.split(":");
-    const msg = name === "goals" ? "Delete this goal? Its money moves stay in history." : name === "subscriptions" ? "Delete this item and its reminders?" : "Delete this entry?";
+    const msg = name === "goals" ? "Delete this goal? Its money moves stay in history." : name === "subscriptions" ? "Delete this item and its reminders?" : name === "bills" ? "Delete this bill? A PDF already filed in Seafile stays there." : "Delete this entry?";
     showInlineConfirm(msg, () => remove(name, id));
   }
   if (t.dataset.editIncome) startEdit("income", ST.income.find((x) => x.id === t.dataset.editIncome));
   if (t.dataset.editExpense) startEdit("expenses", ST.expenses.find((x) => x.id === t.dataset.editExpense));
   if (t.dataset.editSub) startEditSub(ST.subscriptions.find((x) => x.id === t.dataset.editSub));
+  if (t.dataset.editBill) startEditBill(ST.bills.find((x) => x.id === t.dataset.editBill));
+  if (t.dataset.billPaid) {
+    const b = ST.bills.find((x) => x.id === t.dataset.billPaid);
+    save("bills", b.id, { paid: !b.paid });
+  }
 });
 
 /* =========================================================
@@ -720,14 +790,318 @@ $("expenseFilter").addEventListener("click", (e) => {
   renderExpenses();
 });
 
-const TITLES = { home: "Budget", income: "Income", expenses: "Expenses", savings: "Goals", subs: "Subscriptions" };
+const TITLES = { home: "Budget", income: "Income", expenses: "Expenses", savings: "Goals", subs: "Subscriptions", property: "Property & Bills" };
 $("tabs").addEventListener("click", (e) => {
   const btn = e.target.closest("button"); if (!btn || !btn.dataset.v) return;
   const v = btn.dataset.v;
   document.querySelectorAll(".view").forEach((s) => s.classList.toggle("hidden", s.id !== "view-" + v));
   [...$("tabs").children].forEach((b) => b.classList.toggle("on", b === btn));
   $("pageTitle").textContent = TITLES[v];
+  if (v === "property") fillPropForm();
   window.scrollTo(0, 0);
+});
+
+/* =========================================================
+   6c. PROPERTY & BILLS — set-aside maths, PDF reading, saving bills
+   ========================================================= */
+const PROP_IDS = ["A", "B"];
+const PROP_COSTS = ["rates", "water", "insurance", "landTax"];
+const BILL_LABEL = { property: "Property bill", maintenance: "Maintenance receipt", personal: "Personal bill" };
+const MAX_PDF_BYTES = 700000; // base64 copy must fit in one 1 MB Firestore document
+const PDFJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+
+const propData = (id) => ST.properties.find((p) => p.id === id) || {};
+const propName = (id) => propData(id).name || "Property " + id;
+const dayNum = (s) => Math.round(Date.parse(s + "T00:00:00Z") / 86400000);
+function taxYear(dateStr) {
+  const y = Number(dateStr.slice(0, 4)), m = Number(dateStr.slice(5, 7));
+  const start = m >= 7 ? y : y - 1;
+  return start + "-" + String(start + 1).slice(2);
+}
+// Paydays (every 14 days from PAY_ANCHOR) from today up to and including the due date.
+function paysBefore(due) {
+  const anchor = dayNum(PAY_ANCHOR.toLocaleDateString("en-CA")), now = dayNum(today()), end = dayNum(due);
+  const first = anchor + 14 * Math.ceil((now - anchor) / 14);
+  return first > end ? 0 : Math.floor((end - first) / 14) + 1;
+}
+const billExtra = (b) => b.amount / Math.max(1, paysBefore(b.dueDate));
+const openBill = (b) => !b.paid && b.category !== "maintenance";
+
+function propSetAside(id) {
+  const p = propData(id), yearly = PROP_COSTS.reduce((t, k) => t + Number(p[k] || 0), 0);
+  const extra = ST.bills.filter((b) => openBill(b) && b.category === "property" && b.propertyId === id)
+    .reduce((t, b) => t + billExtra(b), 0);
+  return { base: yearly / 26, extra: extra };
+}
+
+function summaryRow(label, base, extra) {
+  const sub = base === null ? "Bills only" : "Fixed " + money(base) + " + bills " + money(extra);
+  return '<li><div class="main"><div>' + esc(label) + '</div><div class="sub">' + sub + '</div></div>' +
+    '<span class="amt">' + money((base || 0) + extra) + '</span></li>';
+}
+function billSubLine(b) {
+  const parts = [BILL_LABEL[b.category] || "Bill"];
+  if (b.category !== "personal") parts.push(esc(propName(b.propertyId)));
+  let when = fmtDate(b.dueDate);
+  if (b.category === "maintenance") when += " · FY " + taxYear(b.dueDate);
+  else if (b.paid) when += ' <span class="badge">Paid</span>';
+  else when += " " + dueBadge(b.dueDate, 7) + " · set aside " + money(billExtra(b)) + "/pay";
+  parts.push(when);
+  if (b.fileStatus === "pending") parts.push("Filing…");
+  if (b.fileStatus === "filed") parts.push("Filed ✓");
+  return parts.join(" · ");
+}
+function billRow(b) {
+  const paidBtn = b.category === "maintenance" ? "" :
+    '<button class="ghost" data-bill-paid="' + b.id + '" aria-label="' + (b.paid ? "Mark unpaid" : "Mark paid") + '">' + (b.paid ? "↺" : "✓") + '</button>';
+  return '<li><div class="main"><div>' + esc(b.vendor) + '</div><div class="sub">' + billSubLine(b) + '</div></div>' +
+    '<span class="amt">' + money(b.amount) + '</span>' + paidBtn +
+    '<button class="ghost" data-edit-bill="' + b.id + '">Edit</button>' +
+    '<button class="ghost" data-del="bills:' + b.id + '">✕</button></li>';
+}
+function receiptRow(r) {
+  return '<li><div class="main"><div>' + r.fy + " · " + esc(propName(r.id)) + '</div><div class="sub">' + r.n +
+    (r.n === 1 ? " receipt" : " receipts") + '</div></div><span class="amt">' + money(r.total) + '</span></li>';
+}
+function setOptions(sel, html) {
+  const keep = sel.value; sel.innerHTML = html; if (keep) sel.value = keep;
+}
+function renderProperty() {
+  const opts = PROP_IDS.map((id) => '<option value="' + id + '">' + esc(propName(id)) + "</option>").join("");
+  setOptions($("propSelect"), opts); setOptions($("billProp"), opts);
+
+  const sums = PROP_IDS.map((id) => ({ id: id, ...propSetAside(id) }));
+  const personal = ST.bills.filter((b) => openBill(b) && b.category === "personal").reduce((t, b) => t + billExtra(b), 0);
+  const fixed = sums.reduce((t, s) => t + s.base, 0), extra = sums.reduce((t, s) => t + s.extra, 0) + personal;
+  $("pFixed").textContent = money(fixed);
+  $("pExtra").textContent = money(extra);
+  $("pTotal").textContent = money(fixed + extra);
+  $("propSummaryList").innerHTML = sums.map((s) => summaryRow(propName(s.id), s.base, s.extra)).join("") +
+    summaryRow("Personal bills", null, personal);
+
+  const rows = ST.bills.filter((b) => billFilter === "all" || b.category === billFilter)
+    .sort((a, b) => (Number(!!a.paid) - Number(!!b.paid)) ||
+      (a.paid ? b.dueDate.localeCompare(a.dueDate) : a.dueDate.localeCompare(b.dueDate)));
+  $("billList").innerHTML = rows.length ? rows.map(billRow).join("") : '<li class="empty">Nothing here yet.</li>';
+
+  const groups = {};
+  ST.bills.filter((b) => b.category === "maintenance").forEach((b) => {
+    const fy = taxYear(b.dueDate), k = fy + "|" + b.propertyId;
+    const g = groups[k] || (groups[k] = { fy: fy, id: b.propertyId, total: 0, n: 0 });
+    g.total += b.amount; g.n++;
+  });
+  const rec = Object.values(groups).sort((a, b) => b.fy.localeCompare(a.fy) || a.id.localeCompare(b.id));
+  $("receiptList").innerHTML = rec.length ? rec.map(receiptRow).join("") : '<li class="empty">No receipts logged yet.</li>';
+}
+
+function fillPropForm() {
+  const f = $("propForm").elements, id = f.id.value || "A", p = propData(id);
+  f.name.value = p.name || "Property " + id;
+  PROP_COSTS.forEach((k) => { f[k].value = p[k] ?? 0; });
+}
+$("propSelect").addEventListener("change", fillPropForm);
+$("propForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const d = formData(e.target), id = d.id; delete d.id;
+  setDoc(doc(db, "users", uid, "properties", id), d, { merge: true }).catch((err) => toast("Save failed: " + err.message));
+});
+
+/* ---- PDF reading (PDF.js loads on first use; the service worker caches it for offline) ---- */
+function loadPdfJs() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = PDFJS_URL + "pdf.min.js";
+    s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_URL + "pdf.worker.min.js"; resolve(window.pdfjsLib); };
+    s.onerror = () => reject(new Error("Couldn't load the PDF reader (are you offline?)"));
+    document.head.appendChild(s);
+  });
+}
+function groupLines(items) {
+  const rows = [];
+  items.forEach((it) => {
+    if (!it.str || !it.str.trim()) return;
+    const y = Math.round(it.transform[5]);
+    let row = rows.find((r) => Math.abs(r.y - y) <= 2);
+    if (!row) { row = { y: y, parts: [] }; rows.push(row); }
+    row.parts.push({ x: it.transform[4], s: it.str });
+  });
+  rows.sort((a, b) => b.y - a.y);
+  return rows.map((r) => r.parts.sort((a, b) => a.x - b.x).map((p) => p.s).join(" ").replace(/\s+/g, " ").trim());
+}
+async function pdfLines(file) {
+  const pdfjs = await loadPdfJs();
+  const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+  let lines = [];
+  for (let p = 1; p <= Math.min(pdf.numPages, 4); p++) {
+    const content = await (await pdf.getPage(p)).getTextContent();
+    lines = lines.concat(groupLines(content.items));
+  }
+  return lines;
+}
+
+/* PARSE-START */
+const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+const pad2 = (n) => String(n).padStart(2, "0");
+function isoDate(y, m, d) {
+  if (y < 100) y += 2000;
+  if (m < 1 || m > 12 || d < 1 || d > 31 || y < 2000 || y > 2100) return null;
+  return y + "-" + pad2(m) + "-" + pad2(d);
+}
+// Every date in a line, in reading order. Numeric dates are read day-first (Australian).
+function findDates(text) {
+  const found = [];
+  let m;
+  const numeric = /\b(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})\b/g;
+  while ((m = numeric.exec(text))) { const iso = isoDate(+m[3], +m[2], +m[1]); if (iso) found.push({ iso: iso, at: m.index }); }
+  const dayFirst = /\b(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,9})\.?,?\s+(\d{2,4})\b/g;
+  while ((m = dayFirst.exec(text))) {
+    const mon = MONTHS[m[2].slice(0, 3).toLowerCase()], iso = mon && isoDate(+m[3], mon, +m[1]);
+    if (iso) found.push({ iso: iso, at: m.index });
+  }
+  const monthFirst = /\b([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})\b/g;
+  while ((m = monthFirst.exec(text))) {
+    const mon = MONTHS[m[1].slice(0, 3).toLowerCase()], iso = mon && isoDate(+m[3], mon, +m[2]);
+    if (iso) found.push({ iso: iso, at: m.index });
+  }
+  return found.sort((a, b) => a.at - b.at);
+}
+const MONEY = /(?:\$\s?)?(\d{1,3}(?:,\d{3})+\.\d{2}|\d+\.\d{2})(?!\d)/g;
+function findMoney(text) {
+  const out = [];
+  let m;
+  MONEY.lastIndex = 0;
+  while ((m = MONEY.exec(text))) out.push({ value: parseFloat(m[1].replace(/,/g, "")), at: m.index });
+  return out;
+}
+const DUE_KEYS = [/due\s*date|date\s*due|payment\s*due|due\s*by|pay\s*by|pay\s*on\s*or\s*before|due\s*on/i, /\bdue\b/i];
+const TOTAL_KEYS = [
+  /total\s*(?:amount\s*)?(?:due|payable)|amount\s*(?:due|payable)|balance\s*due|total\s*to\s*pay|pay\s*this\s*amount|please\s*pay|net\s*payable|amount\s*to\s*pay/i,
+  /\btotal\b/i
+];
+const TOTAL_SKIP = /gst|tax|discount|concession|sub-?\s?total|previous|paid|credit/i;
+function findDueDate(lines) {
+  for (const key of DUE_KEYS) {
+    for (let i = 0; i < lines.length; i++) {
+      const hit = key.exec(lines[i]);
+      if (!hit) continue;
+      const here = findDates(lines[i]).filter((d) => d.at >= hit.index);
+      if (here.length) return here[0].iso;
+      const next = lines[i + 1] ? findDates(lines[i + 1]) : [];
+      if (next.length) return next[0].iso;
+    }
+  }
+  return "";
+}
+function findTotal(lines) {
+  for (let k = 0; k < TOTAL_KEYS.length; k++) {
+    for (let i = 0; i < lines.length; i++) {
+      const hit = TOTAL_KEYS[k].exec(lines[i]);
+      if (!hit || (k > 0 && TOTAL_SKIP.test(lines[i]))) continue;
+      const here = findMoney(lines[i].slice(hit.index));
+      if (here.length) return here[0].value;
+      const next = lines[i + 1] ? findMoney(lines[i + 1]) : [];
+      if (next.length) return next[0].value;
+    }
+  }
+  const all = lines.reduce((acc, l) => acc.concat(findMoney(l)), []);
+  return all.length ? Math.max.apply(null, all.map((a) => a.value)) : 0;
+}
+const VENDOR_SKIP = /^(tax\s*)?invoice|statement|^bill\b|receipt|^page\b|^abn|^acn|^date|^account|^customer|^total|^amount|^due|^\d|^[\W_]+$|www\.|@|^tel\b|^phone|^ph\b|^p:|^t:|^reference|^ref\b/i;
+const VENDOR_HINT = /pty|ltd|limited|council|water|energy|insurance|services|group|strata|plumb|electric|real\s*estate|properties|bank|\binc\b/i;
+function findVendor(lines) {
+  const top = lines.slice(0, 15).filter((l) => !VENDOR_SKIP.test(l) && /[A-Za-z]{3}/.test(l) && l.length <= 80);
+  const pick = top.find((l) => VENDOR_HINT.test(l)) || top[0] || "";
+  return pick.replace(/\s+ABN.*$/i, "").trim().slice(0, 60);
+}
+function parseBill(lines) {
+  return { vendor: findVendor(lines), amount: findTotal(lines), dueDate: findDueDate(lines) };
+}
+/* PARSE-END */
+
+const readBase64 = (file) => new Promise((resolve, reject) => {
+  const r = new FileReader();
+  r.onload = () => resolve(String(r.result).split(",")[1] || "");
+  r.onerror = () => reject(r.error);
+  r.readAsDataURL(file);
+});
+function setScanMsg(msg) { $("scanMsg").textContent = msg; }
+
+$("billFile").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  pendingFile = null;
+  if (!file) { setScanMsg("Pick a PDF and I'll read the vendor, total and due date. It's filed to Seafile afterwards."); return; }
+  if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") { toast("That isn't a PDF."); e.target.value = ""; return; }
+  const form = $("billForm");
+  try {
+    if (file.size <= MAX_PDF_BYTES) pendingFile = { name: file.name, data: await readBase64(file), size: file.size };
+    setScanMsg(pendingFile ? "Reading the PDF…" : "Reading the PDF… (over 700 KB, so the file itself can't be kept)");
+    const found = parseBill(await pdfLines(file));
+    if (found.vendor) form.vendor.value = found.vendor;
+    if (found.amount) form.amount.value = found.amount.toFixed(2);
+    if (found.dueDate) form.dueDate.value = found.dueDate;
+    const missing = [!found.vendor && "vendor", !found.amount && "total", !found.dueDate && "date"].filter(Boolean);
+    setScanMsg(missing.length ? "Couldn't find the " + missing.join(", ") + ". Please check and fill it in."
+      : "Read it. Please check the details before saving.");
+  } catch (err) {
+    setScanMsg("Couldn't read this PDF automatically. Fill in the details by hand." + (pendingFile ? " The file will still be filed." : ""));
+  }
+});
+
+function syncBillForm() {
+  const cat = $("billCat").value;
+  $("billPropWrap").classList.toggle("hidden", cat === "personal");
+  $("billDateLabel").textContent = cat === "maintenance" ? "Receipt date" : "Due date";
+}
+$("billCat").addEventListener("change", syncBillForm);
+
+function resetBillForm() {
+  const form = $("billForm");
+  form.reset(); form.dueDate.value = today();
+  editing.bills = null; pendingFile = null;
+  $("billFile").disabled = false;
+  $("billFormTitle").textContent = "Add a bill or receipt";
+  $("billSubmit").textContent = "Save bill";
+  setScanMsg("Pick a PDF and I'll read the vendor, total and due date. It's filed to Seafile afterwards.");
+  syncBillForm();
+}
+function startEditBill(b) {
+  const form = $("billForm");
+  form.category.value = b.category; syncBillForm();
+  if (b.propertyId) form.propertyId.value = b.propertyId;
+  form.vendor.value = b.vendor; form.amount.value = b.amount; form.dueDate.value = b.dueDate;
+  editing.bills = b.id; pendingFile = null;
+  $("billFile").disabled = true;
+  $("billFormTitle").textContent = "Editing " + b.vendor;
+  $("billSubmit").textContent = "Update";
+  setScanMsg("The PDF can't be changed once saved.");
+  window.scrollTo({ top: $("billForm").offsetTop - 80, behavior: "smooth" });
+}
+$("billForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const d = formData(e.target);
+  if (d.category === "personal") d.propertyId = "";
+  d.paid = d.category === "maintenance";
+  const batch = writeBatch(db);
+  if (editing.bills) {
+    if (d.category !== "maintenance") delete d.paid; // keep the paid state; the ✓ button controls it
+    batch.update(doc(db, "users", uid, "bills", editing.bills), d);
+  } else {
+    const ref = doc(col("bills")), keep = !!pendingFile;
+    d.fileStatus = keep ? "pending" : "none";
+    if (pendingFile) d.fileName = pendingFile.name;
+    batch.set(ref, { ...d, created: serverTimestamp() });
+    // The PDF travels in its own document so the bills list stays light; the OptiPlex moves it to Seafile and deletes it.
+    if (keep) batch.set(doc(db, "users", uid, "billFiles", ref.id), { name: pendingFile.name, data: pendingFile.data, created: serverTimestamp() });
+  }
+  batch.commit().catch((err) => toast("Save failed: " + err.message));
+  resetBillForm();
+});
+$("billFilter").addEventListener("click", (e) => {
+  if (!e.target.dataset.f) return;
+  billFilter = e.target.dataset.f;
+  [...$("billFilter").children].forEach((b) => b.classList.toggle("on", b === e.target));
+  renderProperty();
 });
 
 /* =========================================================
