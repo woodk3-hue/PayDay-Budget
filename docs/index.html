@@ -276,11 +276,10 @@ input[type=file]{padding:9px 12px}
 
   <!-- DASHBOARD -->
   <section id="view-home" class="view hidden">
-    <button id="payBtn" style="width:100%;min-height:64px;font-size:19px;margin-bottom:20px">Log fortnightly pay</button>
     <div class="card">
       <h2 id="periodTitle">This fortnight</h2>
       <div class="grid">
-        <div class="stat"><small>Income</small><b id="cIncome">$0</b></div>
+        <div class="stat" id="incomeTile" role="button" tabindex="0" style="cursor:pointer"><small>Income</small><b id="cIncome">$0</b></div>
         <div class="stat"><small id="cBillsLbl">Bills</small><b id="cBills">$0</b></div>
         <div class="stat"><small>Left over</small><b id="sLeft">$0</b></div>
       </div>
@@ -2984,7 +2983,7 @@ function qpClick(e) {
   if (e.target === qpWrap || d.qpClose !== undefined) qpClose();
   else if (d.qpSave !== undefined) qpSave();
 }
-$("payBtn").addEventListener("click", openQuickPay);
+$("incomeTile").addEventListener("click", openQuickPay);
 
 /* =========================================================
    7. AUTH
