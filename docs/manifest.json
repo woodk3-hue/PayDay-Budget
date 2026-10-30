@@ -1,7 +1,7 @@
 {
-  "name": "Budget Sync",
-  "short_name": "Budget",
-  "description": "Personal budget that syncs across phone, laptop and PC.",
+  "name": "PayDay Budget",
+  "short_name": "PayDay",
+  "description": "PayDay Budget - My Pay. My Goals. My Way.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

@@ -1,4 +1,4 @@
-# Budget Sync
+# PayDay Budget (repo: budget-sync)
 
 Personal budget PWA for Kim (Brisbane, AU). Syncs across phone (Samsung S24 Ultra), laptop and PC.
 Separate from FinCommand (Kim's older offline-only finance PWA).

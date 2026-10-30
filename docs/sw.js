@@ -1,7 +1,7 @@
-// Budget Sync service worker — caches the app shell and Firebase SDK so the app opens offline.
+// PayDay Budget service worker — caches the app shell and Firebase SDK so the app opens offline.
 // Firestore data itself is cached by Firebase (IndexedDB), not here.
 // Bump VERSION whenever you change index.html so devices pick up the new copy.
-const VERSION = "budget-v40";
+const VERSION = "budget-v41";
 const SHELL = [
   "./",
   "./index.html",
@@ -59,7 +59,7 @@ self.addEventListener("fetch", (e) => {
 self.addEventListener("push", (e) => {
   let data = {};
   try { data = e.data ? e.data.json() : {}; } catch (err) { data = { body: e.data && e.data.text() }; }
-  e.waitUntil(self.registration.showNotification(data.title || "Budget Sync", {
+  e.waitUntil(self.registration.showNotification(data.title || "PayDay Budget", {
     body: data.body || "",
     tag: data.tag || "budget",
     icon: "icon-192.png",

@@ -1,4 +1,4 @@
-// Budget Sync notifier — runs on the OptiPlex in Docker.
+// PayDay Budget notifier — runs on the OptiPlex in Docker.
 // Every day at REMIND_TIME (Brisbane time) it:
 //   1. rolls past due dates forward to the next billing cycle,
 //   2. sends a push alert for anything due in exactly `remindDays` days, or due today,
@@ -97,7 +97,7 @@ async function dailyCheck() {
 // ---- entry ----
 if (arg === "--test") {
   const users = await db.collection("users").listDocuments();
-  for (const u of users) console.log(u.id, "→", await sendToUser(u.id, { title: "Budget Sync", body: "Test alert from your OptiPlex ✅", tag: "test", url: APP_URL }), "device(s)");
+  for (const u of users) console.log(u.id, "→", await sendToUser(u.id, { title: "PayDay Budget", body: "Test alert from your OptiPlex ✅", tag: "test", url: APP_URL }), "device(s)");
   process.exit(0);
 } else if (arg === "--now") {
   await dailyCheck(); process.exit(0);
