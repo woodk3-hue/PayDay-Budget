@@ -145,6 +145,11 @@ textarea{font:inherit;font-size:15px;padding:11px 12px;border:0;border-radius:10
 .srcgrid .full{grid-column:1/-1}
 details.past summary{cursor:pointer;min-height:44px;display:flex;align-items:center;color:var(--brand);font-weight:600}
 details.past .list{margin:0 -14px}
+/* Edit and delete are swipe gestures: swipe right to edit, left to delete */
+button[data-del],button[data-del-bank],button[data-grp-del],button[data-grp-edit],button[data-edit-expense],button[data-edit-sub],button[data-edit-bill],button[data-edit-xfer],
+button[data-edit-income],button[data-edit-acct],button[data-edit-goal],button[data-edit-transfer],button[data-edit-src],button[data-edit-bank]{display:none!important}
+.list li,.bankhead{touch-action:pan-y;-webkit-user-select:none;user-select:none}
+.bankhead{cursor:pointer}
 button.small{min-height:44px;padding:0 16px;font-size:15px;flex:none}
 .bankhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
 .bankhead b{font-size:19px}
@@ -557,6 +562,7 @@ input[type=file]{padding:9px 12px}
         </label>
         <label>Next due<input type="date" name="dueDate" required></label>
         <label class="full">Remind me (days before)<input type="number" name="remindDays" min="0" max="30" value="3"></label>
+        <label class="full">Group<select name="groupId" class="grpSel"></select></label>
         <label class="full">Paid from<select name="accountId" class="acctSel"></select></label>
         <label class="check full"><input type="checkbox" name="manual"> I pay this one myself</label>
         <button class="full" type="submit">Save</button>
@@ -585,6 +591,7 @@ input[type=file]{padding:9px 12px}
         </label>
         <label>Total<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
         <label><span id="billDateLabel">Due date</span><input type="date" name="dueDate" required></label>
+        <label class="full">Group<select name="groupId" class="grpSel"></select></label>
         <div class="full" id="billAcctWrap" style="display:grid;gap:12px">
           <label class="full">Paid from<select name="accountId" class="acctSel"></select></label>
         <label class="check full"><input type="checkbox" name="manual"> I pay this one myself</label>
@@ -629,6 +636,7 @@ input[type=file]{padding:9px 12px}
           </select>
         </label>
         <label class="full" id="xferDateWrap">Next transfer date<input type="date" name="nextApply" required></label>
+        <label class="full">Group<select name="groupId" class="grpSel"></select></label>
         <button class="full" type="submit" id="xferSubmit">Save transfer</button>
       </form>
     </div>
@@ -1035,6 +1043,7 @@ function startEditSub(s) {
   ["name", "amount", "type", "frequency", "dueDate", "remindDays"].forEach((k) => { form.elements[k].value = s[k] ?? ""; });
   form.dueDate.value = nextDue(s);
   form.elements.accountId.value = s.accountId || ""; form.elements.manual.checked = !!s.manual;
+  form.elements.groupId.value = (groupOf("subscriptions", s) || {}).id || "";
   editing.subscriptions = s.id;
   form.querySelector("button[type=submit]").textContent = "Update";
   $("subFormTitle").textContent = "Editing " + s.name;
@@ -1486,6 +1495,7 @@ function startEditBill(b) {
   form.vendor.value = b.vendor; form.amount.value = b.amount; form.dueDate.value = b.dueDate;
   form.frequency.value = b.frequency || "once";
   form.elements.accountId.value = b.accountId || ""; form.elements.manual.checked = !!b.manual;
+  form.elements.groupId.value = (groupOf("bills", b) || {}).id || "";
   editing.bills = b.id; pendingFile = null;
   $("billFile").disabled = true;
   $("billFormTitle").textContent = "Editing " + b.vendor;
@@ -1499,8 +1509,12 @@ $("billForm").addEventListener("submit", (e) => {
   if (d.category === "personal") d.propertyId = "";
   if (d.category === "maintenance") d.frequency = "once";
   d.paid = d.category === "maintenance";
-  if (d.category === "maintenance") { d.accountId = ""; d.manual = false; d.nextApply = ""; }
-  else linkFields(d, d.dueDate, ST.bills.find((x) => x.id === editing.bills));
+  if (d.category === "maintenance") { d.accountId = ""; d.manual = false; d.nextApply = ""; d.groupId = ""; }
+  else {
+    const g = groupById(d.groupId);
+    if (g) { d.category = g.kind === "property" ? "property" : "personal"; d.propertyId = g.kind === "property" ? g.propertyId || d.propertyId || "A" : ""; }
+    linkFields(d, d.dueDate, ST.bills.find((x) => x.id === editing.bills));
+  }
   const batch = writeBatch(db);
   if (editing.bills) {
     if (d.category !== "maintenance") delete d.paid; // keep the paid state; the ✓ button controls it
@@ -2202,6 +2216,7 @@ document.addEventListener("click", (e) => {
     const x = ST.acctTransfers.find((y) => y.id === t.dataset.editXfer), f = $("xferForm").elements;
     ["name", "fromId", "toId", "externalName", "amount", "frequency", "nextApply"].forEach((k) => { f[k].value = x[k] ?? ""; });
     f.trigger.value = x.trigger === "payday" ? "payday" : "date"; syncXferForm();
+    f.groupId.value = (groupOf("acctTransfers", x) || {}).id || "";
     editing.acctTransfers = x.id; $("xferSubmit").textContent = "Update"; $("xferFormTitle").textContent = "Editing " + x.name;
     openSheet("xferCard");
   }
@@ -2508,7 +2523,6 @@ function itemRow(it, k) {
   const meta = it.freq === "once" ? "One-off" : cap(it.freq) + " " + money(it.amount);
   const due = it.due ? " · " + (it.coll === "acctTransfers" ? "next " : "due ") + fmtDate(it.due) : "";
   return '<li><div class="main"><div>' + esc(it.name) + '</div><div class="sub wrap">' + meta + due + '</div></div><span class="amt">' + (it.fn ? money(it.fn * k) : "—") + '</span>' +
-    '<button class="ghost" data-move="' + it.coll + ":" + it.x.id + '">Move</button>' +
     '<button class="ghost" ' + EDIT_ATTR[it.coll] + '="' + it.x.id + '">Edit</button>' +
     '<button class="ghost" data-del="' + it.coll + ":" + it.x.id + '">✕</button></li>';
 }
@@ -2531,7 +2545,7 @@ function renderGroups() {
   const opts = PROP_IDS.map((id) => '<option value="' + id + '">' + esc(propName(id)) + "</option>").join("");
   setOptions($("groupProp"), opts);
   const list = ST.groups.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  document.querySelectorAll("select.grpSel").forEach((sel) => setOptions(sel, '<option value="">Choose a group</option>' + list.map((g) => '<option value="' + g.id + '">' + esc(g.name) + "</option>").join("")));
+  document.querySelectorAll("select.grpSel").forEach((sel) => setOptions(sel, '<option value="">' + (sel.required ? "Choose a group" : "Usual group") + "</option>" + list.map((g) => '<option value="' + g.id + '">' + esc(g.name) + "</option>").join("")));
   const items = expenseItems(), cards = list.map((g) => groupCard(g, items.filter((it) => it.group && it.group.id === g.id)));
   const loose = items.filter((it) => !it.group);
   if (loose.length) cards.push(groupCard({ id: "", name: "Ungrouped", kind: "" }, loose));
@@ -2556,30 +2570,8 @@ $("groupForm").addEventListener("submit", (e) => {
   $("groupSubmit").textContent = "Save group"; $("groupFormTitle").textContent = "Add group";
   closeSheets(false);
 });
-// Moving a bill also keeps its property category in step so the property totals stay right.
-function moveItem(coll, id, g) {
-  const patch = { groupId: g.id };
-  if (coll === "bills") { patch.category = g.kind === "property" ? "property" : "personal"; patch.propertyId = g.kind === "property" ? g.propertyId || "A" : ""; }
-  if (coll === "expenses") patch.category = g.name;
-  save(coll, id, patch);
-}
-function showMove(coll, id) {
-  const cur = expenseItems().find((it) => it.coll === coll && it.x.id === id), wrap = document.createElement("div");
-  wrap.className = "overlay sheet";
-  wrap.innerHTML = '<div class="card"><h3>Move to</h3><div class="sec">' + ST.groups.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((g) =>
-    '<button style="width:100%;margin-top:8px"' + (cur && cur.group && cur.group.id === g.id ? " disabled" : "") + ' data-to="' + g.id + '">' + esc(g.name) + "</button>").join("") +
-    '</div><div class="actions"><button class="plain" data-to="">Cancel</button></div></div>';
-  wrap.addEventListener("click", (e) => {
-    if (e.target.dataset.to === undefined && e.target !== wrap) return;
-    wrap.remove();
-    const g = e.target.dataset.to ? groupById(e.target.dataset.to) : null;
-    if (g) moveItem(coll, id, g);
-  });
-  document.body.appendChild(wrap);
-}
 document.addEventListener("click", (e) => {
   const t = e.target;
-  if (t.dataset.move) { const [coll, id] = t.dataset.move.split(":"); showMove(coll, id); }
   if (t.dataset.grpEdit) {
     const g = groupById(t.dataset.grpEdit), f = $("groupForm").elements;
     f.name.value = g.name; f.kind.value = g.kind || "personal"; f.propertyId.value = g.propertyId || "A"; syncGroupForm();
@@ -2605,6 +2597,53 @@ async function seedGroups() {
   } catch (err) { console.warn("Couldn't set up groups yet:", err.message); }
   seedingGroups = false;
 }
+
+/* =========================================================
+   6p. SWIPE — swipe a row right to edit, left to delete (the buttons are hidden and clicked for you)
+   ========================================================= */
+const EDIT_SEL = "[data-edit-expense],[data-edit-sub],[data-edit-bill],[data-edit-xfer],[data-edit-income],[data-edit-acct],[data-edit-goal],[data-edit-transfer],[data-edit-src],[data-edit-bank],[data-grp-edit],[data-wish-edit]";
+const DEL_SEL = "[data-del],[data-del-bank],[data-grp-del]";
+function swipeActions(el) {
+  const box = el.matches("li") ? el : el.parentElement && el.parentElement.querySelector(":scope > .bankbtns");
+  return box ? { edit: box.querySelector(EDIT_SEL), del: box.querySelector(DEL_SEL) } : { edit: null, del: null };
+}
+(function swipeSetup() {
+  const THRESH = 70;
+  let st = null, justDragged = false, draggedEl = null;
+  const reset = (el) => { el.style.transition = "transform .2s"; el.style.transform = ""; el.style.background = ""; setTimeout(() => { el.style.transition = ""; }, 220); };
+  document.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("button, input, select, textarea, summary, a, label")) return;
+    const el = e.target.closest(".list li, .bankhead");
+    if (!el || el.closest(".overlay")) return;
+    const act = swipeActions(el);
+    if (act.edit || act.del) st = { el: el, x: e.clientX, y: e.clientY, dx: 0, drag: false, act: act, id: e.pointerId };
+  });
+  document.addEventListener("pointermove", (e) => {
+    if (!st || e.pointerId !== st.id) return;
+    const dx = e.clientX - st.x, dy = e.clientY - st.y;
+    if (!st.drag) {
+      if (Math.abs(dy) > 14 && Math.abs(dy) > Math.abs(dx)) { st = null; return; }
+      if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      st.drag = true;
+    }
+    st.dx = dx > 0 ? (st.act.edit ? dx : 0) : (st.act.del ? dx : 0);
+    st.el.style.transform = "translateX(" + Math.max(-140, Math.min(140, st.dx)) + "px)";
+    st.el.style.background = st.dx < 0 ? "var(--red-soft)" : st.dx > 0 ? "var(--brand-soft)" : "";
+  });
+  const finish = (e, cancelled) => {
+    if (!st || e.pointerId !== st.id) return;
+    const s2 = st; st = null;
+    if (s2.drag) {
+      reset(s2.el);
+      if (!cancelled && s2.dx > THRESH && s2.act.edit) s2.act.edit.click();
+      else if (!cancelled && s2.dx < -THRESH && s2.act.del) s2.act.del.click();
+      justDragged = true; draggedEl = s2.el; setTimeout(() => { justDragged = false; }, 300); // swallow the click the browser sends after a drag
+    } else if (!cancelled && s2.el.matches(".bankhead") && s2.act.edit) s2.act.edit.click(); // tap a card title to edit it
+  };
+  document.addEventListener("pointerup", (e) => finish(e, false));
+  document.addEventListener("pointercancel", (e) => finish(e, true));
+  document.addEventListener("click", (e) => { if (justDragged && draggedEl && draggedEl.contains(e.target)) { e.stopPropagation(); e.preventDefault(); } }, true);
+})();
 
 /* =========================================================
    7. AUTH
