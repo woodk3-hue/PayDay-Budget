@@ -271,12 +271,11 @@ input[type=file]{padding:9px 12px}
         <div class="stat"><small id="cBillsLbl">Bills</small><b id="cBills">$0</b></div>
         <div class="stat"><small>Left over</small><b id="sLeft">$0</b></div>
       </div>
-      <p class="note" id="cNote" style="margin-top:8px"></p>
       <p class="note" id="periodNote"></p>
       <button class="full" id="allotBtn" style="width:100%;margin-top:10px">Allot left over</button>
     </div>
     <div class="card" id="homeProperty" role="button" tabindex="0" style="cursor:pointer">
-      <h2>Property · this fortnight · tap to open</h2>
+      <h2>Property · this fortnight</h2>
       <div class="grid">
         <div class="stat"><small>Rent received</small><b id="hpIn">$0</b></div>
         <div class="stat"><small>Costs</small><b id="hpCost">$0</b></div>
@@ -300,7 +299,6 @@ input[type=file]{padding:9px 12px}
       <h2>Enter income when you get it</h2>
       <div id="quickList"></div>
       <div id="otherPast"></div>
-      <p class="note" style="margin-top:10px">Type the amount, pick the date you received it, and tap Save. It goes into the account that income is paid into. Add another income with + at the top.</p>
     </div>
     <div class="card addcard" id="srcCard">
       <button type="button" class="ghost x" data-close-sheet>Close</button>
@@ -315,8 +313,7 @@ input[type=file]{padding:9px 12px}
         </label>
         <label class="full">Paid into<select name="accountId" class="acctSel"></select></label>
         <label class="full">Property (if this is rent)<select name="propertyId" id="srcProp"></select></label>
-        <label class="check full"><input type="checkbox" name="wages"> This is my wages (counts for the fortnight it was earned in, and flags extra pay)</label>
-        <label class="check full"><input type="checkbox" name="fixed"> Same amount every time (pre-fill it when I enter it)</label>
+        <label class="check full"><input type="checkbox" name="wages"> This is my wages</label>
         <button class="full" type="submit" id="srcSubmit">Save source</button>
       </form>
     </div>
@@ -326,19 +323,15 @@ input[type=file]{padding:9px 12px}
       <form id="incomeForm">
         <label>Date<input type="date" name="date" required></label>
         <label>Amount<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
-        <label class="full">Source
-          <select name="source">
-            <option>QR pay</option><option>Zane rent</option><option>Apartment rent</option>
-            <option>Car spot</option><option>Tax refund</option><option>Other</option>
-          </select>
-        </label>
+        <label class="full">What is this income?<input name="source" list="incomeNames" required placeholder="e.g. Car spot, Tax refund" autocomplete="off"></label>
+        <datalist id="incomeNames"></datalist>
         <label class="full">Paid into<select name="accountId" class="acctSel"></select></label>
         <label class="full">Note<input name="note" placeholder="Optional"></label>
         <button class="full" type="submit">Save income</button>
       </form>
     </div>
     <div class="card" id="homeAccounts" role="button" tabindex="0" style="cursor:pointer">
-      <h2>Accounts · tap to open</h2>
+      <h2>Accounts</h2>
       <div class="grid"><div class="stat"><small id="hAcctN">0 accounts</small><b id="hAcctTotal">$0</b></div></div>
     </div>
   </section>
@@ -356,7 +349,6 @@ input[type=file]{padding:9px 12px}
         <div class="stat"><small id="schedCount">0 bills</small><b id="schedYr">$0</b></div>
       </div>
       <ul class="list" id="schedList"></ul>
-      <p class="note">Each bill's allocation = amount × times per year ÷ 26. Includes recurring property and personal bills. One-offs aren't listed.</p>
     </div>
     <div class="card addcard" id="expenseCard">
       <button type="button" class="ghost x" data-close-sheet>Close</button>
@@ -374,7 +366,7 @@ input[type=file]{padding:9px 12px}
         </label>
         <label class="full">Description<input name="description" required placeholder="e.g. Woolworths"></label>
         <label class="full">Paid from<select name="accountId" class="acctSel"></select></label>
-        <label class="check full"><input type="checkbox" name="manual"> I pay this one myself (don't take it off automatically)</label>
+        <label class="check full"><input type="checkbox" name="manual"> I pay this one myself</label>
         <button class="full" type="submit">Save expense</button>
       </form>
     </div>
@@ -402,12 +394,11 @@ input[type=file]{padding:9px 12px}
         <label class="full">Needed by (optional)<input type="date" name="neededBy" data-blank></label>
         <label class="full">Savings buffer to protect<input type="number" name="buffer" step="1" min="0" inputmode="decimal"></label>
         <button type="button" class="full" id="bufferSave">Save buffer</button>
-        <p class="note full" id="bufferNote"></p>
       </form>
       <div id="affordResult"></div>
       <button class="full" id="wishSaveBtn" style="width:100%;margin-top:12px">Save to wishlist</button>
     </div>
-    <div class="card"><h2>Wishlist · tap an item to edit</h2><ul class="list" id="wishList"></ul></div>
+    <div class="card"><h2>Wishlist</h2><ul class="list" id="wishList"></ul></div>
     <div class="card addcard" id="transferCard">
       <button type="button" class="ghost x" data-close-sheet>Close</button>
       <h2 id="transferFormTitle">Move money</h2>
@@ -469,7 +460,7 @@ input[type=file]{padding:9px 12px}
         <label>Next due<input type="date" name="dueDate" required></label>
         <label class="full">Remind me (days before)<input type="number" name="remindDays" min="0" max="30" value="3"></label>
         <label class="full">Paid from<select name="accountId" class="acctSel"></select></label>
-        <label class="check full"><input type="checkbox" name="manual"> I pay this one myself (don't take it off automatically)</label>
+        <label class="check full"><input type="checkbox" name="manual"> I pay this one myself</label>
         <button class="full" type="submit">Save</button>
       </form>
     </div>
@@ -493,7 +484,6 @@ input[type=file]{padding:9px 12px}
         <div class="stat"><small>Net</small><b id="ptNet">$0</b></div>
       </div>
       <ul class="list" id="propFlowList" style="margin-top:8px"></ul>
-      <p class="note">Rent is what you logged as received this fortnight (income that isn't wages). Tag each rent source with its property on the Income page.</p>
     </div>
     <div class="card">
       <h2>Set aside every pay</h2>
@@ -503,7 +493,6 @@ input[type=file]{padding:9px 12px}
         <div class="stat"><small>Total per pay</small><b id="pTotal">$0</b></div>
       </div>
       <ul class="list" id="propSummaryList" style="margin-top:8px"></ul>
-      <p class="note">Fixed = yearly rates, water, insurance and land tax ÷ 26 pays. Extra = each unpaid bill ÷ the pays left before it's due.</p>
     </div>
     <div class="card">
       <h2>Property details (yearly costs)</h2>
@@ -522,7 +511,7 @@ input[type=file]{padding:9px 12px}
       <h2 id="billFormTitle">Add a bill or receipt</h2>
       <form id="billForm">
         <label class="full">PDF (optional)<input type="file" id="billFile" accept="application/pdf,.pdf"></label>
-        <p class="note full" id="scanMsg">Pick a PDF and I'll read the vendor, total and due date. It's filed to Seafile afterwards.</p>
+        <p class="note full" id="scanMsg"></p>
         <label class="full">Type
           <select name="category" id="billCat">
             <option value="property">Fixed property bill</option>
@@ -542,7 +531,7 @@ input[type=file]{padding:9px 12px}
         <label><span id="billDateLabel">Due date</span><input type="date" name="dueDate" required></label>
         <div class="full" id="billAcctWrap" style="display:grid;gap:12px">
           <label class="full">Paid from<select name="accountId" class="acctSel"></select></label>
-        <label class="check full"><input type="checkbox" name="manual"> I pay this one myself (don't take it off automatically)</label>
+        <label class="check full"><input type="checkbox" name="manual"> I pay this one myself</label>
         </div>
         <button class="full" type="submit" id="billSubmit">Save bill</button>
       </form>
@@ -577,7 +566,6 @@ input[type=file]{padding:9px 12px}
         <div class="stat"><small>Expenses</small><b id="stExp">$0</b></div>
         <div class="stat"><small>Net</small><b id="stNet">$0</b></div>
       </div>
-      <p class="note" id="stNote" style="margin-top:8px"></p>
     </div>
     <div class="card">
       <h2>Income vs expenses</h2>
@@ -593,13 +581,11 @@ input[type=file]{padding:9px 12px}
     <div class="card">
       <h2>All accounts</h2>
       <div class="grid"><div class="stat"><small>Total balance</small><b id="acTotal">$0</b></div></div>
-      <p class="note" style="margin-top:8px">Balances move by themselves when a bill, transfer or logged payment hits an account. Edit a balance any time to match your bank.</p>
     </div>
     <div id="bankGroups"></div>
     <div class="card">
       <h2>Payday transfers (optional)</h2>
       <label class="check"><input type="checkbox" id="paydayOn"> Run my payday transfers when I log my pay</label>
-      <p class="note" style="margin-top:8px">Off by default and personal to you. When on, a transfer set to "On payday" runs each time you save your wages, instead of on a fixed date.</p>
     </div>
     <div class="card"><h2>Transfers</h2><ul class="list" id="xferList"></ul></div>
     <div class="card">
@@ -607,7 +593,6 @@ input[type=file]{padding:9px 12px}
       <label>Import file (.json)<input type="file" id="setupFile" accept=".json,application/json"></label>
       <label style="margin-top:10px">or paste it here<textarea id="setupText" rows="4" placeholder="Paste the setup text"></textarea></label>
       <button id="setupBtn" style="width:100%;margin-top:12px">Import</button>
-      <p class="note" style="margin-top:8px">Adds the banks, accounts and payday transfers in the file. Existing accounts with the same name are reused. Run it once.</p>
     </div>
     <div class="card addcard" id="bankCard">
       <button type="button" class="ghost x" data-close-sheet>Close</button>
@@ -646,7 +631,6 @@ input[type=file]{padding:9px 12px}
           </select>
         </label>
         <label class="full" id="xferDateWrap">Next transfer date<input type="date" name="nextApply" required></label>
-        <p class="note full" id="xferNote">Anything dated today or earlier is applied straight away.</p>
         <button class="full" type="submit" id="xferSubmit">Save transfer</button>
       </form>
     </div>
@@ -917,17 +901,12 @@ function catRow(r, max) {
   return '<li><div class="main"><div>' + esc(r[0]) + '</div><div class="bar"><span style="width:' + pct + '%"></span></div></div><span class="amt">' + money(r[1]) + '</span></li>';
 }
 
-const DEFAULT_INCOME_SOURCES = ["QR pay", "Zane rent", "Apartment rent", "Car spot", "Tax refund"];
-// Choices follow your income sources, plus anything already logged.
+// Suggestions for the "what is this income?" box: your income sources and anything already logged. Any text is allowed.
 function incomeSourceNames() {
-  const names = ST.incomeSources.map((x) => x.name).concat(ST.income.map((i) => i.source));
-  const all = names.length ? names : DEFAULT_INCOME_SOURCES;
-  return [...new Set(all.concat("Other"))];
+  return [...new Set(ST.incomeSources.map((x) => x.name).concat(ST.income.map((i) => i.source)).filter(Boolean))];
 }
 function renderIncome() {
-  const sel = $("incomeForm").elements.source, keep = sel.value;
-  sel.innerHTML = incomeSourceNames().map((n) => "<option>" + esc(n) + "</option>").join("");
-  if (keep) sel.value = keep;
+  $("incomeNames").innerHTML = incomeSourceNames().map((n) => '<option value="' + esc(n) + '"></option>').join("");
   renderPastIncome();
 }
 const monthLabel = (m) => new Date(m + "-01T00:00:00").toLocaleDateString("en-AU", { month: "long", year: "numeric" });
@@ -953,15 +932,11 @@ function renderPastIncome() {
     if (sum) sum.textContent = pastSummary(rows);
     if (list) list.innerHTML = rows.length ? rows.map(pastRow).join("") : '<li class="empty">Nothing logged yet.</li>';
   });
-  const loose = ST.income.filter((i) => !ST.incomeSources.some((x) => (i.sourceId ? x.id === i.sourceId : x.name === i.source)));
-  $("otherPast").innerHTML = loose.length ? '<details class="past"><summary>Other past income (' + loose.length + ')</summary><ul class="list">' + loose.map(pastRow).join("") + "</ul></details>" : "";
+  const loose = ST.income.filter((i) => !ST.incomeSources.some((x) => (i.sourceId ? x.id === i.sourceId : x.name === i.source))), names = {};
+  loose.forEach((i) => { (names[i.source] = names[i.source] || []).push(i); });
+  $("otherPast").innerHTML = Object.keys(names).sort().map((n) => '<div class="srcblock"><div class="bankhead"><b>' + esc(n) + '</b></div><details class="past"><summary>Past income · ' + names[n].length +
+    '</summary><div class="note">' + esc(pastSummary(names[n])) + '</div><ul class="list">' + names[n].map(pastRow).join("") + "</ul></details></div>").join("");
 }
-// Picking a source pre-fills its usual amount (you can change it, since pay and rent vary).
-$("incomeForm").elements.source.addEventListener("change", (e) => {
-  const usual = ST.incomeSources.find((x) => x.name === e.target.value), amt = $("incomeForm").elements.amount;
-  if (usual && !editing.income && !amt.value) amt.value = usual.amount;
-  if (usual && usual.accountId && !editing.income) $("incomeForm").elements.accountId.value = usual.accountId;
-});
 
 function renderExpenses() {
   const sel = $("catSelect");
@@ -1039,6 +1014,7 @@ function resetForm(form, kind) {
 $("incomeForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const d = formData(e.target), isNew = !editing.income;
+  d.source = d.source.trim();
   d.accountId = d.accountId || "";
   const old = isNew ? null : ST.income.find((x) => x.id === editing.income), src = ST.incomeSources.find((x) => x.name === d.source);
   d.wages = src ? !!src.wages : old ? isWages(old) : d.source === PAY_SOURCE;
@@ -1484,7 +1460,7 @@ function setScanMsg(msg) { $("scanMsg").textContent = msg; }
 $("billFile").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   pendingFile = null;
-  if (!file) { setScanMsg("Pick a PDF and I'll read the vendor, total and due date. It's filed to Seafile afterwards."); return; }
+  if (!file) { setScanMsg(""); return; }
   if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") { toast("That isn't a PDF."); e.target.value = ""; return; }
   const form = $("billForm");
   try {
@@ -1519,7 +1495,7 @@ function resetBillForm() {
   $("billFile").disabled = false;
   $("billFormTitle").textContent = "Add a bill or receipt";
   $("billSubmit").textContent = "Save bill";
-  setScanMsg("Pick a PDF and I'll read the vendor, total and due date. It's filed to Seafile afterwards.");
+  setScanMsg("");
   syncBillForm();
 }
 function startEditBill(b) {
@@ -1533,7 +1509,7 @@ function startEditBill(b) {
   $("billFile").disabled = true;
   $("billFormTitle").textContent = "Editing " + b.vendor;
   $("billSubmit").textContent = "Update";
-  setScanMsg("The PDF can't be changed once saved.");
+  setScanMsg("");
   openSheet("billCard");
 }
 $("billForm").addEventListener("submit", (e) => {
@@ -1619,8 +1595,7 @@ function optionBHtml(c, rem) {
 function renderAfford() {
   const c = affordCalc(), f = $("affordForm").elements;
   f.buffer.placeholder = "3 months: " + defaultBuffer();
-  $("bufferNote").textContent = "Default is 3 months of your regular bills (" + money(defaultBuffer()) + "). Type your own to override it.";
-  if (!c.cost) { $("affordResult").innerHTML = '<p class="note" style="margin-top:10px">Enter a cost to compare your options.</p>'; return; }
+  if (!c.cost) { $("affordResult").innerHTML = ""; return; }
   const rem = c.available - c.cost;
   const plan = c.perPay ? money(c.perPay) + "/fortnight for " + c.pays + " pay cycles" : "saving up over time";
   $("affordResult").innerHTML = optionAHtml(c) + optionBHtml(c, rem) +
@@ -1741,14 +1716,13 @@ function renderCashflow() {
   $("cBills").textContent = money(st.recurring);
   $("sLeft").textContent = money(st.left);
   $("sLeft").className = st.left >= 0 ? "pos" : "neg";
-  $("cNote").textContent = "Left over = your pay − your bills" + (st.allotted ? " − " + money(st.allotted) + " already allotted" : "") + ". Property is separate.";
   $("allotBtn").classList.toggle("hidden", !(st.left > 0.005 && ST.accounts.length > 1));
 }
 
 $("srcForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const d = formData(e.target);
-  d.accountId = d.accountId || ""; d.wages = !!d.wages; d.fixed = !!d.fixed; d.propertyId = d.wages ? "" : (d.propertyId || "");
+  d.accountId = d.accountId || ""; d.wages = !!d.wages; d.propertyId = d.wages ? "" : (d.propertyId || "");
   save("incomeSources", editing.incomeSources, d);
   editing.incomeSources = null; e.target.reset();
   $("srcSubmit").textContent = "Save source";
@@ -1758,7 +1732,7 @@ $("srcForm").addEventListener("submit", (e) => {
 function startEditSrc(s) {
   const f = $("srcForm").elements;
   ["name", "amount", "frequency"].forEach((k) => { f[k].value = s[k] ?? ""; });
-  f.accountId.value = s.accountId || ""; f.wages.checked = !!s.wages; f.fixed.checked = !!s.fixed; f.propertyId.value = s.propertyId || "";
+  f.accountId.value = s.accountId || ""; f.wages.checked = !!s.wages; f.propertyId.value = s.propertyId || "";
   editing.incomeSources = s.id;
   $("srcSubmit").textContent = "Update";
   $("srcFormTitle").textContent = "Editing " + s.name;
@@ -2050,7 +2024,6 @@ function renderStats() {
   $("stExp").textContent = money(t.expenses);
   $("stNet").textContent = money(net);
   $("stNet").className = net >= 0 ? "pos" : "neg";
-  $("stNote").textContent = "Expenses = " + money(t.spent) + " spent + " + money(t.recurring) + " of recurring bills.";
 
   const n = statsView === "year" ? 4 : 6, cols = [];
   let max = 0;
@@ -2208,7 +2181,7 @@ function bankHtml(g) {
 function renderAccounts() {
   const total = ST.accounts.reduce((t, a) => t + (Number(a.balance) || 0), 0);
   $("acTotal").textContent = money(total);
-  $("bankGroups").innerHTML = bankGroups().length ? bankGroups().map(bankHtml).join("") : '<div class="card"><p class="empty">No banks yet. Tap + to add your first bank.</p></div>';
+  $("bankGroups").innerHTML = bankGroups().length ? bankGroups().map(bankHtml).join("") : '<div class="card"><p class="empty">No banks yet.</p></div>';
   $("xferList").innerHTML = ST.acctTransfers.length ? ST.acctTransfers.map(xferRow).join("") : '<li class="empty">No transfers yet.</li>';
   $("hAcctTotal").textContent = money(total);
   $("hAcctN").textContent = ST.accounts.length + (ST.accounts.length === 1 ? " account" : " accounts") + " · total";
@@ -2297,7 +2270,7 @@ function quickBlock(x) {
     '<option value="month"' + (cov === "month" ? " selected" : "") + '>A month</option></select></label>' +
     '<label class="full' + (cov === "month" ? "" : " hidden") + '" data-q-monthwrap="' + x.id + '">Which month<input type="month" data-q-month="' + x.id + '" value="' + today().slice(0, 7) + '"></label>';
   return '<div class="srcblock"><div class="bankhead"><b>' + esc(x.name) + '</b><span class="note">' + into + '</span></div><div class="srcgrid">' +
-    '<label>Amount<input type="number" step="0.01" min="0" inputmode="decimal" data-q-amt="' + x.id + '" placeholder="$0.00" value="' + (x.fixed ? x.amount : "") + '"></label>' +
+    '<label>Amount<input type="number" step="0.01" min="0" inputmode="decimal" data-q-amt="' + x.id + '" placeholder="$0.00"></label>' +
     '<label>Received<input type="date" data-q-date="' + x.id + '" value="' + today() + '"></label>' + covers + '</div>' +
     '<button class="full" style="width:100%;margin-top:10px" data-q-save="' + x.id + '">Save</button>' +
     '<div class="bankbtns"><button class="ghost" data-edit-src="' + x.id + '">Edit</button><button class="ghost" data-del="incomeSources:' + x.id + '">Remove</button></div>' +
@@ -2305,11 +2278,11 @@ function quickBlock(x) {
 }
 // Rebuilt only when the sources change, so snapshots never wipe an amount you are typing.
 function renderQuickIncome() {
-  const sig = JSON.stringify(ST.incomeSources.map((x) => [x.id, x.name, x.amount, x.fixed, x.frequency, x.accountId, x.wages])) + ST.accounts.map((a) => a.id + a.name + a.bank).join();
+  const sig = JSON.stringify(ST.incomeSources.map((x) => [x.id, x.name, x.amount, x.frequency, x.accountId, x.wages])) + ST.accounts.map((a) => a.id + a.name + a.bank).join();
   if (sig !== quickSig) {
     quickSig = sig;
     $("quickList").innerHTML = ST.incomeSources.length ? ST.incomeSources.map(quickBlock).join("")
-      : '<p class="empty" style="margin-top:8px">Add your income first: + → Add income source (for example Pay, Apartment, House).</p>';
+      : '<p class="empty" style="margin-top:8px">No income yet.</p>';
   }
   renderPastIncome();
 }
@@ -2328,7 +2301,7 @@ document.addEventListener("click", (e) => {
   if (!src.wages && q("cov")) { d.covers = q("cov").value; if (d.covers === "month") d.coversMonth = q("month").value || d.date.slice(0, 7); }
   adjustIncomeAccount(null, d);
   save("income", null, d);
-  q("amt").value = src.fixed ? src.amount : ""; q("date").value = today();
+  q("amt").value = ""; q("date").value = today();
   btn.disabled = true; flashSaved(btn, "Save");
   setTimeout(() => { btn.disabled = false; }, 1600);
   if (d.wages) runPaydayTransfers(d.date);
@@ -2419,7 +2392,6 @@ function syncXferForm() {
   $("xferTrigWrap").classList.toggle("hidden", !paydayOn());
   $("xferFreqWrap").classList.toggle("hidden", payday);
   $("xferDateWrap").classList.toggle("hidden", payday);
-  $("xferNote").classList.toggle("hidden", payday);
   f.nextApply.required = !payday;
 }
 $("xferForm").elements.trigger.addEventListener("change", syncXferForm);
