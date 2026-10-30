@@ -7,10 +7,22 @@
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<title>Budget Sync</title>
+<meta name="apple-mobile-web-app-title" content="PayDay Budget">
+<meta name="application-name" content="PayDay Budget">
+<meta name="description" content="PayDay Budget - My Pay. My Goals. My Way.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="PayDay Budget">
+<meta property="og:title" content="PayDay Budget">
+<meta property="og:description" content="My Pay. My Goals. My Way.">
+<meta property="og:image" content="https://woodk3-hue.github.io/budget-sync/icon-512.png">
+<meta property="og:url" content="https://woodk3-hue.github.io/budget-sync/">
+<meta name="twitter:card" content="summary">
+<title>PayDay Budget</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
+<link rel="apple-touch-icon" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" sizes="512x512" href="icon-512.png">
 <script>
 // Paste your Firebase keys here (SETUP.md part 1). While they are still PASTE_ placeholders — or with ?demo
 // on the address — the app runs in preview mode with sample data and nothing is saved.
@@ -63,6 +75,7 @@ header{position:sticky;top:0;z-index:10;flex-wrap:wrap;background:var(--glass);
   border-bottom:.5px solid var(--line);box-shadow:inset 0 -1px 0 var(--edge);padding:calc(8px + env(safe-area-inset-top)) 20px 10px;
   display:flex;align-items:center;gap:10px}
 header h1{font-size:34px;font-weight:700;letter-spacing:.37px;line-height:1.2;order:3;flex-basis:100%;margin-top:2px}
+header .tagline{order:4;flex-basis:100%;margin:-2px 0 2px;font-size:15px;font-weight:600;letter-spacing:.1px;color:var(--brand)}
 .pill{font-size:12px;font-weight:600;padding:4px 10px;border-radius:99px;background:var(--fill);color:var(--muted);
   white-space:nowrap;display:inline-flex;align-items:center;gap:5px;margin-right:auto}
 .pill::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green)}
@@ -257,7 +270,8 @@ input[type=file]{padding:9px 12px}
 <body>
 
 <header>
-  <h1 id="pageTitle">Budget</h1>
+  <h1 id="pageTitle">PayDay Budget</h1>
+  <p id="tagline" class="tagline">My Pay. My Goals. My Way.</p>
   <span id="syncPill" class="pill">Synced</span>
   <button id="statsBtn" class="ghost hbtn hidden" aria-label="Stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V11M12 20V4M19 20v-6"/></svg></button>
   <button id="addBtn" class="ghost hbtn hidden" aria-label="Add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button>
@@ -1191,7 +1205,7 @@ $("alertsBtn").addEventListener("click", async () => {
   refreshAlertsButton();
 });
 
-const TITLES = { home: "Budget", income: "Income", expenses: "Expenses", savings: "Goals", subs: "Subscriptions", property: "Property & Bills" };
+const TITLES = { home: "PayDay Budget", income: "Income", expenses: "Expenses", savings: "Goals", subs: "Subscriptions", property: "Property & Bills" };
 TITLES.stats = "Stats"; TITLES.accounts = "Accounts";
 let currentView = "home";
 function showView(v) {
@@ -1201,6 +1215,7 @@ function showView(v) {
   $("tabs").classList.toggle("none", idx < 0);
   if (idx >= 0) $("tabs").style.setProperty("--i", idx);
   $("pageTitle").textContent = TITLES[v];
+  $("tagline").classList.toggle("hidden", v !== "home");
   currentView = v;
   closeSheets(true);
   $("addBtn").classList.toggle("hidden", !ADD_FORMS[v]);

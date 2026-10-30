@@ -1,4 +1,4 @@
-# Budget Sync – setup (about 15 minutes, no terminal needed)
+# PayDay Budget – setup (about 15 minutes, no terminal needed)
 
 ## 1. Create the Firebase backend
 1. Go to https://console.firebase.google.com → **Add project** → name it `budget-sync` → turn Analytics off → Create.
