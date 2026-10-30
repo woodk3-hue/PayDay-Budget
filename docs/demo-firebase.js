@@ -4,7 +4,7 @@ const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.
 const store = {
   income: [
     { date: day(-2), amount: 2450, source: "QR pay", note: "" },
-    { date: day(6), amount: 2450, source: "QR pay", note: "", wages: true },
+    { date: day(-6), amount: 2450, source: "QR pay", note: "", wages: true },
     { date: day(-5), amount: 620, source: "Zane rent", note: "" },
     { date: day(-9), amount: 480, source: "Apartment rent", note: "" }
   ],

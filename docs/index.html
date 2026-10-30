@@ -279,7 +279,7 @@ input[type=file]{padding:9px 12px}
     <div class="card">
       <h2 id="periodTitle">This fortnight</h2>
       <div class="grid">
-        <div class="stat"><small>Income</small><b id="cIncome">$0</b></div>
+        <div class="stat" id="incomeTile" role="button" tabindex="0" style="cursor:pointer"><small>Income</small><b id="cIncome">$0</b></div>
         <div class="stat"><small id="cBillsLbl">Bills</small><b id="cBills">$0</b></div>
         <div class="stat"><small>Left over</small><b id="sLeft">$0</b></div>
       </div>
@@ -905,25 +905,32 @@ function commitmentsPerFortnight() {
     .reduce((t, x) => t + x.amount * (FREQ_PER_FORTNIGHT[x.frequency] || 0), 0);
 }
 // Home counts only my pay (wages): left over = pay − commitments − anything already allotted.
+// Home follows your pay cycle: the fortnight your latest pay (logged in the last 14 days) was earned in, else the current fortnight.
+const earnedDate = (d) => isoFromDay(periodStartDay(d) - 1);
+function payCycle() {
+  const last = ST.income.filter(isWages).sort((a, b) => b.date.localeCompare(a.date))[0], cur = currentPeriod();
+  if (!last || dayNum(today()) - dayNum(last.date) > 13) return { p: cur, last: null };
+  const start = periodStartDay(last.date) - 14;
+  return { p: { start: isoFromDay(start), end: isoFromDay(start + 13) }, last: last };
+}
 function periodStats() {
-  const p = currentPeriod();
+  const { p, last } = payCycle();
   const inc = ST.income.filter((i) => isWages(i) && inPeriod(incomePeriodDate(i), p)).reduce((s, i) => s + i.amount, 0);
-  const spentRows = ST.expenses.filter((e) => e.frequency === "once" && inPeriod(e.date, p));
+  const spentRows = ST.expenses.filter((e) => e.frequency === "once" && (last ? e.date >= last.date : inPeriod(e.date, p)));
   const recurring = commitmentsPerFortnight();
-  const allotted = ST.allotments.filter((a) => inPeriod(a.date, p)).reduce((t, a) => t + a.amount, 0);
-  return { p: p, inc: inc, spentRows: spentRows, recurring: recurring, allotted: allotted, left: inc - recurring - allotted };
+  const allotted = ST.allotments.filter((a) => inPeriod(earnedDate(a.date), p)).reduce((t, a) => t + a.amount, 0);
+  return { p: p, last: last, inc: inc, spentRows: spentRows, recurring: recurring, allotted: allotted, left: inc - recurring - allotted };
 }
 function renderHome() {
-  const { p, inc, spentRows, recurring, spent, left } = periodStats();
-  $("periodTitle").textContent = "This fortnight · " + fmtDate(p.start) + " – " + fmtDate(p.end);
-  const payDay = isoFromDay(dayNum(p.end) + 3), paid = ST.income.some((i) => isWages(i) && inPeriod(incomePeriodDate(i), p));
-  $("periodNote").textContent = paid ? "Pay for this fortnight is in." : "Pay for this fortnight is due " +
-    new Date(payDay + "T00:00:00").toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "short" }) + ".";
+  const { p, last, spentRows } = periodStats();
+  const long = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "short" });
+  $("periodTitle").textContent = last ? "Pay of " + fmtDate(last.date) + " · fortnight " + fmtDate(p.start) + " – " + fmtDate(p.end) : "This fortnight · " + fmtDate(p.start) + " – " + fmtDate(p.end);
+  $("periodNote").textContent = last ? "Next pay due " + long(isoFromDay(nextPayday())) + "." : "Pay for this fortnight is due " + long(isoFromDay(dayNum(p.end) + 3)) + ".";
 
   const byCat = {};
   spentRows.forEach((e) => { byCat[e.category] = (byCat[e.category] || 0) + e.amount; });
   const rows = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
-  $("catList").innerHTML = rows.length ? rows.map((r) => catRow(r, rows[0][1])).join("") : '<li class="empty">No one-off spending yet this fortnight.</li>';
+  $("catList").innerHTML = rows.length ? rows.map((r) => catRow(r, rows[0][1])).join("") : '<li class="empty">No one-off spending yet.</li>';
 }
 function catRow(r, max) {
   const pct = max ? Math.round((r[1] / max) * 100) : 0;
@@ -1728,10 +1735,18 @@ function flashSaved(btn, label) {
 }
 
 // New wages above the income source's usual amount trigger the allocator.
+// Usual pay: the wages income's usual amount, else the baseline saved from Quick Pay.
+function payBaseline() {
+  const src = ST.incomeSources.find((x) => x.wages && Number(x.amount) > 0);
+  if (src) return Number(src.amount);
+  const s = ST.settings.find((x) => x.id === "pay");
+  return s && Number(s.baseline) > 0 ? Number(s.baseline) : 0;
+}
 function checkSurplus(d) {
-  const src = ST.incomeSources.find((x) => x.name === d.source), usual = src ? Number(src.amount) : 0;
-  if (!isWages(d) || !(usual > 0) || !(d.amount > usual + 0.005)) return;
+  const usual = payBaseline();
+  if (!isWages(d) || !(usual > 0) || !(d.amount > usual + 0.005)) return false;
   openSurplus(round2(d.amount - usual), d.amount, usual);
+  return true;
 }
 function spTargets() {
   const buf = bufferAccount();
@@ -1745,7 +1760,7 @@ function spEvenly(keys) {
   keys.forEach((k) => { sp.amounts[k] = each; });
 }
 function openSurplus(surplus, pay, baseline) {
-  sp = { surplus: surplus, pay: pay, baseline: baseline, mode: wishOpen().length ? "top" : "keep", pct: 100, amounts: {} };
+  sp = { surplus: surplus, pay: pay, baseline: baseline, mode: smartItems().length || bufferAccount() ? "smart" : wishOpen().length ? "top" : "keep", pct: 100, amounts: {} };
   spEvenly(wishOpen().map((w) => "w:" + w.id));
   spWrap = document.createElement("div");
   spWrap.className = "overlay sheet";
@@ -1779,9 +1794,9 @@ function spSplitHtml() {
 function spRender() {
   const modes = [["top", "Top goal"], ["split", "Split"], ["smart", "Smart"], ["keep", "Keep"]].map((m) =>
     '<button data-sp-mode="' + m[0] + '"' + (sp.mode === m[0] ? ' class="on"' : "") + ">" + m[1] + "</button>").join("");
-  const body = sp.mode === "top" ? spTopHtml() : sp.mode === "split" ? spSplitHtml()
+  const body = sp.mode === "top" ? spTopHtml() : sp.mode === "split" ? spSplitHtml() : sp.mode === "smart" ? '<div class="sec">' + adviceHtml() + '<ul class="list" style="margin-top:6px">' + smListFor(sp.surplus) + "</ul></div>"
     : '<div class="sec lede">Leave the full ' + money(sp.pay) + " in your everyday account. Nothing changes.</div>";
-  const apply = sp.mode === "keep" ? '<button data-sp-keep>Keep in checking</button>' :
+  const apply = sp.mode === "keep" ? '<button data-sp-keep>Keep in checking</button>' : sp.mode === "smart" ? '<button class="plain" data-sp-keep>Not now</button><button data-sp-smartapply>Smart Apply</button>' :
     '<button class="plain" data-sp-keep>Not now</button><button data-sp-apply id="spApply">Allocate</button>';
   spWrap.innerHTML = '<div class="card"><h3>Surplus detected!</h3><div class="lede">' + money(sp.pay) + " is " + money(sp.surplus) +
     " above your usual " + money(sp.baseline) + ".</div><div class=\"toggle\">" + modes + "</div>" + body + '<div class="actions">' + apply + "</div></div>";
@@ -1845,8 +1860,8 @@ function spApply() {
 function spClick(e) {
   const d = e.target.dataset;
   if (e.target === spWrap || d.spKeep !== undefined) { spClose(); return; }
-  if (d.spMode === "smart") { const amt = sp.surplus; spClose(); openSmart(amt); }
-  else if (d.spMode) { sp.mode = d.spMode; spRender(); }
+  if (d.spMode) { sp.mode = d.spMode; spRender(); }
+  else if (d.spSmartapply !== undefined) { const amt = sp.surplus; spClose(); applySmartAmount(amt); }
   else if (d.spPct) { sp.pct = Number(d.spPct); spRender(); }
   else if (d.spEven) {
     if (d.spEven === "clear") sp.amounts = {};
@@ -2358,9 +2373,9 @@ $("paydayOn").addEventListener("change", (e) => {
     .catch((err) => toast("Save failed: " + err.message));
 });
 function runPaydayTransfers(date) {
-  if (!paydayOn()) return;
+  if (!paydayOn()) return false;
   const list = ST.acctTransfers.filter((t) => t.trigger === "payday" && (t.fromId || t.toId));
-  if (!list.length) return;
+  if (!list.length) return false;
   const delta = {}, batch = writeBatch(db);
   let total = 0;
   list.forEach((t) => {
@@ -2373,6 +2388,7 @@ function runPaydayTransfers(date) {
   Object.keys(delta).forEach((id) => batch.update(doc(db, "users", uid, "accounts", id), { balance: increment(round2(delta[id])) }));
   batch.commit().catch((err) => toast("Payday transfers failed: " + err.message));
   toast("Ran " + list.length + " payday transfers (" + money(total) + ").");
+  return true;
 }
 
 /* =========================================================
@@ -2859,8 +2875,9 @@ function smRow(s) {
   const why = s.reason === "deadline" ? "Deadline " + fmtLong(s.deadline) + " · needs " + money(s.required) + "/fortnight" : "Priority " + s.rank;
   return '<li><div class="main"><div>' + esc(s.name) + '</div><div class="sub wrap">' + esc(why) + '</div></div><span class="amt">' + money(s.amount) + "</span></li>";
 }
-function smList() {
-  const plan = smartPlan(sm.amount), buf = bufferAccount();
+const smList = () => smListFor(sm.amount);
+function smListFor(amount) {
+  const plan = smartPlan(amount), buf = bufferAccount();
   const rows = plan.steps.length ? plan.steps.map(smRow).join("") : '<li class="empty">Nothing to fund yet.</li>';
   return rows + '<li><div class="main"><div>' + (buf ? "Into " + esc(buf.name) + " (Big Savings)" : "Stays in checking") + '</div><div class="sub">Left over after your goals</div></div><span class="amt">' + money(plan.toBuffer) + "</span></li>";
 }
@@ -2874,8 +2891,9 @@ function smInput(e) {
   $("smList").innerHTML = smList();
 }
 // Executes the split: goals get their share, the rest goes into Big Savings. Each part is recorded so Left over drops by what was placed.
-function smApply() {
-  const plan = smartPlan(sm.amount);
+function smApply() { const amt = sm.amount; smClose(); applySmartAmount(amt); }
+function applySmartAmount(amount) {
+  const plan = smartPlan(amount);
   if (!(plan.amount > 0)) { toast("Enter an amount to split first."); return; }
   const batch = writeBatch(db), buf = bufferAccount();
   const record = (amount, name, toId) => batch.set(doc(col("allotments")), { date: today(), amount: round2(amount), fromId: "", toId: toId || "", target: name, created: serverTimestamp() });
@@ -2886,7 +2904,6 @@ function smApply() {
   });
   if (buf && plan.toBuffer > 0) { batch.update(doc(db, "users", uid, "accounts", buf.id), { balance: increment(plan.toBuffer) }); record(plan.toBuffer, buf.name, buf.id); }
   batch.commit().catch((err) => toast("Save failed: " + err.message));
-  smClose();
   toast("Split " + money(plan.amount) + ": " + plan.steps.length + (plan.steps.length === 1 ? " goal" : " goals") + (buf ? " and " + money(plan.toBuffer) + " into Big Savings." : "."));
 }
 function smClick(e) {
@@ -2920,6 +2937,53 @@ function renderHomeGoals() {
   $("homeGoals").classList.toggle("hidden", !rows.length);
   $("homeGoalList").innerHTML = rows.map(homeGoalRow).join("");
 }
+
+/* =========================================================
+   6t. QUICK PAY — log the fortnight's pay from Home in one tap
+   ========================================================= */
+let qp = null, qpWrap = null; // qp = { base }
+function openQuickPay() {
+  qp = { base: payBaseline() };
+  qpWrap = document.createElement("div");
+  qpWrap.className = "overlay sheet";
+  qpWrap.addEventListener("click", qpClick);
+  qpWrap.addEventListener("input", qpInput);
+  document.body.appendChild(qpWrap);
+  qpWrap.innerHTML = '<div class="card"><h3>Log fortnightly pay</h3><label class="sec">Amount<input id="qpAmt" type="number" step="0.01" min="0" inputmode="decimal" placeholder="$0.00" value="' + (qp.base || "") + '"></label>' +
+    '<label class="sec">Received<input id="qpDate" type="date" value="' + today() + '"></label>' +
+    '<label class="check sec hidden" id="qpUsualWrap"><input type="checkbox" id="qpUsual"> Set as my usual pay</label>' +
+    '<div class="actions"><button class="plain" data-qp-close>Cancel</button><button data-qp-save id="qpSave"></button></div></div>';
+  qpInput();
+}
+function qpClose() { if (qpWrap) qpWrap.remove(); qpWrap = null; qp = null; }
+function qpInput() {
+  const amt = parseFloat($("qpAmt").value) || 0, same = qp.base > 0 && Math.abs(amt - qp.base) < 0.005;
+  $("qpSave").textContent = amt > 0 ? (same ? "Confirm " : "Save ") + money(amt) : "Save pay";
+  const wrap = $("qpUsualWrap"), box = $("qpUsual");
+  if (!(qp.base > 0)) { wrap.classList.remove("hidden"); } else { wrap.classList.toggle("hidden", same); }
+}
+function qpSave() {
+  const amount = parseFloat($("qpAmt").value), date = $("qpDate").value || today(), setUsual = !$("qpUsualWrap").classList.contains("hidden") && $("qpUsual").checked;
+  if (!(amount > 0)) { toast("Enter the amount first."); return; }
+  const src = ST.incomeSources.find((x) => x.wages);
+  const d = { date: date, amount: round2(amount), source: src ? src.name : "Pay", note: "", accountId: src ? src.accountId || "" : "", wages: true };
+  if (src) d.sourceId = src.id;
+  adjustIncomeAccount(null, d);
+  save("income", null, d);
+  if (setUsual) {
+    if (src) save("incomeSources", src.id, { amount: round2(amount) });
+    else setDoc(doc(db, "users", uid, "settings", "pay"), { baseline: round2(amount), updated: serverTimestamp() }, { merge: true }).catch((err) => toast("Save failed: " + err.message));
+  }
+  qpClose();
+  const ran = runPaydayTransfers(d.date), surplus = !setUsual && checkSurplus(d);
+  if (!ran && !surplus) toast("Pay of " + money(d.amount) + " logged.");
+}
+function qpClick(e) {
+  const d = e.target.dataset;
+  if (e.target === qpWrap || d.qpClose !== undefined) qpClose();
+  else if (d.qpSave !== undefined) qpSave();
+}
+$("incomeTile").addEventListener("click", openQuickPay);
 
 /* =========================================================
    7. AUTH
