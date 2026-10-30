@@ -326,12 +326,8 @@ input[type=file]{padding:9px 12px}
       <form id="incomeForm">
         <label>Date<input type="date" name="date" required></label>
         <label>Amount<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
-        <label class="full">Source
-          <select name="source">
-            <option>QR pay</option><option>Zane rent</option><option>Apartment rent</option>
-            <option>Car spot</option><option>Tax refund</option><option>Other</option>
-          </select>
-        </label>
+        <label class="full">What is this income?<input name="source" list="incomeNames" required placeholder="e.g. Car spot, Tax refund" autocomplete="off"></label>
+        <datalist id="incomeNames"></datalist>
         <label class="full">Paid into<select name="accountId" class="acctSel"></select></label>
         <label class="full">Note<input name="note" placeholder="Optional"></label>
         <button class="full" type="submit">Save income</button>
@@ -917,17 +913,12 @@ function catRow(r, max) {
   return '<li><div class="main"><div>' + esc(r[0]) + '</div><div class="bar"><span style="width:' + pct + '%"></span></div></div><span class="amt">' + money(r[1]) + '</span></li>';
 }
 
-const DEFAULT_INCOME_SOURCES = ["QR pay", "Zane rent", "Apartment rent", "Car spot", "Tax refund"];
-// Choices follow your income sources, plus anything already logged.
+// Suggestions for the "what is this income?" box: your income sources and anything already logged. Any text is allowed.
 function incomeSourceNames() {
-  const names = ST.incomeSources.map((x) => x.name).concat(ST.income.map((i) => i.source));
-  const all = names.length ? names : DEFAULT_INCOME_SOURCES;
-  return [...new Set(all.concat("Other"))];
+  return [...new Set(ST.incomeSources.map((x) => x.name).concat(ST.income.map((i) => i.source)).filter(Boolean))];
 }
 function renderIncome() {
-  const sel = $("incomeForm").elements.source, keep = sel.value;
-  sel.innerHTML = incomeSourceNames().map((n) => "<option>" + esc(n) + "</option>").join("");
-  if (keep) sel.value = keep;
+  $("incomeNames").innerHTML = incomeSourceNames().map((n) => '<option value="' + esc(n) + '"></option>').join("");
   renderPastIncome();
 }
 const monthLabel = (m) => new Date(m + "-01T00:00:00").toLocaleDateString("en-AU", { month: "long", year: "numeric" });
@@ -957,8 +948,8 @@ function renderPastIncome() {
   $("otherPast").innerHTML = loose.length ? '<details class="past"><summary>Other past income (' + loose.length + ')</summary><ul class="list">' + loose.map(pastRow).join("") + "</ul></details>" : "";
 }
 // Picking a source pre-fills its usual amount (you can change it, since pay and rent vary).
-$("incomeForm").elements.source.addEventListener("change", (e) => {
-  const usual = ST.incomeSources.find((x) => x.name === e.target.value), amt = $("incomeForm").elements.amount;
+$("incomeForm").elements.source.addEventListener("input", (e) => {
+  const usual = ST.incomeSources.find((x) => x.name === e.target.value.trim()), amt = $("incomeForm").elements.amount;
   if (usual && !editing.income && !amt.value) amt.value = usual.amount;
   if (usual && usual.accountId && !editing.income) $("incomeForm").elements.accountId.value = usual.accountId;
 });
@@ -1039,6 +1030,7 @@ function resetForm(form, kind) {
 $("incomeForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const d = formData(e.target), isNew = !editing.income;
+  d.source = d.source.trim();
   d.accountId = d.accountId || "";
   const old = isNew ? null : ST.income.find((x) => x.id === editing.income), src = ST.incomeSources.find((x) => x.name === d.source);
   d.wages = src ? !!src.wages : old ? isWages(old) : d.source === PAY_SOURCE;
