@@ -1,7 +1,7 @@
 // PayDay Budget service worker — caches the app shell and Firebase SDK so the app opens offline.
 // Firestore data itself is cached by Firebase (IndexedDB), not here.
 // Bump VERSION whenever you change index.html so devices pick up the new copy.
-const VERSION = "budget-v41";
+const VERSION = "budget-v42";
 const SHELL = [
   "./",
   "./index.html",
@@ -9,6 +9,8 @@ const SHELL = [
   "./demo-firebase.js",
   "./icon-192.png",
   "./icon-512.png",
+  "./icon-maskable-512.png",
+  "./apple-touch-icon.png",
   "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js",
   "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js",
   "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"
