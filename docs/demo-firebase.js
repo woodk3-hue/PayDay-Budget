@@ -71,6 +71,7 @@ const store = {
   ],
   paydayMoves: [],
   allotments: [],
+  groups: [],
   pushDevices: [], billFiles: []
 };
 let counter = 0;

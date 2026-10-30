@@ -300,38 +300,6 @@ input[type=file]{padding:9px 12px}
       <div id="quickList"></div>
       <div id="otherPast"></div>
     </div>
-    <div class="card addcard" id="srcCard">
-      <button type="button" class="ghost x" data-close-sheet>Close</button>
-      <h2 id="srcFormTitle">Add income source</h2>
-      <form id="srcForm">
-        <label class="full">Name<input name="name" required placeholder="e.g. Job, Property 1 rent"></label>
-        <label>Usual amount<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
-        <label>Paid
-          <select name="frequency">
-            <option value="fortnightly">Fortnightly</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option>
-          </select>
-        </label>
-        <label class="full">Paid into<select name="accountId" class="acctSel"></select></label>
-        <label class="full">Property (if this is rent)<select name="propertyId" id="srcProp"></select></label>
-        <label class="check full"><input type="checkbox" name="wages"> This is my wages</label>
-        <label class="check full"><input type="checkbox" name="recurring"> Recurring (same amount every time)</label>
-        <label class="full hidden" id="srcDateWrap">Next date<input type="date" name="nextApply"></label>
-        <button class="full" type="submit" id="srcSubmit">Save source</button>
-      </form>
-    </div>
-    <div class="card addcard" id="incomeCard">
-      <button type="button" class="ghost x" data-close-sheet>Close</button>
-      <h2 id="incomeFormTitle">Add income</h2>
-      <form id="incomeForm">
-        <label>Date<input type="date" name="date" required></label>
-        <label>Amount<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
-        <label class="full">What is this income?<input name="source" list="incomeNames" required placeholder="e.g. Car spot, Tax refund" autocomplete="off"></label>
-        <datalist id="incomeNames"></datalist>
-        <label class="full">Paid into<select name="accountId" class="acctSel"></select></label>
-        <label class="full">Note<input name="note" placeholder="Optional"></label>
-        <button class="full" type="submit">Save income</button>
-      </form>
-    </div>
     <div class="card" id="homeAccounts" role="button" tabindex="0" style="cursor:pointer">
       <h2>Accounts</h2>
       <div class="grid"><div class="stat"><small id="hAcctN">0 accounts</small><b id="hAcctTotal">$0</b></div></div>
@@ -341,46 +309,11 @@ input[type=file]{padding:9px 12px}
   <!-- EXPENSES -->
   <section id="view-expenses" class="view hidden">
     <div class="card">
-      <h2>Bills schedule (recurring)</h2>
-      <div class="toggle chips" id="schedFilter">
-        <button data-f="all" class="on">All</button><button data-f="weekly">Weekly</button><button data-f="fortnightly">Fortnightly</button>
-        <button data-f="monthly">Monthly</button><button data-f="quarterly">Quarterly</button><button data-f="yearly">Yearly</button>
+      <div class="toggle" id="grpPeriod">
+        <button data-f="fortnight" class="on">Fortnight</button><button data-f="month">Month</button><button data-f="year">Year</button>
       </div>
-      <div class="grid" style="margin:10px 0 4px">
-        <div class="stat"><small>Set aside per fortnight</small><b id="schedFn">$0</b></div>
-        <div class="stat"><small id="schedCount">0 bills</small><b id="schedYr">$0</b></div>
-      </div>
-      <ul class="list" id="schedList"></ul>
     </div>
-    <div class="card addcard" id="expenseCard">
-      <button type="button" class="ghost x" data-close-sheet>Close</button>
-      <h2 id="expenseFormTitle">Add expense</h2>
-      <form id="expenseForm">
-        <label>Date<input type="date" name="date" required></label>
-        <label>Amount<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
-        <label>Category<select name="category" id="catSelect"></select></label>
-        <label>How often
-          <select name="frequency">
-            <option value="once">One-off</option><option value="weekly">Weekly</option>
-            <option value="fortnightly">Fortnightly</option><option value="monthly">Monthly</option>
-            <option value="quarterly">Quarterly</option><option value="yearly">Yearly</option>
-          </select>
-        </label>
-        <label class="full">Description<input name="description" required placeholder="e.g. Woolworths"></label>
-        <label class="full">Paid from<select name="accountId" class="acctSel"></select></label>
-        <label class="check full"><input type="checkbox" name="manual"> I pay this one myself</label>
-        <button class="full" type="submit">Save expense</button>
-      </form>
-    </div>
-    <div class="card">
-      <h2>Expenses</h2>
-      <div class="toggle" id="expenseFilter">
-        <button data-f="all" class="on">All</button>
-        <button data-f="once">One-off</button>
-        <button data-f="recurring">Recurring</button>
-      </div>
-      <ul class="list" id="expenseList" style="margin-top:8px"></ul>
-    </div>
+    <div id="groupCards"></div>
   </section>
 
   <!-- SAVINGS -->
@@ -401,35 +334,7 @@ input[type=file]{padding:9px 12px}
       <button class="full" id="wishSaveBtn" style="width:100%;margin-top:12px">Save to wishlist</button>
     </div>
     <div class="card"><h2>Wishlist</h2><ul class="list" id="wishList"></ul></div>
-    <div class="card addcard" id="transferCard">
-      <button type="button" class="ghost x" data-close-sheet>Close</button>
-      <h2 id="transferFormTitle">Move money</h2>
-      <form id="transferForm">
-        <label class="full">Goal<select name="goalId" id="goalSelect" required></select></label>
-        <label>Type
-          <select name="type">
-            <option value="spend">Spent</option>
-            <option value="add">Added</option>
-          </select>
-        </label>
-        <label>Amount<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
-        <label>Date<input type="date" name="date" required></label>
-        <label>Note<input name="note" placeholder="e.g. MacBook"></label>
-        <button class="full" type="submit" id="transferSubmit">Save</button>
-      </form>
-    </div>
     <div class="card"><h2>Goals</h2><ul class="list" id="goalList"></ul></div>
-    <div class="card addcard" id="goalCard">
-      <button type="button" class="ghost x" data-close-sheet>Close</button>
-      <h2 id="goalFormTitle">New goal</h2>
-      <form id="goalForm">
-        <label class="full">Name<input name="name" required placeholder="e.g. Japan trip"></label>
-        <label>Target<input type="number" name="target" step="0.01" min="0" inputmode="decimal" required></label>
-        <label>Starting balance<input type="number" name="opening" step="0.01" min="0" inputmode="decimal" value="0"></label>
-        <label class="full">Needed by (optional)<input type="date" name="targetDate" data-blank></label>
-        <button class="full" type="submit" id="goalSubmit">Add goal</button>
-      </form>
-    </div>
     <div class="card"><h2>Recent moves</h2><ul class="list" id="transferList"></ul></div>
   </section>
 
@@ -438,33 +343,6 @@ input[type=file]{padding:9px 12px}
     <div class="card alerts">
       <p id="alertsText">Get a phone alert before things renew.</p>
       <button id="alertsBtn">Turn on alerts</button>
-    </div>
-    <div class="card addcard" id="subCard">
-      <button type="button" class="ghost x" data-close-sheet>Close</button>
-      <h2 id="subFormTitle">Add subscription, bill or purchase</h2>
-      <form id="subForm">
-        <label class="full">Name<input name="name" required placeholder="e.g. Spotify"></label>
-        <label>Cost<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
-        <label>Type
-          <select name="type">
-            <option value="subscription">Subscription</option>
-            <option value="bill">Bill</option>
-            <option value="purchase">Planned purchase</option>
-          </select>
-        </label>
-        <label>How often
-          <select name="frequency">
-            <option value="monthly">Monthly</option><option value="weekly">Weekly</option>
-            <option value="fortnightly">Fortnightly</option><option value="quarterly">Quarterly</option>
-            <option value="yearly">Yearly</option><option value="once">One-off</option>
-          </select>
-        </label>
-        <label>Next due<input type="date" name="dueDate" required></label>
-        <label class="full">Remind me (days before)<input type="number" name="remindDays" min="0" max="30" value="3"></label>
-        <label class="full">Paid from<select name="accountId" class="acctSel"></select></label>
-        <label class="check full"><input type="checkbox" name="manual"> I pay this one myself</label>
-        <button class="full" type="submit">Save</button>
-      </form>
     </div>
     <div class="card">
       <h2>All subscriptions & purchases</h2>
@@ -506,36 +384,6 @@ input[type=file]{padding:9px 12px}
         <label>Insurance<input type="number" name="insurance" step="0.01" min="0" inputmode="decimal" value="0"></label>
         <label>Land tax<input type="number" name="landTax" step="0.01" min="0" inputmode="decimal" value="0"></label>
         <button class="full" type="submit">Save property</button>
-      </form>
-    </div>
-    <div class="card addcard" id="billCard">
-      <button type="button" class="ghost x" data-close-sheet>Close</button>
-      <h2 id="billFormTitle">Add a bill or receipt</h2>
-      <form id="billForm">
-        <label class="full">PDF (optional)<input type="file" id="billFile" accept="application/pdf,.pdf"></label>
-        <p class="note full" id="scanMsg"></p>
-        <label class="full">Type
-          <select name="category" id="billCat">
-            <option value="property">Fixed property bill</option>
-            <option value="maintenance">Property maintenance receipt (tax)</option>
-            <option value="personal">General personal bill</option>
-          </select>
-        </label>
-        <label class="full" id="billPropWrap">Property<select name="propertyId" id="billProp"></select></label>
-        <label class="full">Vendor<input name="vendor" required placeholder="e.g. Council"></label>
-        <label class="full" id="billFreqWrap">How often is it billed?
-          <select name="frequency">
-            <option value="once">One-off</option><option value="weekly">Weekly</option><option value="fortnightly">Fortnightly</option>
-            <option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option>
-          </select>
-        </label>
-        <label>Total<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
-        <label><span id="billDateLabel">Due date</span><input type="date" name="dueDate" required></label>
-        <div class="full" id="billAcctWrap" style="display:grid;gap:12px">
-          <label class="full">Paid from<select name="accountId" class="acctSel"></select></label>
-        <label class="check full"><input type="checkbox" name="manual"> I pay this one myself</label>
-        </div>
-        <button class="full" type="submit" id="billSubmit">Save bill</button>
       </form>
     </div>
     <div class="card">
@@ -596,7 +444,160 @@ input[type=file]{padding:9px 12px}
       <label style="margin-top:10px">or paste it here<textarea id="setupText" rows="4" placeholder="Paste the setup text"></textarea></label>
       <button id="setupBtn" style="width:100%;margin-top:12px">Import</button>
     </div>
-    <div class="card addcard" id="bankCard">
+  </section>
+</main>
+
+<div id="sheets">
+  <div class="card addcard" id="groupCard">
+    <button type="button" class="ghost x" data-close-sheet>Close</button>
+    <h2 id="groupFormTitle">Add group</h2>
+    <form id="groupForm">
+      <label class="full">Name<input name="name" required placeholder="e.g. Personal"></label>
+      <label class="full">Type
+        <select name="kind"><option value="personal">Personal (counts in my commitments)</option><option value="property">Property</option><option value="transfers">Transfers</option></select>
+      </label>
+      <label class="full hidden" id="groupPropWrap">Property<select name="propertyId" id="groupProp"></select></label>
+      <button class="full" type="submit" id="groupSubmit">Save group</button>
+    </form>
+  </div>
+  <div class="card addcard" id="srcCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
+      <h2 id="srcFormTitle">Add income source</h2>
+      <form id="srcForm">
+        <label class="full">Name<input name="name" required placeholder="e.g. Job, Property 1 rent"></label>
+        <label>Usual amount<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
+        <label>Paid
+          <select name="frequency">
+            <option value="fortnightly">Fortnightly</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option>
+          </select>
+        </label>
+        <label class="full">Paid into<select name="accountId" class="acctSel"></select></label>
+        <label class="full">Property (if this is rent)<select name="propertyId" id="srcProp"></select></label>
+        <label class="check full"><input type="checkbox" name="wages"> This is my wages</label>
+        <label class="check full"><input type="checkbox" name="recurring"> Recurring (same amount every time)</label>
+        <label class="full hidden" id="srcDateWrap">Next date<input type="date" name="nextApply"></label>
+        <button class="full" type="submit" id="srcSubmit">Save source</button>
+      </form>
+    </div>
+  <div class="card addcard" id="incomeCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
+      <h2 id="incomeFormTitle">Add income</h2>
+      <form id="incomeForm">
+        <label>Date<input type="date" name="date" required></label>
+        <label>Amount<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
+        <label class="full">What is this income?<input name="source" list="incomeNames" required placeholder="e.g. Car spot, Tax refund" autocomplete="off"></label>
+        <datalist id="incomeNames"></datalist>
+        <label class="full">Paid into<select name="accountId" class="acctSel"></select></label>
+        <label class="full">Note<input name="note" placeholder="Optional"></label>
+        <button class="full" type="submit">Save income</button>
+      </form>
+    </div>
+  <div class="card addcard" id="expenseCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
+      <h2 id="expenseFormTitle">Add expense</h2>
+      <form id="expenseForm">
+        <label>Date or due date<input type="date" name="date" required></label>
+        <label>Amount<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
+        <label class="full">Group<select name="groupId" class="grpSel" required></select></label>
+        <label>How often
+          <select name="frequency">
+            <option value="once">One-off</option><option value="weekly">Weekly</option>
+            <option value="fortnightly">Fortnightly</option><option value="monthly">Monthly</option>
+            <option value="quarterly">Quarterly</option><option value="yearly">Yearly</option>
+          </select>
+        </label>
+        <label class="full">Name<input name="description" required placeholder="e.g. Woolworths"></label>
+        <label class="full">Paid from<select name="accountId" class="acctSel"></select></label>
+        <label class="check full"><input type="checkbox" name="manual"> I pay this one myself</label>
+        <button class="full" type="submit">Save expense</button>
+      </form>
+    </div>
+  <div class="card addcard" id="transferCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
+      <h2 id="transferFormTitle">Move money</h2>
+      <form id="transferForm">
+        <label class="full">Goal<select name="goalId" id="goalSelect" required></select></label>
+        <label>Type
+          <select name="type">
+            <option value="spend">Spent</option>
+            <option value="add">Added</option>
+          </select>
+        </label>
+        <label>Amount<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
+        <label>Date<input type="date" name="date" required></label>
+        <label>Note<input name="note" placeholder="e.g. MacBook"></label>
+        <button class="full" type="submit" id="transferSubmit">Save</button>
+      </form>
+    </div>
+  <div class="card addcard" id="goalCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
+      <h2 id="goalFormTitle">New goal</h2>
+      <form id="goalForm">
+        <label class="full">Name<input name="name" required placeholder="e.g. Japan trip"></label>
+        <label>Target<input type="number" name="target" step="0.01" min="0" inputmode="decimal" required></label>
+        <label>Starting balance<input type="number" name="opening" step="0.01" min="0" inputmode="decimal" value="0"></label>
+        <label class="full">Needed by (optional)<input type="date" name="targetDate" data-blank></label>
+        <button class="full" type="submit" id="goalSubmit">Add goal</button>
+      </form>
+    </div>
+  <div class="card addcard" id="subCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
+      <h2 id="subFormTitle">Add subscription, bill or purchase</h2>
+      <form id="subForm">
+        <label class="full">Name<input name="name" required placeholder="e.g. Spotify"></label>
+        <label>Cost<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
+        <label>Type
+          <select name="type">
+            <option value="subscription">Subscription</option>
+            <option value="bill">Bill</option>
+            <option value="purchase">Planned purchase</option>
+          </select>
+        </label>
+        <label>How often
+          <select name="frequency">
+            <option value="monthly">Monthly</option><option value="weekly">Weekly</option>
+            <option value="fortnightly">Fortnightly</option><option value="quarterly">Quarterly</option>
+            <option value="yearly">Yearly</option><option value="once">One-off</option>
+          </select>
+        </label>
+        <label>Next due<input type="date" name="dueDate" required></label>
+        <label class="full">Remind me (days before)<input type="number" name="remindDays" min="0" max="30" value="3"></label>
+        <label class="full">Paid from<select name="accountId" class="acctSel"></select></label>
+        <label class="check full"><input type="checkbox" name="manual"> I pay this one myself</label>
+        <button class="full" type="submit">Save</button>
+      </form>
+    </div>
+  <div class="card addcard" id="billCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
+      <h2 id="billFormTitle">Add a bill or receipt</h2>
+      <form id="billForm">
+        <label class="full">PDF (optional)<input type="file" id="billFile" accept="application/pdf,.pdf"></label>
+        <p class="note full" id="scanMsg"></p>
+        <label class="full">Type
+          <select name="category" id="billCat">
+            <option value="property">Fixed property bill</option>
+            <option value="maintenance">Property maintenance receipt (tax)</option>
+            <option value="personal">General personal bill</option>
+          </select>
+        </label>
+        <label class="full" id="billPropWrap">Property<select name="propertyId" id="billProp"></select></label>
+        <label class="full">Vendor<input name="vendor" required placeholder="e.g. Council"></label>
+        <label class="full" id="billFreqWrap">How often is it billed?
+          <select name="frequency">
+            <option value="once">One-off</option><option value="weekly">Weekly</option><option value="fortnightly">Fortnightly</option>
+            <option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option>
+          </select>
+        </label>
+        <label>Total<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
+        <label><span id="billDateLabel">Due date</span><input type="date" name="dueDate" required></label>
+        <div class="full" id="billAcctWrap" style="display:grid;gap:12px">
+          <label class="full">Paid from<select name="accountId" class="acctSel"></select></label>
+        <label class="check full"><input type="checkbox" name="manual"> I pay this one myself</label>
+        </div>
+        <button class="full" type="submit" id="billSubmit">Save bill</button>
+      </form>
+    </div>
+  <div class="card addcard" id="bankCard">
       <button type="button" class="ghost x" data-close-sheet>Close</button>
       <h2 id="bankFormTitle">Add bank</h2>
       <form id="bankForm">
@@ -604,7 +605,7 @@ input[type=file]{padding:9px 12px}
         <button class="full" type="submit" id="bankSubmit">Save bank</button>
       </form>
     </div>
-    <div class="card addcard" id="acctCard">
+  <div class="card addcard" id="acctCard">
       <button type="button" class="ghost x" data-close-sheet>Close</button>
       <h2 id="acctFormTitle">Add account</h2>
       <form id="acctForm">
@@ -614,7 +615,7 @@ input[type=file]{padding:9px 12px}
         <button class="full" type="submit" id="acctSubmit">Save account</button>
       </form>
     </div>
-    <div class="card addcard" id="xferCard">
+  <div class="card addcard" id="xferCard">
       <button type="button" class="ghost x" data-close-sheet>Close</button>
       <h2 id="xferFormTitle">Add transfer</h2>
       <form id="xferForm">
@@ -636,8 +637,7 @@ input[type=file]{padding:9px 12px}
         <button class="full" type="submit" id="xferSubmit">Save transfer</button>
       </form>
     </div>
-  </section>
-</main>
+</div>
 
 <nav id="tabs" class="hidden">
   <button data-v="home" class="on" aria-label="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 9.8V20h4.5v-5.5h4V20h4.5V9.8"/></svg><span>Home</span></button>
@@ -673,7 +673,7 @@ const db = initializeFirestore(app, {
 /* =========================================================
    2. STATE
    ========================================================= */
-const ST = { income: [], expenses: [], goals: [], transfers: [], subscriptions: [], properties: [], bills: [], wishlist: [], settings: [], incomeSources: [], accounts: [], acctTransfers: [], banks: [], allotments: [], paydayMoves: [] };
+const ST = { income: [], expenses: [], goals: [], transfers: [], subscriptions: [], properties: [], bills: [], wishlist: [], settings: [], incomeSources: [], accounts: [], acctTransfers: [], banks: [], allotments: [], paydayMoves: [], groups: [] };
 const CATEGORIES = ["Groceries","Eating out","Shopping","Clothes","Fuel","Transport","Bills","Subscriptions",
   "Health","Medication","Gym","Home","Property","Loan","Travel","Tech","Gifts","Kids","Beauty","Other"];
 const DEFAULT_GOALS = [
@@ -688,8 +688,8 @@ const PAY_ANCHOR = new Date("2026-11-04T00:00:00");
 const PERIOD_ANCHOR = new Date("2026-10-19T00:00:00");
 const PAY_SOURCE = "QR pay"; // older entries; new income sources carry a "wages" flag instead
 const isWages = (i) => !!i.wages || i.source === PAY_SOURCE;
-let uid = null, unsubs = [], editing = { income: null, expenses: null, subscriptions: null, bills: null, incomeSources: null, accounts: null, acctTransfers: null, banks: null }, expenseFilter = "all", schedFilter = "all", billFilter = "all", pendingFile = null;
-const pending = { income: false, expenses: false, goals: false, transfers: false, subscriptions: false, properties: false, bills: false, wishlist: false, settings: false, incomeSources: false, accounts: false, acctTransfers: false, banks: false, allotments: false, paydayMoves: false };
+let uid = null, unsubs = [], editing = { income: null, expenses: null, subscriptions: null, bills: null, incomeSources: null, accounts: null, acctTransfers: null, banks: null, groups: null }, expenseFilter = "all", schedFilter = "all", billFilter = "all", pendingFile = null;
+const pending = { income: false, expenses: false, goals: false, transfers: false, subscriptions: false, properties: false, bills: false, wishlist: false, settings: false, incomeSources: false, accounts: false, acctTransfers: false, banks: false, allotments: false, paydayMoves: false, groups: false };
 
 /* =========================================================
    3. HELPERS
@@ -810,7 +810,8 @@ function startSync() {
     listen("acctTransfers", "name", "asc"),
     listen("banks", "name", "asc"),
     listen("allotments", "date", "desc"),
-    listen("paydayMoves", "date", "desc")
+    listen("paydayMoves", "date", "desc"),
+    listen("groups", "order", "asc")
   ];
   refreshAlertsButton();
   // Seed default goals once, the first time this account has none.
@@ -826,7 +827,7 @@ function startSync() {
    5. RENDER
    ========================================================= */
 function render() {
-  renderHome(); renderIncome(); renderExpenses(); renderSavings(); renderSubs(); renderProperty(); syncBufferField(); renderAfford(); renderWishlist(); renderCashflow(); renderSchedule(); renderQuickIncome();
+  renderHome(); renderIncome(); renderGroups(); renderSavings(); renderSubs(); renderProperty(); syncBufferField(); renderAfford(); renderWishlist(); renderCashflow(); renderQuickIncome();
   if (currentView === "stats") renderStats();
   renderAccountSelects(); renderAccounts(); renderPaydaySetting(); scheduleApply();
 }
@@ -873,6 +874,7 @@ function recurringPerFortnight() {
 }
 // Commitments = my own recurring bills. Property costs live on the Property tab.
 function commitmentsPerFortnight() {
+  if (ST.groups.length) return expenseItems().filter((it) => it.group && it.group.kind === "personal").reduce((t, it) => t + it.fn, 0);
   const personal = ST.bills.filter((b) => b.category === "personal" && isRecurringBill(b));
   return ST.expenses.filter((e) => e.category !== "Property").concat(ST.subscriptions, personal)
     .reduce((t, x) => t + x.amount * (FREQ_PER_FORTNIGHT[x.frequency] || 0), 0);
@@ -938,21 +940,6 @@ function renderPastIncome() {
   loose.forEach((i) => { (names[i.source] = names[i.source] || []).push(i); });
   $("otherPast").innerHTML = Object.keys(names).sort().map((n) => '<div class="srcblock"><div class="bankhead"><b>' + esc(n) + '</b></div><details class="past"><summary>Past income · ' + names[n].length +
     '</summary><div class="note">' + esc(pastSummary(names[n])) + '</div><ul class="list">' + names[n].map(pastRow).join("") + "</ul></details></div>").join("");
-}
-
-function renderExpenses() {
-  const sel = $("catSelect");
-  if (!sel.options.length) sel.innerHTML = CATEGORIES.map((c) => "<option>" + c + "</option>").join("");
-  const rows = ST.expenses.filter((e) =>
-    expenseFilter === "all" || (expenseFilter === "once" ? e.frequency === "once" : e.frequency !== "once"));
-  $("expenseList").innerHTML = rows.length ? rows.map(expenseRow).join("") : '<li class="empty">Nothing here yet.</li>';
-}
-function expenseRow(e) {
-  const freq = e.frequency === "once" ? fmtDate(e.date) : e.frequency + " · " + money(e.amount * FREQ_PER_FORTNIGHT[e.frequency]) + "/fn";
-  return '<li><div class="main"><div>' + esc(e.description) + '</div><div class="sub">' + esc(e.category) + " · " + freq + '</div></div>' +
-    '<span class="amt">' + money(e.amount) + '</span>' +
-    '<button class="ghost" data-edit-expense="' + e.id + '">Edit</button>' +
-    '<button class="ghost" data-del="expenses:' + e.id + '">✕</button></li>';
 }
 
 function renderSavings() {
@@ -1029,7 +1016,8 @@ $("incomeForm").addEventListener("submit", (e) => {
 });
 $("expenseForm").addEventListener("submit", (e) => {
   e.preventDefault();
-  const d = formData(e.target);
+  const d = formData(e.target), g = groupById(d.groupId);
+  d.category = g ? g.name : "Other";
   linkFields(d, d.date, ST.expenses.find((x) => x.id === editing.expenses));
   save("expenses", editing.expenses, d);
   resetForm(e.target, "expenses");
@@ -1093,6 +1081,7 @@ function startEdit(kind, item) {
   const form = $(kind === "income" ? "incomeForm" : "expenseForm");
   Object.keys(item).forEach((k) => { if (form.elements[k] && k !== "manual") form.elements[k].value = item[k]; });
   if (form.elements.manual) form.elements.manual.checked = !!item.manual;
+  if (kind === "expenses") form.elements.groupId.value = item.groupId || (groupOf("expenses", item) || {}).id || "";
   editing[kind] = item.id;
   form.querySelector("button[type=submit]").textContent = "Update";
   $(kind === "income" ? "incomeFormTitle" : "expenseFormTitle").textContent = "Editing";
@@ -1167,13 +1156,6 @@ $("alertsBtn").addEventListener("click", async () => {
     }
   } catch (e) { toast("Alerts error: " + e.message); }
   refreshAlertsButton();
-});
-
-$("expenseFilter").addEventListener("click", (e) => {
-  if (!e.target.dataset.f) return;
-  expenseFilter = e.target.dataset.f;
-  [...$("expenseFilter").children].forEach((b) => b.classList.toggle("on", b === e.target));
-  renderExpenses();
 });
 
 const TITLES = { home: "Budget", income: "Income", expenses: "Expenses", savings: "Goals", subs: "Subscriptions", property: "Property & Bills" };
@@ -1273,7 +1255,9 @@ function setOptions(sel, html) {
 const sourceProperty = (i) => { const x = ST.incomeSources.find((y) => (i.sourceId ? y.id === i.sourceId : y.name === i.source)); return x ? x.propertyId || "" : ""; };
 const rentEntries = () => { const p = currentPeriod(); return ST.income.filter((i) => !isWages(i) && inPeriod(i.date, p)); };
 const rentFortnight = (id) => rentEntries().filter((i) => sourceProperty(i) === id).reduce((t, i) => t + i.amount, 0);
-const propCosts = (id) => { const c = propSetAside(id); return c.base + c.extra; };
+// Property costs: yearly details and property bills, plus anything else the property's group holds.
+const groupPropertyCosts = (id) => expenseItems().filter((it) => it.coll !== "bills" && it.group && it.group.kind === "property" && (it.group.propertyId || "") === id).reduce((t, it) => t + it.fn, 0);
+const propCosts = (id) => { const c = propSetAside(id); return c.base + c.extra + groupPropertyCosts(id); };
 function flowRow(label, rent, costs) {
   const net = rent - costs;
   return '<li><div class="main"><div>' + esc(label) + '</div><div class="sub wrap">Rent ' + money(rent) + " · costs " + money(costs) +
@@ -1745,44 +1729,9 @@ function startEditSrc(s) {
   openSheet("srcCard");
 }
 
-// Recurring expenses and subscriptions/bills as one schedule (one-offs excluded).
-function scheduleItems() {
-  const ex = ST.expenses.filter((e) => e.frequency !== "once").map((e) =>
-    ({ kind: "expenses", id: e.id, name: e.description, frequency: e.frequency, amount: e.amount, due: nextDue({ dueDate: e.date, frequency: e.frequency }) }));
-  const su = ST.subscriptions.filter((s) => s.frequency !== "once").map((s) =>
-    ({ kind: "subscriptions", id: s.id, name: s.name, frequency: s.frequency, amount: s.amount, due: nextDue(s) }));
-  const bl = ST.bills.filter(isRecurringBill).map((b) =>
-    ({ kind: "bills", id: b.id, name: b.vendor, frequency: b.frequency, amount: b.amount, due: billDue(b) }));
-  return ex.concat(su, bl).map((b) => ({ ...b, fn: toFortnight(b.amount, b.frequency) })).sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
-}
-function schedRow(b) {
-  return '<li><div class="main"><div>' + esc(b.name) + '</div><div class="sub wrap">' + cap(b.frequency) + " " + money(b.amount) + (b.due ? " · due " + fmtDate(b.due) : " · no due date") + '</div></div>' +
-    '<span class="amt">' + money(b.fn) + '/fn</span>' +
-    '<button class="ghost" data-sched-edit="' + b.kind + ":" + b.id + '">Edit</button></li>';
-}
-function renderSchedule() {
-  const rows = scheduleItems().filter((b) => schedFilter === "all" || b.frequency === schedFilter);
-  const fn = rows.reduce((t, b) => t + b.fn, 0);
-  $("schedFn").textContent = money(fn);
-  $("schedYr").textContent = money(fn * 26);
-  $("schedCount").textContent = "Per year · " + rows.length + (rows.length === 1 ? " bill" : " bills");
-  $("schedList").innerHTML = rows.length ? rows.map(schedRow).join("") : '<li class="empty">No recurring bills here yet.</li>';
-}
-$("schedFilter").addEventListener("click", (e) => {
-  if (!e.target.dataset.f) return;
-  schedFilter = e.target.dataset.f;
-  [...$("schedFilter").children].forEach((b) => b.classList.toggle("on", b === e.target));
-  renderSchedule();
-});
 document.addEventListener("click", (e) => {
   const t = e.target;
   if (t.dataset.editSrc) startEditSrc(ST.incomeSources.find((x) => x.id === t.dataset.editSrc));
-  if (t.dataset.schedEdit) {
-    const [kind, id] = t.dataset.schedEdit.split(":");
-    if (kind === "expenses") startEdit("expenses", ST.expenses.find((x) => x.id === id));
-    else if (kind === "bills") { document.querySelector('nav [data-v="property"]').click(); startEditBill(ST.bills.find((x) => x.id === id)); }
-    else { document.querySelector('nav [data-v="subs"]').click(); startEditSub(ST.subscriptions.find((x) => x.id === id)); }
-  }
 });
 
 /* =========================================================
@@ -1956,6 +1905,7 @@ function resetAddForms() {
   resetBillForm();
   editing.accounts = null; $("acctForm").reset(); $("acctSubmit").textContent = "Save account"; $("acctFormTitle").textContent = "Add account";
   editing.banks = null; $("bankForm").reset(); $("bankSubmit").textContent = "Save bank"; $("bankFormTitle").textContent = "Add bank";
+  editing.groups = null; $("groupForm").reset(); syncGroupForm(); $("groupSubmit").textContent = "Save group"; $("groupFormTitle").textContent = "Add group";
   editing.acctTransfers = null; $("xferForm").reset(); $("xferForm").nextApply.value = today(); syncXferForm();
   $("xferSubmit").textContent = "Save transfer"; $("xferFormTitle").textContent = "Add transfer";
 }
@@ -2118,7 +2068,7 @@ async function applySpec(coll, item, mode) {
 let applying = false, applyTimer = null;
 function scheduleApply() {
   clearTimeout(applyTimer);
-  applyTimer = setTimeout(applyDue, 1200);
+  applyTimer = setTimeout(() => { seedGroups(); applyDue(); }, 1200);
 }
 async function applyDue() {
   if (applying || !uid) return;
@@ -2522,6 +2472,137 @@ async function applyIncomeSource(x) {
 }
 async function applyIncomeDue() {
   for (const x of ST.incomeSources) if (x.recurring && x.nextApply && x.nextApply <= today()) await applyIncomeSource(x);
+}
+
+/* =========================================================
+   6o. EXPENSE GROUPS — every bill sits in a group; move items between groups; totals by fortnight / month / year
+   ========================================================= */
+ADD_FORMS.expenses = [["expenseCard", "Add expense or bill"], ["groupCard", "Add group"]];
+const DEFAULT_GROUPS = [
+  { key: "transfers", name: "Payday transfers", kind: "transfers", propertyId: "" },
+  { key: "griffin", name: "Griffin House", kind: "property", propertyId: "A" },
+  { key: "bowen", name: "Bowen Hills", kind: "property", propertyId: "B" },
+  { key: "subscriptions", name: "Subscriptions", kind: "personal", propertyId: "" },
+  { key: "personal", name: "Personal", kind: "personal", propertyId: "" }
+];
+const GROUP_KINDS = { personal: "Personal", property: "Property", transfers: "Transfers" };
+const PERIOD_K = { fortnight: 1, month: 26 / 12, year: 26 };
+let grpPeriod = "fortnight", seedingGroups = false;
+const groupById = (id) => ST.groups.find((g) => g.id === id);
+// Items with no group of their own start in the matching starter group.
+function defaultGroupKey(coll, x) {
+  if (coll === "acctTransfers") return "transfers";
+  if (coll === "bills") return x.category === "property" ? (x.propertyId === "B" ? "bowen" : "griffin") : "personal";
+  if (coll === "subscriptions") return x.type === "subscription" ? "subscriptions" : "personal";
+  return "personal";
+}
+const groupOf = (coll, x) => groupById(x.groupId) || ST.groups.find((g) => g.key === defaultGroupKey(coll, x)) || null;
+function expenseItems() {
+  const out = [];
+  const add = (coll, x, name, freq, due) => out.push({ coll: coll, x: x, name: name || "Untitled", amount: Number(x.amount) || 0, freq: freq || "once", due: due || "" });
+  ST.expenses.forEach((x) => add("expenses", x, x.description, x.frequency, x.frequency === "once" ? x.date : nextDue({ dueDate: x.date, frequency: x.frequency })));
+  ST.subscriptions.forEach((x) => add("subscriptions", x, x.name, x.frequency, nextDue(x)));
+  ST.bills.filter((b) => b.category !== "maintenance").forEach((x) => add("bills", x, x.vendor, x.frequency, billDue(x)));
+  ST.acctTransfers.forEach((x) => add("acctTransfers", x, x.name, x.frequency, x.nextApply));
+  out.forEach((it) => { it.group = groupOf(it.coll, it.x); it.fn = toFortnight(it.amount, it.freq); });
+  return out;
+}
+const EDIT_ATTR = { expenses: "data-edit-expense", subscriptions: "data-edit-sub", bills: "data-edit-bill", acctTransfers: "data-edit-xfer" };
+function itemRow(it) {
+  const k = PERIOD_K[grpPeriod];
+  const meta = it.freq === "once" ? "One-off" : cap(it.freq) + " " + money(it.amount);
+  const due = it.due ? " · " + (it.coll === "acctTransfers" ? "next " : "due ") + fmtDate(it.due) : "";
+  return '<li><div class="main"><div>' + esc(it.name) + '</div><div class="sub wrap">' + meta + due + '</div></div><span class="amt">' + (it.fn ? money(it.fn * k) : "—") + '</span>' +
+    '<button class="ghost" data-move="' + it.coll + ":" + it.x.id + '">Move</button>' +
+    '<button class="ghost" ' + EDIT_ATTR[it.coll] + '="' + it.x.id + '">Edit</button>' +
+    '<button class="ghost" data-del="' + it.coll + ":" + it.x.id + '">✕</button></li>';
+}
+function groupCard(g, items) {
+  const total = items.reduce((t, it) => t + it.fn, 0) * PERIOD_K[grpPeriod];
+  const sorted = items.slice().sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999") || a.name.localeCompare(b.name));
+  const btns = g.id ? '<button class="ghost" data-grp-edit="' + g.id + '">Rename</button><button class="ghost" data-grp-del="' + g.id + '">Remove</button>' : "";
+  return '<div class="card"><div class="bankhead"><b>' + esc(g.name) + '</b><span class="amt">' + money(total) + '</span></div><div class="sub note">' +
+    (GROUP_KINDS[g.kind] ? GROUP_KINDS[g.kind] + " · " : "") + items.length + (items.length === 1 ? " item" : " items") + '</div><div class="bankbtns">' + btns + '</div><ul class="list">' +
+    (sorted.length ? sorted.map(itemRow).join("") : '<li class="empty">Nothing here.</li>') + "</ul></div>";
+}
+function renderGroups() {
+  const opts = PROP_IDS.map((id) => '<option value="' + id + '">' + esc(propName(id)) + "</option>").join("");
+  setOptions($("groupProp"), opts);
+  const list = ST.groups.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  document.querySelectorAll("select.grpSel").forEach((sel) => setOptions(sel, '<option value="">Choose a group</option>' + list.map((g) => '<option value="' + g.id + '">' + esc(g.name) + "</option>").join("")));
+  const items = expenseItems(), cards = list.map((g) => groupCard(g, items.filter((it) => it.group && it.group.id === g.id)));
+  const loose = items.filter((it) => !it.group);
+  if (loose.length) cards.push(groupCard({ id: "", name: "Ungrouped", kind: "" }, loose));
+  $("groupCards").innerHTML = cards.join("") || '<div class="card"><p class="empty">No groups yet.</p></div>';
+}
+$("grpPeriod").addEventListener("click", (e) => {
+  if (!e.target.dataset.f) return;
+  grpPeriod = e.target.dataset.f;
+  [...$("grpPeriod").children].forEach((b) => b.classList.toggle("on", b === e.target));
+  renderGroups();
+});
+
+function syncGroupForm() { $("groupPropWrap").classList.toggle("hidden", $("groupForm").elements.kind.value !== "property"); }
+$("groupForm").elements.kind.addEventListener("change", syncGroupForm);
+$("groupForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const d = formData(e.target);
+  d.name = d.name.trim();
+  d.propertyId = d.kind === "property" ? d.propertyId || "A" : "";
+  if (!editing.groups) d.order = ST.groups.reduce((m, g) => Math.max(m, g.order ?? 0), -1) + 1;
+  save("groups", editing.groups, d);
+  editing.groups = null; e.target.reset(); syncGroupForm();
+  $("groupSubmit").textContent = "Save group"; $("groupFormTitle").textContent = "Add group";
+  closeSheets(false);
+});
+// Moving a bill also keeps its property category in step so the property totals stay right.
+function moveItem(coll, id, g) {
+  const patch = { groupId: g.id };
+  if (coll === "bills") { patch.category = g.kind === "property" ? "property" : "personal"; patch.propertyId = g.kind === "property" ? g.propertyId || "A" : ""; }
+  if (coll === "expenses") patch.category = g.name;
+  save(coll, id, patch);
+}
+function showMove(coll, id) {
+  const cur = expenseItems().find((it) => it.coll === coll && it.x.id === id), wrap = document.createElement("div");
+  wrap.className = "overlay sheet";
+  wrap.innerHTML = '<div class="card"><h3>Move to</h3><div class="sec">' + ST.groups.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((g) =>
+    '<button style="width:100%;margin-top:8px"' + (cur && cur.group && cur.group.id === g.id ? " disabled" : "") + ' data-to="' + g.id + '">' + esc(g.name) + "</button>").join("") +
+    '</div><div class="actions"><button class="plain" data-to="">Cancel</button></div></div>';
+  wrap.addEventListener("click", (e) => {
+    if (e.target.dataset.to === undefined && e.target !== wrap) return;
+    wrap.remove();
+    const g = e.target.dataset.to ? groupById(e.target.dataset.to) : null;
+    if (g) moveItem(coll, id, g);
+  });
+  document.body.appendChild(wrap);
+}
+document.addEventListener("click", (e) => {
+  const t = e.target;
+  if (t.dataset.move) { const [coll, id] = t.dataset.move.split(":"); showMove(coll, id); }
+  if (t.dataset.grpEdit) {
+    const g = groupById(t.dataset.grpEdit), f = $("groupForm").elements;
+    f.name.value = g.name; f.kind.value = g.kind || "personal"; f.propertyId.value = g.propertyId || "A"; syncGroupForm();
+    editing.groups = g.id; $("groupSubmit").textContent = "Update"; $("groupFormTitle").textContent = "Editing " + g.name;
+    openSheet("groupCard");
+  }
+  if (t.dataset.grpDel) {
+    const g = groupById(t.dataset.grpDel);
+    showInlineConfirm("Remove " + g.name + "? Its items go back to their usual groups.", () => remove("groups", g.id), "Remove");
+  }
+});
+// First visit: create the starter groups once (the transaction stops a second device doing it again).
+async function seedGroups() {
+  if (!uid || seedingGroups || ST.groups.length) return;
+  seedingGroups = true;
+  try {
+    await runTransaction(db, async (tx) => {
+      const ref = doc(db, "users", uid, "settings", "groups"), snap = await tx.get(ref);
+      if (snap.exists() && snap.data().seeded) return;
+      DEFAULT_GROUPS.forEach((g, i) => tx.set(doc(col("groups")), { ...g, order: i, created: serverTimestamp() }));
+      tx.set(ref, { seeded: true, updated: serverTimestamp() });
+    });
+  } catch (err) { console.warn("Couldn't set up groups yet:", err.message); }
+  seedingGroups = false;
 }
 
 /* =========================================================
