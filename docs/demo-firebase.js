@@ -47,7 +47,7 @@ const store = {
   ],
   incomeSources: [
     { name: "QR pay", amount: 3000, frequency: "fortnightly", nextDate: day(5), accountId: "acc2", wages: true, fixed: false },
-    { name: "Rent 1", amount: 1100, frequency: "fortnightly", nextDate: day(3), accountId: "acc3", wages: false, fixed: true, propertyId: "A" },
+    { name: "Rent 1", amount: 1100, frequency: "fortnightly", nextApply: day(-1), nextDate: day(3), accountId: "acc3", wages: false, propertyId: "A", recurring: true },
     { name: "Rent 2", amount: 3791.67, frequency: "monthly", nextDate: day(12), accountId: "acc4", wages: false, fixed: false, propertyId: "B" }
   ],
   wishlist: [
@@ -113,7 +113,8 @@ export const runTransaction = async (db, fn) => {
   const pending = [];
   const tx = {
     get: async (ref) => { const row = (store[ref.name] || []).find((r) => r.id === ref.id); return { exists: () => !!row, data: () => { const { id, ...rest } = row || {}; return rest; } }; },
-    update: (ref, data) => pending.push(() => write(ref, data, true))
+    update: (ref, data) => pending.push(() => write(ref, data, true)),
+    set: (ref, data) => pending.push(() => write(ref, data, false))
   };
   await fn(tx); pending.forEach((f) => f()); notify();
 };
