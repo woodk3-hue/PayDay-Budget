@@ -139,6 +139,12 @@ nav button.on{color:var(--brand)}
 .list input.amtin{width:104px;flex:none;text-align:right}
 textarea{font:inherit;font-size:15px;padding:11px 12px;border:0;border-radius:10px;background:var(--tile);color:var(--ink);width:100%;
   outline:none;resize:vertical;box-shadow:inset 0 0 0 .5px var(--line)}
+/* Income entry blocks */
+.srcblock{background:var(--tile);border-radius:16px;padding:12px 14px;margin-top:12px;box-shadow:inset 0 1px 0 var(--edge),inset 0 0 0 .5px var(--line)}
+.srcgrid{display:grid;gap:10px;grid-template-columns:1fr 1fr;margin-top:8px}
+.srcgrid .full{grid-column:1/-1}
+details.past summary{cursor:pointer;min-height:44px;display:flex;align-items:center;color:var(--brand);font-weight:600}
+details.past .list{margin:0 -14px}
 button.small{min-height:44px;padding:0 16px;font-size:15px;flex:none}
 .bankhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
 .bankhead b{font-size:19px}
@@ -270,9 +276,9 @@ input[type=file]{padding:9px 12px}
       <button class="full" id="allotBtn" style="width:100%;margin-top:10px">Allot left over</button>
     </div>
     <div class="card" id="homeProperty" role="button" tabindex="0" style="cursor:pointer">
-      <h2>Property · per fortnight · tap to open</h2>
+      <h2>Property · this fortnight · tap to open</h2>
       <div class="grid">
-        <div class="stat"><small>Rent in</small><b id="hpIn">$0</b></div>
+        <div class="stat"><small>Rent received</small><b id="hpIn">$0</b></div>
         <div class="stat"><small>Costs</small><b id="hpCost">$0</b></div>
         <div class="stat"><small>Net</small><b id="hpNet">$0</b></div>
       </div>
@@ -290,19 +296,11 @@ input[type=file]{padding:9px 12px}
 
   <!-- INCOME -->
   <section id="view-income" class="view hidden">
-    <div class="card" id="homeAccounts" role="button" tabindex="0" style="cursor:pointer">
-      <h2>Accounts · tap to open</h2>
-      <div class="grid"><div class="stat"><small id="hAcctN">0 accounts</small><b id="hAcctTotal">$0</b></div></div>
-    </div>
     <div class="card" id="quickCard">
       <h2>Enter income when you get it</h2>
-      <label>Received on<input type="date" id="qDate" data-blank></label>
-      <ul class="list" id="quickList" style="margin-top:8px"></ul>
-      <p class="note">Type the amount and tap Save. It goes straight into the account that income is paid into.</p>
-    </div>
-    <div class="card">
-      <h2>Income sources (normalised per fortnight)</h2>
-      <ul class="list" id="srcList"></ul>
+      <div id="quickList"></div>
+      <div id="otherPast"></div>
+      <p class="note" style="margin-top:10px">Type the amount, pick the date you received it, and tap Save. It goes into the account that income is paid into. Add another income with + at the top.</p>
     </div>
     <div class="card addcard" id="srcCard">
       <button type="button" class="ghost x" data-close-sheet>Close</button>
@@ -315,7 +313,6 @@ input[type=file]{padding:9px 12px}
             <option value="fortnightly">Fortnightly</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option>
           </select>
         </label>
-        <label class="full">Next pay date<input type="date" name="nextDate" required></label>
         <label class="full">Paid into<select name="accountId" class="acctSel"></select></label>
         <label class="full">Property (if this is rent)<select name="propertyId" id="srcProp"></select></label>
         <label class="check full"><input type="checkbox" name="wages"> This is my wages (counts for the fortnight it was earned in, and flags extra pay)</label>
@@ -340,15 +337,9 @@ input[type=file]{padding:9px 12px}
         <button class="full" type="submit">Save income</button>
       </form>
     </div>
-    <div class="card">
-      <h2>Past income</h2>
-      <div class="toggle chips" id="incomeFilter"></div>
-      <div class="grid" style="margin:10px 0 4px">
-        <div class="stat"><small>Total</small><b id="piTotal">$0</b></div>
-        <div class="stat"><small id="piCount">Average</small><b id="piAvg">$0</b></div>
-        <div class="stat"><small>Latest</small><b id="piLast">$0</b></div>
-      </div>
-      <ul class="list" id="incomeList"></ul>
+    <div class="card" id="homeAccounts" role="button" tabindex="0" style="cursor:pointer">
+      <h2>Accounts · tap to open</h2>
+      <div class="grid"><div class="stat"><small id="hAcctN">0 accounts</small><b id="hAcctTotal">$0</b></div></div>
     </div>
   </section>
 
@@ -495,14 +486,14 @@ input[type=file]{padding:9px 12px}
   <!-- PROPERTY & BILLS -->
   <section id="view-property" class="view hidden">
     <div class="card">
-      <h2>Rent vs costs (per fortnight)</h2>
+      <h2>Rent vs costs (this fortnight)</h2>
       <div class="grid">
-        <div class="stat"><small>Rent in</small><b id="ptIn">$0</b></div>
+        <div class="stat"><small>Rent received</small><b id="ptIn">$0</b></div>
         <div class="stat"><small>Costs</small><b id="ptCost">$0</b></div>
         <div class="stat"><small>Net</small><b id="ptNet">$0</b></div>
       </div>
       <ul class="list" id="propFlowList" style="margin-top:8px"></ul>
-      <p class="note">Rent comes from income sources that aren't wages. Pick the property on each rent source (Income page).</p>
+      <p class="note">Rent is what you logged as received this fortnight (income that isn't wages). Tag each rent source with its property on the Income page.</p>
     </div>
     <div class="card">
       <h2>Set aside every pay</h2>
@@ -849,7 +840,7 @@ function startSync() {
    5. RENDER
    ========================================================= */
 function render() {
-  renderHome(); renderIncome(); renderExpenses(); renderSavings(); renderSubs(); renderProperty(); syncBufferField(); renderAfford(); renderWishlist(); renderCashflow(); renderSources(); renderSchedule(); renderQuickIncome();
+  renderHome(); renderIncome(); renderExpenses(); renderSavings(); renderSubs(); renderProperty(); syncBufferField(); renderAfford(); renderWishlist(); renderCashflow(); renderSchedule(); renderQuickIncome();
   if (currentView === "stats") renderStats();
   renderAccountSelects(); renderAccounts(); renderPaydaySetting(); scheduleApply();
 }
@@ -926,53 +917,51 @@ function catRow(r, max) {
   return '<li><div class="main"><div>' + esc(r[0]) + '</div><div class="bar"><span style="width:' + pct + '%"></span></div></div><span class="amt">' + money(r[1]) + '</span></li>';
 }
 
-let incomeFilter = "all";
 const DEFAULT_INCOME_SOURCES = ["QR pay", "Zane rent", "Apartment rent", "Car spot", "Tax refund"];
-// Choices follow your income sources (so a rename like "JHT Property" shows up), plus anything already logged.
+// Choices follow your income sources, plus anything already logged.
 function incomeSourceNames() {
   const names = ST.incomeSources.map((x) => x.name).concat(ST.income.map((i) => i.source));
   const all = names.length ? names : DEFAULT_INCOME_SOURCES;
   return [...new Set(all.concat("Other"))];
 }
-function chipBtn(value, label, on) {
-  return '<button data-f="' + esc(value) + '"' + (on ? ' class="on"' : "") + ">" + esc(label) + "</button>";
-}
 function renderIncome() {
   const sel = $("incomeForm").elements.source, keep = sel.value;
   sel.innerHTML = incomeSourceNames().map((n) => "<option>" + esc(n) + "</option>").join("");
   if (keep) sel.value = keep;
-  const sources = [...new Set(ST.income.map((i) => i.source))].sort();
-  if (incomeFilter !== "all" && !sources.includes(incomeFilter)) incomeFilter = "all";
-  $("incomeFilter").innerHTML = chipBtn("all", "All", incomeFilter === "all") + sources.map((n) => chipBtn(n, n, incomeFilter === n)).join("");
-  const rows = ST.income.filter((i) => incomeFilter === "all" || i.source === incomeFilter);
-  const total = rows.reduce((t, i) => t + i.amount, 0);
-  $("piTotal").textContent = money(total);
-  $("piCount").textContent = "Average of " + rows.length;
-  $("piAvg").textContent = money(rows.length ? total / rows.length : 0);
-  $("piLast").textContent = money(rows.length ? rows[0].amount : 0);
-  $("incomeList").innerHTML = rows.length ? rows.map(incomeRow).join("") : '<li class="empty">No income logged yet.</li>';
+  renderPastIncome();
 }
-$("incomeFilter").addEventListener("click", (e) => {
-  if (!e.target.dataset.f) return;
-  incomeFilter = e.target.dataset.f;
-  renderIncome();
-});
+const monthLabel = (m) => new Date(m + "-01T00:00:00").toLocaleDateString("en-AU", { month: "long", year: "numeric" });
+const entriesFor = (src) => ST.income.filter((i) => (i.sourceId ? i.sourceId === src.id : i.source === src.name));
+function pastRow(i) {
+  const src = ST.incomeSources.find((x) => (i.sourceId ? x.id === i.sourceId : x.name === i.source)), diff = src ? round2(i.amount - src.amount) : 0;
+  const vs = Math.abs(diff) >= 0.01 ? " · " + (diff > 0 ? "+" : "−") + money(Math.abs(diff)) + " vs usual" : "";
+  const cov = i.covers === "month" && i.coversMonth ? " · for " + monthLabel(i.coversMonth) : isWages(i) ? " · for fortnight ending " + fmtDate(incomePeriodDate(i)) : "";
+  return '<li><div class="main"><div>' + fmtLong(i.date) + '</div><div class="sub wrap">' + esc(i.source) + cov + vs + (i.note ? " · " + esc(i.note) : "") + '</div></div>' +
+    '<span class="amt pos">' + money(i.amount) + '</span>' +
+    '<button class="ghost" data-edit-income="' + i.id + '">Edit</button>' +
+    '<button class="ghost" data-del="income:' + i.id + '">✕</button></li>';
+}
+function pastSummary(rows) {
+  if (!rows.length) return "No payments yet.";
+  const total = rows.reduce((t, i) => t + i.amount, 0);
+  return rows.length + (rows.length === 1 ? " payment" : " payments") + " · total " + money(total) + " · average " + money(total / rows.length);
+}
+// Updates only the lists inside the collapsed panels, so an amount you are typing is never wiped.
+function renderPastIncome() {
+  ST.incomeSources.forEach((x) => {
+    const rows = entriesFor(x), sum = document.querySelector('[data-past-sum="' + x.id + '"]'), list = document.querySelector('[data-past-list="' + x.id + '"]');
+    if (sum) sum.textContent = pastSummary(rows);
+    if (list) list.innerHTML = rows.length ? rows.map(pastRow).join("") : '<li class="empty">Nothing logged yet.</li>';
+  });
+  const loose = ST.income.filter((i) => !ST.incomeSources.some((x) => (i.sourceId ? x.id === i.sourceId : x.name === i.source)));
+  $("otherPast").innerHTML = loose.length ? '<details class="past"><summary>Other past income (' + loose.length + ')</summary><ul class="list">' + loose.map(pastRow).join("") + "</ul></details>" : "";
+}
 // Picking a source pre-fills its usual amount (you can change it, since pay and rent vary).
 $("incomeForm").elements.source.addEventListener("change", (e) => {
   const usual = ST.incomeSources.find((x) => x.name === e.target.value), amt = $("incomeForm").elements.amount;
   if (usual && !editing.income && !amt.value) amt.value = usual.amount;
   if (usual && usual.accountId && !editing.income) $("incomeForm").elements.accountId.value = usual.accountId;
 });
-function incomeRow(i) {
-  const usual = ST.incomeSources.find((x) => x.name === i.source), diff = usual ? round2(i.amount - usual.amount) : 0;
-  const vs = Math.abs(diff) >= 0.01 ? " · " + (diff > 0 ? "+" : "−") + money(Math.abs(diff)) + " vs usual" : "";
-  const note = i.note ? " · " + esc(i.note) : "";
-  const earned = isWages(i) ? " · for fortnight ending " + fmtDate(incomePeriodDate(i)) : "";
-  return '<li><div class="main"><div>' + esc(i.source) + '</div><div class="sub wrap">' + fmtLong(i.date) + earned + vs + note + '</div></div>' +
-    '<span class="amt pos">' + money(i.amount) + '</span>' +
-    '<button class="ghost" data-edit-income="' + i.id + '">Edit</button>' +
-    '<button class="ghost" data-del="income:' + i.id + '">✕</button></li>';
-}
 
 function renderExpenses() {
   const sel = $("catSelect");
@@ -1302,8 +1291,10 @@ function receiptRow(r) {
 function setOptions(sel, html) {
   const keep = sel.value; sel.innerHTML = html; if (keep) sel.value = keep;
 }
-const rentSources = () => ST.incomeSources.filter((x) => !x.wages);
-const rentFortnight = (id) => rentSources().filter((x) => (x.propertyId || "") === id).reduce((t, x) => t + toFortnight(x.amount, x.frequency), 0);
+// Rent is what you logged as received this fortnight; costs are each property's share per fortnight.
+const sourceProperty = (i) => { const x = ST.incomeSources.find((y) => (i.sourceId ? y.id === i.sourceId : y.name === i.source)); return x ? x.propertyId || "" : ""; };
+const rentEntries = () => { const p = currentPeriod(); return ST.income.filter((i) => !isWages(i) && inPeriod(i.date, p)); };
+const rentFortnight = (id) => rentEntries().filter((i) => sourceProperty(i) === id).reduce((t, i) => t + i.amount, 0);
 const propCosts = (id) => { const c = propSetAside(id); return c.base + c.extra; };
 function flowRow(label, rent, costs) {
   const net = rent - costs;
@@ -1311,7 +1302,7 @@ function flowRow(label, rent, costs) {
     '</div></div><span class="amt ' + (net >= 0 ? "pos" : "neg") + '">' + money(net) + "</span></li>";
 }
 function renderPropertyFlows() {
-  const rent = rentSources().reduce((t, x) => t + toFortnight(x.amount, x.frequency), 0), costs = PROP_IDS.reduce((t, id) => t + propCosts(id), 0), net = rent - costs;
+  const rent = rentEntries().reduce((t, i) => t + i.amount, 0), costs = PROP_IDS.reduce((t, id) => t + propCosts(id), 0), net = rent - costs;
   [["ptIn", rent], ["ptCost", costs], ["ptNet", net], ["hpIn", rent], ["hpCost", costs], ["hpNet", net]].forEach((x) => { $(x[0]).textContent = money(x[1]); });
   ["ptNet", "hpNet"].forEach((id) => { $(id).className = net >= 0 ? "pos" : "neg"; });
   const loose = rentFortnight("");
@@ -1742,7 +1733,6 @@ document.addEventListener("click", (e) => {
 // Weekly ×2, fortnightly ×1, monthly ×12/26, quarterly ×4/26, yearly ÷26 (see FREQ_PER_FORTNIGHT).
 const toFortnight = (amount, frequency) => amount * (FREQ_PER_FORTNIGHT[frequency] || 0);
 const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);
-const incomePerFortnight = () => ST.incomeSources.reduce((t, s) => t + toFortnight(s.amount, s.frequency), 0);
 
 function renderCashflow() {
   const st = periodStats();
@@ -1755,33 +1745,19 @@ function renderCashflow() {
   $("allotBtn").classList.toggle("hidden", !(st.left > 0.005 && ST.accounts.length > 1));
 }
 
-function srcRow(s) {
-  const when = nextDue({ dueDate: s.nextDate, frequency: s.frequency });
-  const orig = s.frequency === "fortnightly" ? "" : cap(s.frequency) + " " + money(s.amount) + " · ";
-  return '<li><div class="main"><div>' + esc(s.name) + '</div><div class="sub wrap">' + orig + (when ? "next " + fmtDate(when) : "no pay date yet") + '</div></div>' +
-    '<span class="amt pos">' + money(toFortnight(s.amount, s.frequency)) + '/fn</span>' +
-    '<button class="ghost" data-edit-src="' + s.id + '">Edit</button>' +
-    '<button class="ghost" data-del="incomeSources:' + s.id + '">✕</button></li>';
-}
-function renderSources() {
-  const total = '<li><div class="main"><div>Total per fortnight</div></div><span class="amt">' + money(incomePerFortnight()) + '</span></li>';
-  $("srcList").innerHTML = ST.incomeSources.length ? ST.incomeSources.map(srcRow).join("") + total : '<li class="empty">No income sources yet.</li>';
-}
 $("srcForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const d = formData(e.target);
   d.accountId = d.accountId || ""; d.wages = !!d.wages; d.fixed = !!d.fixed; d.propertyId = d.wages ? "" : (d.propertyId || "");
   save("incomeSources", editing.incomeSources, d);
   editing.incomeSources = null; e.target.reset();
-  e.target.nextDate.value = today();
   $("srcSubmit").textContent = "Save source";
   $("srcFormTitle").textContent = "Add income source";
   closeSheets(false);
 });
 function startEditSrc(s) {
   const f = $("srcForm").elements;
-  ["name", "amount", "frequency", "nextDate"].forEach((k) => { f[k].value = s[k] ?? ""; });
-  f.nextDate.value = nextDue({ dueDate: s.nextDate, frequency: s.frequency });
+  ["name", "amount", "frequency"].forEach((k) => { f[k].value = s[k] ?? ""; });
   f.accountId.value = s.accountId || ""; f.wages.checked = !!s.wages; f.fixed.checked = !!s.fixed; f.propertyId.value = s.propertyId || "";
   editing.incomeSources = s.id;
   $("srcSubmit").textContent = "Update";
@@ -1992,7 +1968,7 @@ function resetAddForms() {
   resetForm($("incomeForm"), "income"); resetForm($("expenseForm"), "expenses");
   editing.subscriptions = null; $("subForm").reset(); $("subForm").dueDate.value = today();
   $("subForm").querySelector("button[type=submit]").textContent = "Save"; $("subFormTitle").textContent = "Add subscription, bill or purchase";
-  editing.incomeSources = null; $("srcForm").reset(); $("srcForm").nextDate.value = today();
+  editing.incomeSources = null; $("srcForm").reset();
   $("srcSubmit").textContent = "Save source"; $("srcFormTitle").textContent = "Add income source";
   editing.goals = null; $("goalForm").reset(); $("goalSubmit").textContent = "Add goal"; $("goalFormTitle").textContent = "New goal";
   editing.transfers = null; $("transferForm").reset(); $("transferForm").date.value = today();
@@ -2074,7 +2050,7 @@ function renderStats() {
   $("stExp").textContent = money(t.expenses);
   $("stNet").textContent = money(net);
   $("stNet").className = net >= 0 ? "pos" : "neg";
-  $("stNote").textContent = "Expenses = " + money(t.spent) + " spent + " + money(t.recurring) + " of recurring bills. Expected income from your sources: " + money(incomePerFortnight() * r.k) + ".";
+  $("stNote").textContent = "Expenses = " + money(t.spent) + " spent + " + money(t.recurring) + " of recurring bills.";
 
   const n = statsView === "year" ? 4 : 6, cols = [];
   let max = 0;
@@ -2314,31 +2290,45 @@ document.addEventListener("click", (e) => {
    6j. QUICK INCOME — type the amount when it arrives; it lands in the right account
    ========================================================= */
 let quickSig = "";
-function quickRow(x) {
-  const into = x.accountId ? "→ " + esc(acctName(x.accountId)) : "no account yet";
-  return '<li><div class="main"><div>' + esc(x.name) + '</div><div class="sub wrap">' + into + " · " + cap(x.frequency) + (x.fixed ? "" : " · usual " + money(x.amount)) + '</div></div>' +
-    '<input class="amtin" type="number" step="0.01" min="0" inputmode="decimal" data-q-amt="' + x.id + '" value="' + (x.fixed ? x.amount : "") + '" placeholder="$">' +
-    '<button class="small" data-q-save="' + x.id + '">Save</button></li>';
+function quickBlock(x) {
+  const into = x.accountId ? "→ " + esc(acctName(x.accountId)) : "no account yet", cov = x.frequency === "monthly" ? "month" : "fortnight";
+  const covers = x.wages ? "" :
+    '<label class="full">This payment is for<select data-q-cov="' + x.id + '"><option value="fortnight"' + (cov === "fortnight" ? " selected" : "") + '>A fortnight</option>' +
+    '<option value="month"' + (cov === "month" ? " selected" : "") + '>A month</option></select></label>' +
+    '<label class="full' + (cov === "month" ? "" : " hidden") + '" data-q-monthwrap="' + x.id + '">Which month<input type="month" data-q-month="' + x.id + '" value="' + today().slice(0, 7) + '"></label>';
+  return '<div class="srcblock"><div class="bankhead"><b>' + esc(x.name) + '</b><span class="note">' + into + '</span></div><div class="srcgrid">' +
+    '<label>Amount<input type="number" step="0.01" min="0" inputmode="decimal" data-q-amt="' + x.id + '" placeholder="$0.00" value="' + (x.fixed ? x.amount : "") + '"></label>' +
+    '<label>Received<input type="date" data-q-date="' + x.id + '" value="' + today() + '"></label>' + covers + '</div>' +
+    '<button class="full" style="width:100%;margin-top:10px" data-q-save="' + x.id + '">Save</button>' +
+    '<div class="bankbtns"><button class="ghost" data-edit-src="' + x.id + '">Edit</button><button class="ghost" data-del="incomeSources:' + x.id + '">Remove</button></div>' +
+    '<details class="past"><summary>Past income</summary><div class="note" data-past-sum="' + x.id + '"></div><ul class="list" data-past-list="' + x.id + '"></ul></details></div>';
 }
 // Rebuilt only when the sources change, so snapshots never wipe an amount you are typing.
 function renderQuickIncome() {
-  if (!$("qDate").value) $("qDate").value = today();
-  const sig = JSON.stringify(ST.incomeSources.map((x) => [x.id, x.name, x.amount, x.fixed, x.frequency, x.accountId])) + ST.accounts.map((a) => a.id + a.name + a.bank).join();
-  if (sig === quickSig) return;
-  quickSig = sig;
-  $("quickList").innerHTML = ST.incomeSources.length ? ST.incomeSources.map(quickRow).join("")
-    : '<li class="empty">Add your income first: + → Add income source (for example Pay, Rent 1, Rent 2).</li>';
+  const sig = JSON.stringify(ST.incomeSources.map((x) => [x.id, x.name, x.amount, x.fixed, x.frequency, x.accountId, x.wages])) + ST.accounts.map((a) => a.id + a.name + a.bank).join();
+  if (sig !== quickSig) {
+    quickSig = sig;
+    $("quickList").innerHTML = ST.incomeSources.length ? ST.incomeSources.map(quickBlock).join("")
+      : '<p class="empty" style="margin-top:8px">Add your income first: + → Add income source (for example Pay, Apartment, House).</p>';
+  }
+  renderPastIncome();
 }
+document.addEventListener("change", (e) => {
+  const id = e.target.dataset.qCov;
+  if (!id) return;
+  document.querySelector('[data-q-monthwrap="' + id + '"]').classList.toggle("hidden", e.target.value !== "month");
+});
 document.addEventListener("click", (e) => {
   const btn = e.target.closest("[data-q-save]");
   if (!btn || btn.disabled) return;
-  const src = ST.incomeSources.find((x) => x.id === btn.dataset.qSave), input = document.querySelector('[data-q-amt="' + btn.dataset.qSave + '"]');
-  const amount = parseFloat(input.value);
+  const id = btn.dataset.qSave, src = ST.incomeSources.find((x) => x.id === id), q = (k) => document.querySelector("[data-q-" + k + '="' + id + '"]');
+  const amount = parseFloat(q("amt").value);
   if (!src || !(amount > 0)) { toast("Enter the amount first."); return; }
-  const d = { date: $("qDate").value || today(), amount: round2(amount), source: src.name, note: "", accountId: src.accountId || "", wages: !!src.wages };
+  const d = { date: q("date").value || today(), amount: round2(amount), source: src.name, sourceId: src.id, note: "", accountId: src.accountId || "", wages: !!src.wages };
+  if (!src.wages && q("cov")) { d.covers = q("cov").value; if (d.covers === "month") d.coversMonth = q("month").value || d.date.slice(0, 7); }
   adjustIncomeAccount(null, d);
   save("income", null, d);
-  input.value = src.fixed ? src.amount : "";
+  q("amt").value = src.fixed ? src.amount : ""; q("date").value = today();
   btn.disabled = true; flashSaved(btn, "Save");
   setTimeout(() => { btn.disabled = false; }, 1600);
   if (d.wages) runPaydayTransfers(d.date);
