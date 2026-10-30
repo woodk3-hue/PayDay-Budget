@@ -150,6 +150,10 @@ button[data-del],button[data-del-bank],button[data-grp-del],button[data-grp-edit
 button[data-edit-income],button[data-edit-acct],button[data-edit-goal],button[data-edit-transfer],button[data-edit-src],button[data-edit-bank]{display:none!important}
 .list li,.bankhead{touch-action:pan-y;-webkit-user-select:none;user-select:none}
 .bankhead{cursor:pointer}
+input[type=range]{appearance:auto;-webkit-appearance:auto;padding:0;min-height:36px;background:none;box-shadow:none;accent-color:var(--brand)}
+.splitrow{margin-top:12px}
+.splitrow .rowtop{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.splitrow .rowtop label{flex:1}
 button.small{min-height:44px;padding:0 16px;font-size:15px;flex:none}
 .bankhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
 .bankhead b{font-size:19px}
@@ -318,20 +322,23 @@ input[type=file]{padding:9px 12px}
 
   <!-- SAVINGS -->
   <section id="view-savings" class="view hidden">
+    <div class="card" id="bufferCard" role="button" tabindex="0" style="cursor:pointer">
+      <h2>Big Savings buffer</h2>
+      <div class="grid">
+        <div class="stat"><small id="bufAcct">Balance</small><b id="bufBal">—</b></div>
+        <div class="stat"><small>Target buffer</small><b id="bufTarget">—</b></div>
+        <div class="stat"><small>Status</small><b id="bufStatus" style="font-size:17px">—</b></div>
+      </div>
+    </div>
     <div class="card">
       <h2>Can I afford it?</h2>
       <form id="affordForm">
         <label class="full">Item<input name="name" placeholder="e.g. MacBook Pro"></label>
         <label>Total cost<input type="number" name="cost" step="0.01" min="0" inputmode="decimal"></label>
         <label>Is it a<select name="kind"><option value="want">Want</option><option value="need">Need</option></select></label>
-        <label>Save per fortnight<input type="number" name="perPay" step="0.01" min="0" inputmode="decimal" placeholder="e.g. 250"></label>
-        <label>or in how many pays<input type="number" name="pays" step="1" min="1" inputmode="numeric" placeholder="e.g. 14"></label>
         <label class="full">Needed by (optional)<input type="date" name="neededBy" data-blank></label>
-        <label class="full">Savings buffer to protect<input type="number" name="buffer" step="1" min="0" inputmode="decimal"></label>
-        <button type="button" class="full" id="bufferSave">Save buffer</button>
+        <button type="button" class="full" id="compareBtn">Compare paths</button>
       </form>
-      <div id="affordResult"></div>
-      <button class="full" id="wishSaveBtn" style="width:100%;margin-top:12px">Save to wishlist</button>
     </div>
     <div class="card"><h2>Wishlist</h2><ul class="list" id="wishList"></ul></div>
     <div class="card"><h2>Goals</h2><ul class="list" id="goalList"></ul></div>
@@ -448,6 +455,15 @@ input[type=file]{padding:9px 12px}
 </main>
 
 <div id="sheets">
+  <div class="card addcard" id="bufferSetCard">
+    <button type="button" class="ghost x" data-close-sheet>Close</button>
+    <h2>Big Savings setup</h2>
+    <form id="bufferSetForm">
+      <label class="full">Account<select name="accountId" class="acctSel"></select></label>
+      <label class="full">Target buffer<input type="number" name="target" step="1" min="0" inputmode="decimal" required placeholder="e.g. 30000"></label>
+      <button class="full" type="submit">Save</button>
+    </form>
+  </div>
   <div class="card addcard" id="groupCard">
     <button type="button" class="ghost x" data-close-sheet>Close</button>
     <h2 id="groupFormTitle">Add group</h2>
@@ -830,7 +846,7 @@ function startSync() {
    5. RENDER
    ========================================================= */
 function render() {
-  renderHome(); renderIncome(); renderGroups(); renderSavings(); renderSubs(); renderProperty(); syncBufferField(); renderAfford(); renderWishlist(); renderCashflow(); renderQuickIncome();
+  renderHome(); renderIncome(); renderGroups(); renderSavings(); renderSubs(); renderProperty(); renderBuffer(); renderWishlist(); renderCashflow(); renderQuickIncome();
   if (currentView === "stats") renderStats();
   renderAccountSelects(); renderAccounts(); renderPaydaySetting(); scheduleApply();
 }
@@ -1541,86 +1557,13 @@ $("billFilter").addEventListener("click", (e) => {
 /* =========================================================
    6d. CAN I AFFORD IT? — save-up vs draw-from-savings, plus the wishlist
    ========================================================= */
-let affordLast = "perPay";
 const isoFromDay = (n) => new Date(n * 86400000).toISOString().slice(0, 10);
 const fmtLong = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
-const savingsAvailable = () => ST.goals.reduce((t, g) => t + goalBalance(g), 0);
-const defaultBuffer = () => Math.round(recurringPerFortnight() * 26 / 12 * 3); // 3 months of regular costs
 function nextPayday() {
   const anchor = dayNum(PAY_ANCHOR.toLocaleDateString("en-CA")), now = dayNum(today());
   return anchor + 14 * Math.ceil((now - anchor) / 14);
 }
 function readyDate(pays) { return isoFromDay(nextPayday() + 14 * (Math.max(1, pays) - 1)); }
-
-function affordCalc() {
-  const f = $("affordForm").elements;
-  const cost = parseFloat(f.cost.value) || 0;
-  let perPay = parseFloat(f.perPay.value) || 0, pays = parseInt(f.pays.value, 10) || 0;
-  const needed = f.neededBy.value;
-  if (affordLast === "date" && needed && cost > 0) { pays = Math.max(1, paysBefore(needed)); perPay = Math.ceil((cost / pays) * 100) / 100; }
-  else if (affordLast === "pays" && pays > 0 && cost > 0) perPay = Math.ceil((cost / pays) * 100) / 100;
-  else if (perPay > 0 && cost > 0) pays = Math.ceil(cost / perPay);
-  else if (pays > 0 && cost > 0) perPay = Math.ceil((cost / pays) * 100) / 100;
-  else { perPay = 0; pays = 0; }
-  const buffer = f.buffer.value === "" ? defaultBuffer() : Math.max(0, parseFloat(f.buffer.value) || 0);
-  return { name: f.name.value.trim() || "This item", cost: cost, kind: f.kind.value, perPay: perPay, pays: pays, neededBy: needed,
-    ready: pays ? readyDate(pays) : "", buffer: buffer, available: savingsAvailable(), left: periodStats().left };
-}
-
-function optionAHtml(c) {
-  const head = '<div class="head">Option A · Save up</div>';
-  if (!c.perPay) return '<div class="opt">' + head + '<div class="sub">Enter an amount per fortnight, how many pays, or a needed-by date to see the plan.</div></div>';
-  const used = c.left > 0 ? Math.round((c.perPay / c.left) * 100) : null;
-  const fit = used === null ? "More than this fortnight's left-over" : used + "% of this fortnight's left-over (" + money(c.left) + ")";
-  return '<div class="opt">' + head + '<div class="big">' + money(c.perPay) + "/fortnight × " + c.pays + (c.pays === 1 ? " pay" : " pays") +
-    '</div><div class="sub">Ready by ' + fmtLong(c.ready) + " · " + fit + "</div></div>";
-}
-function optionBHtml(c, rem) {
-  let cls = "ok", msg = "Stays above your " + money(c.buffer) + " buffer.";
-  if (rem < 0) { cls = "bad"; msg = "Savings can't cover this. Short by " + money(-rem) + "."; }
-  else if (rem < c.buffer) { cls = "warn"; msg = "Drops " + money(c.buffer - rem) + " below your " + money(c.buffer) + " buffer."; }
-  const pct = c.buffer > 0 ? Math.max(0, Math.min(100, (rem / c.buffer) * 100)) : 100;
-  let advice = "";
-  if (cls !== "ok") advice = c.kind === "want" ? "As a want, saving up (Option A) keeps your buffer safe."
-    : "It's a need, so using savings is reasonable. Plan to rebuild the buffer afterwards.";
-  return '<div class="opt"><div class="head">Option B · Draw from savings</div><div class="big ' + (rem < 0 ? "bad" : "") + '">Leaves ' + money(rem) +
-    '</div><div class="bar ' + cls + '"><span style="width:' + pct.toFixed(0) + '%"></span></div><div class="msg ' + cls + '">' + msg + '</div>' +
-    '<div class="sub">Savings now ' + money(c.available) + (advice ? " · " + advice : "") + "</div></div>";
-}
-function renderAfford() {
-  const c = affordCalc(), f = $("affordForm").elements;
-  f.buffer.placeholder = "3 months: " + defaultBuffer();
-  if (!c.cost) { $("affordResult").innerHTML = ""; return; }
-  const rem = c.available - c.cost;
-  const plan = c.perPay ? money(c.perPay) + "/fortnight for " + c.pays + " pay cycles" : "saving up over time";
-  $("affordResult").innerHTML = optionAHtml(c) + optionBHtml(c, rem) +
-    '<div class="opt summary">' + esc(c.name) + " (" + money(c.cost) + ") = " + plan + " OR draw from savings leaving " + money(rem) + ".</div>";
-}
-function syncBufferField() {
-  const field = $("affordForm").elements.buffer, s = ST.settings.find((x) => x.id === "afford");
-  if (document.activeElement !== field) field.value = s && s.buffer != null ? s.buffer : "";
-}
-$("affordForm").addEventListener("submit", (e) => e.preventDefault());
-$("affordForm").addEventListener("input", (e) => {
-  if (e.target.name === "perPay") affordLast = "perPay";
-  if (e.target.name === "pays") affordLast = "pays";
-  if (e.target.name === "neededBy") affordLast = "date";
-  renderAfford();
-});
-function saveBuffer() {
-  const raw = $("affordForm").elements.buffer.value, v = raw === "" ? null : Math.max(0, parseFloat(raw) || 0);
-  setDoc(doc(db, "users", uid, "settings", "afford"), { buffer: v, updated: serverTimestamp() }, { merge: true })
-    .catch((err) => toast("Save failed: " + err.message));
-}
-$("affordForm").elements.buffer.addEventListener("change", saveBuffer);
-$("bufferSave").addEventListener("click", () => { saveBuffer(); flashSaved($("bufferSave"), "Save buffer"); });
-$("wishSaveBtn").addEventListener("click", () => {
-  const c = affordCalc();
-  if (!c.cost || !c.perPay) { toast("Enter a cost and a fortnightly amount (or number of pays) first."); return; }
-  const top = ST.wishlist.reduce((m, w) => Math.max(m, w.order ?? -1), -1);
-  save("wishlist", null, { name: c.name, cost: c.cost, kind: c.kind, perPay: c.perPay, saved: 0, neededBy: c.neededBy || "", order: top + 1 });
-  $("affordForm").reset(); affordLast = "perPay"; syncBufferField(); renderAfford();
-});
 
 const wishDone = (w) => w.cost - (w.saved || 0) <= 0.005;
 // Manual priority: lowest `order` first; funded items drop to the bottom.
@@ -1771,8 +1714,10 @@ function checkSurplus(d) {
   openSurplus(round2(d.amount - usual), d.amount, usual);
 }
 function spTargets() {
+  const buf = bufferAccount();
   return wishOpen().map((w) => ({ key: "w:" + w.id, type: "wish", item: w, name: w.name }))
-    .concat(ST.goals.map((g) => ({ key: "g:" + g.id, type: "goal", item: g, name: g.name })));
+    .concat(ST.goals.map((g) => ({ key: "g:" + g.id, type: "goal", item: g, name: g.name })))
+    .concat(buf ? [{ key: "b:" + buf.id, type: "buf", item: buf, name: buf.name + " (Big Savings)" }] : []);
 }
 function spEvenly(keys) {
   const each = keys.length ? Math.floor((sp.surplus / keys.length) * 100) / 100 : 0;
@@ -1808,7 +1753,7 @@ function spSplitRow(t) {
 }
 function spSplitHtml() {
   const targets = spTargets();
-  return '<div class="sec"><div class="toggle chips"><button data-sp-even="wish">Even: wishlist</button><button data-sp-even="all">Even: all</button><button data-sp-even="clear">Clear</button></div>' +
+  return '<div class="sec"><div class="toggle chips"><button data-sp-even="wish">Even: wishlist</button><button data-sp-even="all">Even: all</button>' + (splitPlan() ? '<button data-sp-even="mine">My split</button>' : "") + '<button data-sp-even="clear">Clear</button></div>' +
     '<ul class="list" style="margin-top:6px">' + targets.map(spSplitRow).join("") + '</ul><div class="opt" id="spTotal"></div></div>';
 }
 function spRender() {
@@ -1833,7 +1778,7 @@ function spPreview() {
     const total = Object.values(sp.amounts).reduce((t, v) => t + (v || 0), 0), over = total > sp.surplus + 0.005;
     spTargets().forEach((t) => {
       const el = $("fx-" + t.key), v = sp.amounts[t.key] || 0;
-      if (el) el.textContent = t.type === "wish" ? (v ? "This " + money(v) + " " + effectText(t.item, v) : money(t.item.saved || 0) + " of " + money(t.item.cost))
+      if (el) el.textContent = t.type === "buf" ? money(t.item.balance || 0) + (v ? " → " + money((t.item.balance || 0) + v) : "") : t.type === "wish" ? (v ? "This " + money(v) + " " + effectText(t.item, v) : money(t.item.saved || 0) + " of " + money(t.item.cost))
         : money(goalBalance(t.item)) + " saved" + (v ? " → " + money(goalBalance(t.item) + v) : "");
     });
     const box = $("spTotal");
@@ -1841,6 +1786,18 @@ function spPreview() {
     box.textContent = over ? "That's " + money(total - sp.surplus) + " more than the surplus."
       : "Allocated " + money(total) + " of " + money(sp.surplus) + " · " + money(sp.surplus - total) + " stays in checking.";
   }
+}
+// Fills the saved split: the main goal and second goal get their per-pay amounts, the rest goes to Big Savings.
+const splitPlan = () => { const x = ST.settings.find((y) => y.id === "split"); return x && x.primaryId ? x : null; };
+function spMySplit() {
+  const plan = splitPlan(), targets = spTargets(), buf = targets.find((t) => t.type === "buf");
+  let left = sp.surplus;
+  sp.amounts = {};
+  const put = (key, amt) => { if (!targets.some((t) => t.key === key)) return; const v = Math.min(round2(Number(amt) || 0), left); if (v > 0) { sp.amounts[key] = v; left = round2(left - v); } };
+  const main = ST.wishlist.find((w) => w.id === plan.primaryId);
+  if (main) put("w:" + main.id, main.perPay);
+  if (plan.secKey && plan.secAmt) put(plan.secKey, plan.secAmt);
+  if (buf && left > 0) sp.amounts[buf.key] = left;
 }
 function spInput(e) {
   if (e.target.id === "spPct") { sp.pct = Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)); spWrap.querySelectorAll("[data-sp-pct]").forEach((b) => b.classList.remove("on")); }
@@ -1853,7 +1810,8 @@ function spApply() {
   const give = (t, amt) => {
     if (!(amt > 0)) return;
     total += amt;
-    if (t.type === "wish") batch.update(doc(db, "users", uid, "wishlist", t.item.id), { saved: round2((t.item.saved || 0) + amt) });
+    if (t.type === "buf") batch.update(doc(db, "users", uid, "accounts", t.item.id), { balance: increment(round2(amt)) });
+    else if (t.type === "wish") batch.update(doc(db, "users", uid, "wishlist", t.item.id), { saved: round2((t.item.saved || 0) + amt) });
     else batch.set(doc(col("transfers")), { goalId: t.item.id, type: "add", amount: round2(amt), date: today(), note: "Surplus pay", created: serverTimestamp() });
   };
   if (sp.mode === "top") give(spTargets().find((t) => t.type === "wish"), spTopAmount());
@@ -1871,6 +1829,7 @@ function spClick(e) {
   else if (d.spPct) { sp.pct = Number(d.spPct); spRender(); }
   else if (d.spEven) {
     if (d.spEven === "clear") sp.amounts = {};
+    else if (d.spEven === "mine") spMySplit();
     else spEvenly(spTargets().filter((t) => d.spEven === "all" || t.type === "wish").map((t) => t.key));
     spRender();
   }
@@ -1883,7 +1842,7 @@ function spClick(e) {
 const ADD_FORMS = {
   income: [["incomeCard", "Add income"], ["srcCard", "Add income source"]],
   expenses: [["expenseCard", "Add expense"]],
-  savings: [["transferCard", "Move money"], ["goalCard", "New goal"]],
+  savings: [["transferCard", "Move money"], ["goalCard", "New goal"], ["bufferSetCard", "Big Savings setup"]],
   subs: [["subCard", "Add subscription, bill or purchase"]],
   property: [["billCard", "Add a bill or receipt"]]
 };
@@ -2644,6 +2603,164 @@ function swipeActions(el) {
   document.addEventListener("pointercancel", (e) => finish(e, true));
   document.addEventListener("click", (e) => { if (justDragged && draggedEl && draggedEl.contains(e.target)) { e.stopPropagation(); e.preventDefault(); } }, true);
 })();
+
+/* =========================================================
+   6q. BIG SAVINGS BUFFER and CAN I AFFORD IT? (buy now vs save over time)
+   ========================================================= */
+// Data: settings/buffer = { accountId, target }; settings/split = { primaryId, secKey, secAmt }. Balances live on the accounts.
+const bufferSetting = () => ST.settings.find((x) => x.id === "buffer") || {};
+const bufferAccount = () => acctById(bufferSetting().accountId);
+const bufferTarget = () => Number(bufferSetting().target) || 0;
+const bufferBalance = () => { const a = bufferAccount(); return a ? Number(a.balance) || 0 : 0; };
+// Buffer after paying `cost` from Big Savings, and how far below the target that leaves it.
+function bufferImpact(balance, target, cost) {
+  const after = round2(balance - cost);
+  return { after: after, deficit: Math.max(0, round2(target - after)), intact: after >= target - 0.005 };
+}
+const restorePays = (deficit, perPay) => (perPay > 0 ? Math.ceil(deficit / perPay) : null);
+// Usual pay: the wages income's usual amount, else your latest logged wages.
+function payBasis() {
+  const src = ST.incomeSources.find((x) => x.wages && Number(x.amount) > 0);
+  if (src) return Number(src.amount);
+  const last = ST.income.filter(isWages).sort((a, b) => b.date.localeCompare(a.date))[0];
+  return last ? last.amount : 0;
+}
+const disposable = () => round2(payBasis() - commitmentsPerFortnight());
+const splitRemainder = (surplus, primary, secondary) => round2(surplus - primary - secondary);
+// A pace that reaches the goal in time (or in about 14 pays) while keeping at least half the surplus for Big Savings.
+function suggestSplit(surplus, cost, neededBy) {
+  if (!(surplus > 0) || !(cost > 0)) return null;
+  const pays = neededBy ? Math.max(1, paysBefore(neededBy)) : 14;
+  let amt = Math.ceil(cost / pays / 10) * 10;
+  const cap = Math.max(10, Math.floor((surplus * 0.5) / 10) * 10);
+  amt = Math.min(amt, cap, Math.ceil(cost));
+  const n = Math.ceil(cost / amt);
+  return { amount: amt, pays: n, weeks: n * 2, remainder: round2(surplus - amt) };
+}
+
+function renderBuffer() {
+  const a = bufferAccount(), target = bufferTarget(), bal = bufferBalance(), st = $("bufStatus");
+  $("bufAcct").textContent = a ? acctLabel(a) : "Balance";
+  $("bufBal").textContent = a ? money(bal) : "—";
+  $("bufTarget").textContent = target ? money(target) : "—";
+  if (!a || !target) { st.textContent = "Set up"; st.className = ""; }
+  else if (bal >= target) { st.textContent = "Buffer Intact"; st.className = "pos"; }
+  else { st.textContent = "Buffer Deficit " + money(target - bal); st.className = "neg"; }
+}
+function openBufferSetup() {
+  const f = $("bufferSetForm").elements, s = bufferSetting();
+  f.accountId.value = s.accountId || ""; f.target.value = s.target ?? "";
+  openSheet("bufferSetCard");
+}
+$("bufferCard").addEventListener("click", openBufferSetup);
+$("bufferSetForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const d = formData(e.target);
+  setDoc(doc(db, "users", uid, "settings", "buffer"), { accountId: d.accountId || "", target: Math.max(0, Number(d.target) || 0), updated: serverTimestamp() }, { merge: true })
+    .catch((err) => toast("Save failed: " + err.message));
+  closeSheets(false);
+});
+
+let ac = null, acWrap = null; // ac = { name, cost, kind, neededBy, tab, surplus, primary, secKey, secAmt }
+function openCompare() {
+  const f = $("affordForm").elements, cost = parseFloat(f.cost.value) || 0;
+  if (!(cost > 0)) { toast("Enter a total cost first."); return; }
+  const surplus = Math.max(0, disposable()), sug = suggestSplit(surplus, cost, f.neededBy.value);
+  ac = { name: f.name.value.trim() || "This item", cost: cost, kind: f.kind.value, neededBy: f.neededBy.value, tab: "a", surplus: surplus, primary: sug ? sug.amount : 0, secKey: "", secAmt: 0 };
+  acWrap = document.createElement("div");
+  acWrap.className = "overlay sheet";
+  acWrap.addEventListener("click", acClick);
+  acWrap.addEventListener("input", acInput);
+  acWrap.addEventListener("change", acChange);
+  document.body.appendChild(acWrap);
+  acRender();
+}
+function acClose() { if (acWrap) acWrap.remove(); acWrap = null; ac = null; }
+
+function acPathA() {
+  const a = bufferAccount(), target = bufferTarget();
+  if (!a) return '<div class="opt bad">Set your Big Savings account first.</div><button style="width:100%;margin-top:10px" data-ac-setup>Set up Big Savings</button>';
+  const bal = bufferBalance(), imp = bufferImpact(bal, target, ac.cost);
+  const msg = "If you pay " + money(ac.cost) + " upfront from " + esc(a.name) + " (" + money(bal) + "), your buffer will drop to " + money(imp.after) + ".";
+  if (imp.after < 0) return '<div class="opt bad"><div class="head">Buy now</div><div class="big bad">Not enough</div><div class="sub">' + msg + "</div></div>";
+  const pct = target > 0 ? Math.max(0, Math.min(100, (imp.after / target) * 100)) : 100;
+  const bar = '<div class="bar ' + (imp.intact ? "ok" : "bad") + '"><span style="width:' + pct.toFixed(0) + '%"></span></div>';
+  if (imp.intact) return '<div class="opt"><div class="head">Buy now</div><div class="big">Buffer stays intact</div>' + bar + '<div class="sub">' + msg + "</div></div>";
+  const pays = restorePays(imp.deficit, acSurplus()), restore = pays ? "At " + money(acSurplus()) + " surplus a pay it takes " + pays + (pays === 1 ? " pay" : " pays") + " (about " + pays * 2 + " weeks) to restore it." : "You have no surplus to restore it from right now.";
+  return '<div class="opt"><div class="head">Buy now</div><div class="big bad">Buffer deficit ' + money(imp.deficit) + "</div>" + bar +
+    '<div class="sub">' + msg + '</div><div class="msg bad">' + money(imp.deficit) + " below your " + money(target) + " target. " + restore + "</div></div>";
+}
+const acSurplus = () => Math.max(0, ac.surplus);
+function acSecOptions() {
+  const wish = wishOpen().map((w) => '<option value="w:' + w.id + '"' + (ac.secKey === "w:" + w.id ? " selected" : "") + ">" + esc(w.name) + "</option>");
+  const goals = ST.goals.map((g) => '<option value="g:' + g.id + '"' + (ac.secKey === "g:" + g.id ? " selected" : "") + ">" + esc(g.name) + "</option>");
+  return '<option value="">No second goal</option>' + wish.join("") + goals.join("");
+}
+function acPlanText() {
+  if (!(ac.primary > 0)) return "Put an amount toward " + esc(ac.name) + " to see when you'd reach it.";
+  const n = Math.ceil(ac.cost / ac.primary);
+  return money(ac.primary) + "/pay reaches " + money(ac.cost) + " in " + n + (n === 1 ? " pay" : " pays") + " (" + n * 2 + " weeks), ready by " + fmtLong(readyDate(n)) + ".";
+}
+function acSuggestHtml() {
+  const sg = suggestSplit(acSurplus(), ac.cost, ac.neededBy);
+  if (!sg) return "";
+  return '<div class="opt summary"><div class="head">Suggestion</div>Put ' + money(sg.amount) + "/fortnight toward " + esc(ac.name) + " and you'll reach it in " + sg.pays + " pays (" + sg.weeks +
+    " weeks) while still depositing " + money(sg.remainder) + ' into Big Savings every pay.<button class="small" style="margin-top:8px" data-ac-use>Use this</button></div>';
+}
+function acPathB() {
+  const basis = payBasis(), bills = commitmentsPerFortnight(), sur = acSurplus();
+  const tiles = '<div class="grid"><div class="stat"><small>Pay</small><b>' + (basis ? money(basis) : "—") + '</b></div><div class="stat"><small>Bills</small><b>' + money(bills) +
+    '</b></div><div class="stat"><small>Surplus</small><b class="' + (basis - bills >= 0 ? "pos" : "neg") + '">' + (basis ? money(basis - bills) : "—") + "</b></div></div>";
+  if (!(sur > 0)) return tiles + '<div class="opt bad">No surplus to split yet. Add your wages income and your bills.</div>';
+  const row = (label, key, val, extra) => '<div class="splitrow"><div class="rowtop"><label>' + label + '</label><input class="amtin" type="number" min="0" step="1" inputmode="decimal" data-ac-num="' + key +
+    '" value="' + val + '"' + (extra || "") + '></div><input type="range" min="0" max="' + sur + '" step="10" value="' + val + '" data-ac-range="' + key + '"' + (extra || "") + "></div>";
+  const rem = splitRemainder(sur, ac.primary, ac.secAmt);
+  return tiles + row("Toward " + esc(ac.name), "p", ac.primary) +
+    '<div class="splitrow"><label>Second goal<select data-ac-sec style="text-align:left">' + acSecOptions() + "</select></label></div>" +
+    row("Amount", "s", ac.secAmt, ac.secKey ? "" : " disabled") +
+    '<div class="opt"><div class="head">Into Big Savings</div><div class="big" id="acRem">' + money(rem) + '</div><div class="sub wrap" id="acPlan">' + acPlanText() + "</div></div>" + acSuggestHtml();
+}
+function acRender() {
+  const tabs = [["a", "Buy now"], ["b", "Save over time"]].map((t) => '<button data-ac-tab="' + t[0] + '"' + (ac.tab === t[0] ? ' class="on"' : "") + ">" + t[1] + "</button>").join("");
+  acWrap.innerHTML = '<div class="card"><h3>Can I afford ' + esc(ac.name) + '?</h3><div class="lede">' + money(ac.cost) + " · " + (ac.kind === "need" ? "Need" : "Want") + '</div><div class="toggle">' + tabs + "</div>" +
+    '<div class="sec">' + (ac.tab === "a" ? acPathA() : acPathB()) + '</div><div class="actions"><button class="plain" data-ac-close>Close</button>' +
+    (ac.tab === "b" ? "<button data-ac-save>Save plan</button>" : "") + "</div></div>";
+}
+// Keeps primary + second goal within the surplus; the remainder always goes to Big Savings.
+function acInput(e) {
+  const k = e.target.dataset.acNum || e.target.dataset.acRange;
+  if (!k) return;
+  const v = Math.max(0, parseFloat(e.target.value) || 0);
+  if (k === "p") { ac.primary = Math.min(v, acSurplus()); ac.secAmt = Math.min(ac.secAmt, acSurplus() - ac.primary); }
+  else ac.secAmt = Math.min(v, acSurplus() - ac.primary);
+  acWrap.querySelectorAll('[data-ac-num="p"],[data-ac-range="p"]').forEach((el) => { if (el !== e.target) el.value = ac.primary; });
+  acWrap.querySelectorAll('[data-ac-num="s"],[data-ac-range="s"]').forEach((el) => { if (el !== e.target) el.value = ac.secAmt; });
+  $("acRem").textContent = money(splitRemainder(acSurplus(), ac.primary, ac.secAmt));
+  $("acPlan").textContent = acPlanText();
+}
+function acChange(e) {
+  if (e.target.dataset.acSec === undefined) return;
+  ac.secKey = e.target.value; if (!ac.secKey) ac.secAmt = 0; acRender();
+}
+function acSave() {
+  if (!(ac.primary > 0)) { toast("Put an amount toward the item first."); return; }
+  const batch = writeBatch(db), ref = doc(col("wishlist")), top = ST.wishlist.reduce((m, w) => Math.max(m, w.order ?? -1), -1);
+  batch.set(ref, { name: ac.name, cost: ac.cost, kind: ac.kind, perPay: round2(ac.primary), saved: 0, neededBy: ac.neededBy || "", order: top + 1, created: serverTimestamp() });
+  if (ac.secKey.startsWith("w:") && ac.secAmt > 0) batch.update(doc(db, "users", uid, "wishlist", ac.secKey.slice(2)), { perPay: round2(ac.secAmt) });
+  batch.set(doc(db, "users", uid, "settings", "split"), { primaryId: ref.id, secKey: ac.secKey, secAmt: round2(ac.secAmt), updated: serverTimestamp() }, { merge: true });
+  batch.commit().catch((err) => toast("Save failed: " + err.message));
+  acClose(); $("affordForm").reset();
+  toast("Saved to your wishlist with this split.");
+}
+function acClick(e) {
+  const d = e.target.dataset;
+  if (e.target === acWrap || d.acClose !== undefined) { acClose(); return; }
+  if (d.acTab) { ac.tab = d.acTab; acRender(); }
+  else if (d.acUse !== undefined) { const sg = suggestSplit(acSurplus(), ac.cost, ac.neededBy); if (sg) { ac.primary = sg.amount; ac.secAmt = Math.min(ac.secAmt, acSurplus() - ac.primary); acRender(); } }
+  else if (d.acSave !== undefined) acSave();
+  else if (d.acSetup !== undefined) { acClose(); openBufferSetup(); }
+}
+$("compareBtn").addEventListener("click", openCompare);
 
 /* =========================================================
    7. AUTH
