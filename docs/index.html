@@ -314,6 +314,8 @@ input[type=file]{padding:9px 12px}
         <label class="full">Paid into<select name="accountId" class="acctSel"></select></label>
         <label class="full">Property (if this is rent)<select name="propertyId" id="srcProp"></select></label>
         <label class="check full"><input type="checkbox" name="wages"> This is my wages</label>
+        <label class="check full"><input type="checkbox" name="recurring"> Recurring (same amount every time)</label>
+        <label class="full hidden" id="srcDateWrap">Next date<input type="date" name="nextApply"></label>
         <button class="full" type="submit" id="srcSubmit">Save source</button>
       </form>
     </div>
@@ -1723,8 +1725,11 @@ $("srcForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const d = formData(e.target);
   d.accountId = d.accountId || ""; d.wages = !!d.wages; d.propertyId = d.wages ? "" : (d.propertyId || "");
+  d.recurring = !!d.recurring;
+  if (d.recurring && !d.nextApply) { toast("Pick the next date for this recurring income."); return; }
+  if (!d.recurring) d.nextApply = "";
   save("incomeSources", editing.incomeSources, d);
-  editing.incomeSources = null; e.target.reset();
+  editing.incomeSources = null; e.target.reset(); syncSrcForm();
   $("srcSubmit").textContent = "Save source";
   $("srcFormTitle").textContent = "Add income source";
   closeSheets(false);
@@ -1733,6 +1738,7 @@ function startEditSrc(s) {
   const f = $("srcForm").elements;
   ["name", "amount", "frequency"].forEach((k) => { f[k].value = s[k] ?? ""; });
   f.accountId.value = s.accountId || ""; f.wages.checked = !!s.wages; f.propertyId.value = s.propertyId || "";
+  f.recurring.checked = !!s.recurring; f.nextApply.value = s.nextApply || ""; syncSrcForm();
   editing.incomeSources = s.id;
   $("srcSubmit").textContent = "Update";
   $("srcFormTitle").textContent = "Editing " + s.name;
@@ -1942,7 +1948,7 @@ function resetAddForms() {
   resetForm($("incomeForm"), "income"); resetForm($("expenseForm"), "expenses");
   editing.subscriptions = null; $("subForm").reset(); $("subForm").dueDate.value = today();
   $("subForm").querySelector("button[type=submit]").textContent = "Save"; $("subFormTitle").textContent = "Add subscription, bill or purchase";
-  editing.incomeSources = null; $("srcForm").reset();
+  editing.incomeSources = null; $("srcForm").reset(); syncSrcForm();
   $("srcSubmit").textContent = "Save source"; $("srcFormTitle").textContent = "Add income source";
   editing.goals = null; $("goalForm").reset(); $("goalSubmit").textContent = "Add goal"; $("goalFormTitle").textContent = "New goal";
   editing.transfers = null; $("transferForm").reset(); $("transferForm").date.value = today();
@@ -2123,6 +2129,7 @@ async function applyDue() {
         if (x.nextApply && x.nextApply <= today() && !x.manual && (linkedFrom(coll, x) || linkedTo(coll, x))) await applySpec(coll, x, "due");
       }
     }
+    await applyIncomeDue();
   } catch (e) { console.warn("Couldn't update balances yet:", e.message); }
   applying = false;
 }
@@ -2264,6 +2271,13 @@ document.addEventListener("click", (e) => {
    ========================================================= */
 let quickSig = "";
 function quickBlock(x) {
+  if (x.recurring) {
+    const into = x.accountId ? " · → " + esc(acctName(x.accountId)) : "";
+    return '<div class="srcblock"><div class="bankhead"><b>' + esc(x.name) + '</b><span class="amt">' + money(x.amount) + '</span></div><div class="note">Recurring · ' + cap(x.frequency) +
+      (x.nextApply ? " · next " + fmtDate(x.nextApply) : "") + into + '</div>' +
+      '<div class="bankbtns"><button class="ghost" data-edit-src="' + x.id + '">Edit</button><button class="ghost" data-del="incomeSources:' + x.id + '">Remove</button></div>' +
+      '<details class="past"><summary>Past income</summary><div class="note" data-past-sum="' + x.id + '"></div><ul class="list" data-past-list="' + x.id + '"></ul></details></div>';
+  }
   const into = x.accountId ? "→ " + esc(acctName(x.accountId)) : "no account yet", cov = x.frequency === "monthly" ? "month" : "fortnight";
   const covers = x.wages ? "" :
     '<label class="full">This payment is for<select data-q-cov="' + x.id + '"><option value="fortnight"' + (cov === "fortnight" ? " selected" : "") + '>A fortnight</option>' +
@@ -2278,7 +2292,7 @@ function quickBlock(x) {
 }
 // Rebuilt only when the sources change, so snapshots never wipe an amount you are typing.
 function renderQuickIncome() {
-  const sig = JSON.stringify(ST.incomeSources.map((x) => [x.id, x.name, x.amount, x.frequency, x.accountId, x.wages])) + ST.accounts.map((a) => a.id + a.name + a.bank).join();
+  const sig = JSON.stringify(ST.incomeSources.map((x) => [x.id, x.name, x.amount, x.frequency, x.accountId, x.wages, x.recurring, x.nextApply])) + ST.accounts.map((a) => a.id + a.name + a.bank).join();
   if (sig !== quickSig) {
     quickSig = sig;
     $("quickList").innerHTML = ST.incomeSources.length ? ST.incomeSources.map(quickBlock).join("")
@@ -2468,6 +2482,47 @@ $("setupBtn").addEventListener("click", () => {
   showInlineConfirm("Add " + plan.banks.length + " banks, " + plan.accounts.length + " new accounts" + (names ? " (" + names + ")" : "") + " and " +
     plan.transfers.length + " payday transfers? Accounts you already have are reused. Only do this once.", () => runSetup(plan), "Import");
 });
+
+/* =========================================================
+   6n. RECURRING INCOME — fixed incomes add themselves on their date
+   ========================================================= */
+function syncSrcForm() {
+  const on = $("srcForm").elements.recurring.checked;
+  $("srcDateWrap").classList.toggle("hidden", !on);
+  $("srcForm").elements.nextApply.required = on;
+}
+$("srcForm").elements.recurring.addEventListener("change", syncSrcForm);
+// Each due date is added once: the transaction re-checks `nextApply`, so two devices can't both add it.
+async function applyIncomeSource(x) {
+  const ref = doc(db, "users", uid, "incomeSources", x.id), added = [];
+  await runTransaction(db, async (tx) => {
+    added.length = 0;
+    const snap = await tx.get(ref);
+    if (!snap.exists()) return;
+    const cur = snap.data();
+    if (!cur.recurring || cur.nextApply !== x.nextApply) return;
+    let n = cur.nextApply;
+    const dates = [];
+    for (let g = 0; n && n <= today() && g < 400; g++) { dates.push(n); n = addCycle(n, cur.frequency); }
+    if (!dates.length) return;
+    let bal = null;
+    const accRef = cur.accountId ? doc(db, "users", uid, "accounts", cur.accountId) : null;
+    if (accRef) { const a = await tx.get(accRef); if (a.exists()) bal = Number(a.data().balance) || 0; }
+    const amt = Number(cur.amount) || 0;
+    dates.forEach((date) => {
+      const e = { date: date, amount: round2(amt), source: cur.name, sourceId: x.id, note: "", accountId: cur.accountId || "", wages: !!cur.wages, auto: true, created: serverTimestamp() };
+      if (!cur.wages) { e.covers = cur.frequency === "monthly" ? "month" : "fortnight"; if (e.covers === "month") e.coversMonth = date.slice(0, 7); }
+      tx.set(doc(col("income")), e);
+    });
+    if (bal !== null) tx.update(accRef, { balance: round2(bal + amt * dates.length) });
+    tx.update(ref, { nextApply: n });
+    dates.forEach((d) => added.push(d));
+  });
+  if (x.wages) added.forEach((date) => runPaydayTransfers(date));
+}
+async function applyIncomeDue() {
+  for (const x of ST.incomeSources) if (x.recurring && x.nextApply && x.nextApply <= today()) await applyIncomeSource(x);
+}
 
 /* =========================================================
    7. AUTH
