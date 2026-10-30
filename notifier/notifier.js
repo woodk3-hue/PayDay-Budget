@@ -94,17 +94,40 @@ async function dailyCheck() {
   }
 }
 
+// Expenses with a reminder set: the next due date is worked out from the date + frequency (the expense itself is never changed).
+async function expenseCheck() {
+  const today = todayStr();
+  const snap = await db.collectionGroup("expenses").get();
+  for (const docSnap of snap.docs) {
+    const e = docSnap.data(), uid = docSnap.ref.parent.parent.id;
+    if (e.remindDays === null || e.remindDays === undefined || !e.date) continue;
+    let due = e.date;
+    if (e.frequency && e.frequency !== "once") for (let i = 0; due < today && i < 500; i++) due = addCycle(due, e.frequency);
+    const left = daysBetween(today, due);
+    if ((left === Number(e.remindDays) || left === 0) && e.lastNotified !== today) {
+      const when = left === 0 ? "today" : left === 1 ? "tomorrow" : "in " + left + " days";
+      const sent = await sendToUser(uid, {
+        title: e.description + " is due " + when,
+        body: money(e.amount) + (e.frequency && e.frequency !== "once" ? " · " + e.frequency : "") + " · due " + due,
+        tag: docSnap.id, url: APP_URL
+      });
+      await docSnap.ref.update({ lastNotified: today });
+      console.log("Alert:", e.description, when, "→", sent, "device(s)");
+    }
+  }
+}
+
 // ---- entry ----
 if (arg === "--test") {
   const users = await db.collection("users").listDocuments();
   for (const u of users) console.log(u.id, "→", await sendToUser(u.id, { title: "PayDay Budget", body: "Test alert from your OptiPlex ✅", tag: "test", url: APP_URL }), "device(s)");
   process.exit(0);
 } else if (arg === "--now") {
-  await dailyCheck(); process.exit(0);
+  await dailyCheck(); await expenseCheck(); process.exit(0);
 } else {
   const [h, m] = REMIND_TIME.split(":").map(Number);
-  cron.schedule(m + " " + h + " * * *", () => dailyCheck().catch((e) => console.error(e)), { timezone: TZ });
+  cron.schedule(m + " " + h + " * * *", () => dailyCheck().then(expenseCheck).catch((e) => console.error(e)), { timezone: TZ });
   console.log("Notifier running. Daily check at", REMIND_TIME, TZ);
   startFiling(db);
-  dailyCheck().catch((e) => console.error(e)); // catch up on start (safe: never double-alerts the same day)
+  dailyCheck().then(expenseCheck).catch((e) => console.error(e)); // catch up on start (safe: never double-alerts the same day)
 }
