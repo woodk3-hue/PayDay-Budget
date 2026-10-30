@@ -286,13 +286,9 @@ input[type=file]{padding:9px 12px}
       <p class="note" id="periodNote"></p>
       <button class="full" id="allotBtn" style="width:100%;margin-top:10px">Allot left over</button>
     </div>
-    <div class="card" id="homeProperty" role="button" tabindex="0" style="cursor:pointer">
-      <h2>Property · this fortnight</h2>
-      <div class="grid">
-        <div class="stat"><small>Rent received</small><b id="hpIn">$0</b></div>
-        <div class="stat"><small>Costs</small><b id="hpCost">$0</b></div>
-        <div class="stat"><small>Net</small><b id="hpNet">$0</b></div>
-      </div>
+    <div class="card hidden" id="homeGoals" role="button" tabindex="0" style="cursor:pointer">
+      <h2>Wishlist & goals</h2>
+      <ul class="list" id="homeGoalList"></ul>
     </div>
     <div class="card hidden" id="manualCard"><h2>Bills you pay yourself</h2><ul class="list" id="manualList"></ul></div>
     <div class="card">
@@ -856,7 +852,7 @@ function startSync() {
    5. RENDER
    ========================================================= */
 function render() {
-  renderHome(); renderIncome(); renderGroups(); renderSavings(); renderSubs(); renderProperty(); renderBuffer(); renderAdvice(); renderWishlist(); renderCashflow(); renderQuickIncome();
+  renderHome(); renderIncome(); renderGroups(); renderSavings(); renderSubs(); renderProperty(); renderBuffer(); renderAdvice(); renderHomeGoals(); renderWishlist(); renderCashflow(); renderQuickIncome();
   if (currentView === "stats") renderStats();
   renderAccountSelects(); renderAccounts(); renderPaydaySetting(); scheduleApply();
 }
@@ -1295,8 +1291,8 @@ function flowRow(label, rent, costs) {
 }
 function renderPropertyFlows() {
   const rent = rentEntries().reduce((t, i) => t + i.amount, 0), costs = PROP_IDS.reduce((t, id) => t + propCosts(id), 0), net = rent - costs;
-  [["ptIn", rent], ["ptCost", costs], ["ptNet", net], ["hpIn", rent], ["hpCost", costs], ["hpNet", net]].forEach((x) => { $(x[0]).textContent = money(x[1]); });
-  ["ptNet", "hpNet"].forEach((id) => { $(id).className = net >= 0 ? "pos" : "neg"; });
+  [["ptIn", rent], ["ptCost", costs], ["ptNet", net]].forEach((x) => { $(x[0]).textContent = money(x[1]); });
+  $("ptNet").className = net >= 0 ? "pos" : "neg";
   const loose = rentFortnight("");
   $("propFlowList").innerHTML = PROP_IDS.map((id) => flowRow(propName(id), rentFortnight(id), propCosts(id))).join("") +
     (loose > 0.005 ? flowRow("Rent not assigned to a property", loose, 0) : "");
@@ -2140,7 +2136,7 @@ function renderAccounts() {
   $("manualList").innerHTML = due.map(manualRow).join("");
 }
 $("homeAccounts").addEventListener("click", () => showView("accounts"));
-$("homeProperty").addEventListener("click", () => showView("property"));
+$("homeGoals").addEventListener("click", () => showView("savings"));
 $("acctForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const d = formData(e.target), bank = ST.banks.find((b) => b.id === d.bankId);
@@ -2899,6 +2895,31 @@ function smClick(e) {
   else if (d.smApply !== undefined) smApply();
 }
 $("smartBtn").addEventListener("click", () => openSmart());
+
+/* =========================================================
+   6s. HOME GOALS PANEL — the top 3: deadline goals falling behind first, then wishlist by priority, then goal pots
+   ========================================================= */
+function homeGoalItems() {
+  const rows = [];
+  wishOpen().forEach((w) => rows.push({ name: w.name, saved: w.saved || 0, target: w.cost, deadline: w.neededBy || "", perPay: Number(w.perPay) || 0, remaining: wishLeft(w), group: 1 }));
+  ST.goals.forEach((g) => {
+    const bal = goalBalance(g), rem = Math.max(0, (g.target || 0) - bal);
+    if (rem > 0.005) rows.push({ name: g.name, saved: bal, target: g.target || 0, deadline: g.targetDate || "", perPay: 0, remaining: rem, group: 2 });
+  });
+  rows.forEach((r, i) => { const dl = deadlineInfo(r); r.behind = !!(dl && dl.behind); r.i = i; });
+  return rows.sort((a, b) => Number(b.behind) - Number(a.behind) || (a.behind && b.behind ? a.deadline.localeCompare(b.deadline) : 0) || a.group - b.group || a.i - b.i);
+}
+function homeGoalRow(r) {
+  const pct = r.target ? Math.max(0, Math.min(100, (r.saved / r.target) * 100)) : 0;
+  const sub = money(r.saved) + " of " + money(r.target) + (r.deadline ? " · by " + fmtDate(r.deadline) : "");
+  return '<li><div class="main"><div>' + esc(r.name) + '</div><div class="sub wrap">' + sub + (r.behind ? ' <span class="warn">Behind</span>' : "") +
+    '</div><div class="bar"><span style="width:' + pct.toFixed(0) + '%"></span></div></div></li>';
+}
+function renderHomeGoals() {
+  const rows = homeGoalItems().slice(0, 3);
+  $("homeGoals").classList.toggle("hidden", !rows.length);
+  $("homeGoalList").innerHTML = rows.map(homeGoalRow).join("");
+}
 
 /* =========================================================
    7. AUTH
