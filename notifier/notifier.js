@@ -24,7 +24,7 @@ if (arg === "--keys") {
 }
 
 const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_CONTACT = "mailto:you@example.com",
-        REMIND_TIME = "08:00", APP_URL = "./#subs" } = process.env;
+        REMIND_TIME = "08:00", APP_URL = "./" } = process.env;
 if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) throw new Error("Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY in .env");
 webpush.setVapidDetails(VAPID_CONTACT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 

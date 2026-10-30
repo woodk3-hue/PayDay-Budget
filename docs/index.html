@@ -134,7 +134,7 @@ header button.ghost{min-height:32px;font-size:17px}
 
 /* Floating glass tab bar */
 nav{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(10px + env(safe-area-inset-bottom));
-  width:min(560px,calc(100% - 24px));display:flex;padding:5px;border-radius:32px;z-index:10;--i:0;--n:6;
+  width:min(560px,calc(100% - 24px));display:flex;padding:5px;border-radius:32px;z-index:10;--i:0;--n:5;
   background:var(--glass);-webkit-backdrop-filter:blur(30px) saturate(2);backdrop-filter:blur(30px) saturate(2);
   box-shadow:0 12px 36px rgba(20,30,80,.22),inset 0 1px 0 var(--edge),inset 0 0 0 .5px var(--line)}
 nav::before{content:"";position:absolute;top:5px;bottom:5px;left:5px;width:calc((100% - 10px)/var(--n));border-radius:26px;
@@ -363,22 +363,6 @@ input[type=file]{padding:9px 12px}
     <div class="card"><h2>Recent moves</h2><ul class="list" id="transferList"></ul></div>
   </section>
 
-  <!-- SUBSCRIPTIONS & PURCHASES -->
-  <section id="view-subs" class="view hidden">
-    <div class="card alerts">
-      <p id="alertsText">Get a phone alert before things renew.</p>
-      <button id="alertsBtn">Turn on alerts</button>
-    </div>
-    <div class="card">
-      <h2>All subscriptions & purchases</h2>
-      <div class="grid" style="margin-bottom:8px">
-        <div class="stat"><small>Recurring per fortnight</small><b id="subsFn">$0</b></div>
-        <div class="stat"><small>Recurring per year</small><b id="subsYr">$0</b></div>
-      </div>
-      <ul class="list" id="subList"></ul>
-    </div>
-  </section>
-
   <!-- PROPERTY & BILLS -->
   <section id="view-property" class="view hidden">
     <div class="card">
@@ -449,6 +433,10 @@ input[type=file]{padding:9px 12px}
     </div>
     <div class="card"><h2>Spending by category</h2><ul class="list" id="statsCats"></ul></div>
     <div class="card"><h2>Income by source</h2><ul class="list" id="statsSources"></ul></div>
+    <div class="card alerts">
+      <p id="alertsText">Get a phone alert before things renew.</p>
+      <button id="alertsBtn">Turn on alerts</button>
+    </div>
   </section>
 
   <!-- ACCOUNTS -->
@@ -681,7 +669,6 @@ input[type=file]{padding:9px 12px}
   <button data-v="income" aria-label="Income"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v9M8.5 13l3.5 3.5 3.5-3.5"/></svg><span>Income</span></button>
   <button data-v="expenses" aria-label="Expenses"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M2.5 10h19M6 15h4"/></svg><span>Expenses</span></button>
   <button data-v="savings" aria-label="Goals"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 8.2a4.3 4.3 0 0 1 7.5 2.6C19.5 16.4 12 21 12 21z"/></svg><span>Goals</span></button>
-  <button data-v="subs" aria-label="Subs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4.5h-4.5"/><path d="M12 8v4.2l2.6 1.6"/></svg><span>Subs</span></button>
   <button data-v="property" aria-label="Property"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V9l8-5 8 5v12"/><path d="M9 21v-6h6v6M2.5 21h19"/></svg><span>Property</span></button>
 </nav>
 
@@ -878,24 +865,12 @@ function dueBadge(next, remindDays) {
   const txt = n < 0 ? "Overdue" : n === 0 ? "Today" : n === 1 ? "Tomorrow" : "In " + n + " days";
   return '<span class="badge' + (n <= (remindDays ?? 3) ? " soon" : "") + '">' + txt + "</span>";
 }
-function subRow(s) {
-  const freq = s.frequency === "once" ? "One-off" : s.frequency.charAt(0).toUpperCase() + s.frequency.slice(1);
-  return '<li><div class="main"><div>' + esc(s.name) + '</div><div class="sub">' + freq + " · " +
-    (s.next ? fmtDate(s.next) + " " : "") + dueBadge(s.next, s.remindDays) + '</div></div>' +
-    '<span class="amt">' + money(s.amount) + '</span>' +
-    '<button class="ghost" data-edit-sub="' + s.id + '">Edit</button>' +
-    '<button class="ghost" data-del="subscriptions:' + s.id + '">✕</button></li>';
-}
 function upcomingRow(s) {
   return '<li><div class="main"><div>' + esc(s.name) + '</div><div class="sub">' + fmtDate(s.next) + '</div></div>' +
     dueBadge(s.next, s.remindDays) + '<span class="amt">' + money(s.amount) + '</span></li>';
 }
 function renderSubs() {
   const rows = subsSorted();
-  const fn = rows.reduce((t, s) => t + s.amount * (FREQ_PER_FORTNIGHT[s.frequency] || 0), 0);
-  $("subsFn").textContent = money(fn);
-  $("subsYr").textContent = money(fn * 26);
-  $("subList").innerHTML = rows.length ? rows.map(subRow).join("") : '<li class="empty">Nothing added yet.</li>';
   const soon = rows.filter((s) => daysUntil(s.next) >= 0 && daysUntil(s.next) <= 14);
   $("upcomingList").innerHTML = soon.length ? soon.map(upcomingRow).join("") : '<li class="empty">Nothing due in the next 14 days.</li>';
 }
@@ -1203,7 +1178,7 @@ $("alertsBtn").addEventListener("click", async () => {
   refreshAlertsButton();
 });
 
-const TITLES = { home: "PayDay Budget", income: "Income", expenses: "Expenses", savings: "Goals", subs: "Subscriptions", property: "Property & Bills" };
+const TITLES = { home: "PayDay Budget", income: "Income", expenses: "Expenses", savings: "Goals", property: "Property & Bills" };
 TITLES.stats = "Stats"; TITLES.accounts = "Accounts";
 let currentView = "home";
 function showView(v) {
@@ -1892,7 +1867,6 @@ const ADD_FORMS = {
   income: [["incomeCard", "Add income"], ["srcCard", "Add income source"]],
   expenses: [["expenseCard", "Add expense"]],
   savings: [["transferCard", "Move money"], ["goalCard", "New goal"], ["bufferSetCard", "Big Savings setup"]],
-  subs: [["subCard", "Add subscription, bill or purchase"]],
   property: [["billCard", "Add a bill or receipt"]]
 };
 let sheetBack = null;
@@ -3020,7 +2994,6 @@ onAuthStateChanged(auth, (user) => {
   if (!user) { document.querySelectorAll(".view").forEach((s) => s.classList.add("hidden")); return; }
   document.querySelectorAll("form input[type=date]:not([data-blank])").forEach((i) => (i.value = today()));
   startSync();
-  if (location.hash === "#subs") document.querySelector('nav [data-v="subs"]').click();
 });
 
 /* =========================================================
