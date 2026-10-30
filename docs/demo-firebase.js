@@ -21,7 +21,7 @@ const store = {
   ],
   goals: [
     { id: "g1", name: "Emergency fund", target: 10000, opening: 4200 },
-    { id: "g2", name: "Holidays", target: 5000, opening: 1800, targetDate: day(400) },
+    { id: "g2", name: "Holidays", target: 5000, opening: 1800, targetDate: day(42) },
     { id: "g3", name: "Tech", target: 4000, opening: 900 },
     { id: "g4", name: "Gear", target: 2000, opening: 300 }
   ],

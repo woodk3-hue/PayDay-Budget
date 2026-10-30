@@ -154,6 +154,9 @@ input[type=range]{appearance:auto;-webkit-appearance:auto;padding:0;min-height:3
 .splitrow{margin-top:12px}
 .splitrow .rowtop{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .splitrow .rowtop label{flex:1}
+.advice{padding:12px 14px;border-radius:14px;background:var(--brand-soft);font-size:15px;line-height:1.35}
+.advice+.advice{margin-top:8px}
+.advice.warn{background:rgba(255,149,0,.18)}
 button.small{min-height:44px;padding:0 16px;font-size:15px;flex:none}
 .bankhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
 .bankhead b{font-size:19px}
@@ -330,13 +333,20 @@ input[type=file]{padding:9px 12px}
         <div class="stat"><small>Status</small><b id="bufStatus" style="font-size:17px">—</b></div>
       </div>
     </div>
+    <div class="card hidden" id="adviceCard">
+      <h2>Smart advice</h2>
+      <div id="adviceText"></div>
+      <button class="full" id="smartBtn" style="width:100%;margin-top:10px">Smart split</button>
+    </div>
     <div class="card">
       <h2>Can I afford it?</h2>
       <form id="affordForm">
         <label class="full">Item<input name="name" placeholder="e.g. MacBook Pro"></label>
         <label>Total cost<input type="number" name="cost" step="0.01" min="0" inputmode="decimal"></label>
         <label>Is it a<select name="kind"><option value="want">Want</option><option value="need">Need</option></select></label>
-        <label class="full">Needed by (optional)<input type="date" name="neededBy" data-blank></label>
+        <label>Priority rank<input type="number" name="rank" min="1" step="1" inputmode="numeric" placeholder="1 = top"></label>
+        <label>Saved so far<input type="number" name="saved" min="0" step="0.01" inputmode="decimal"></label>
+        <label class="full">Target deadline (optional)<input type="date" name="neededBy" data-blank></label>
         <button type="button" class="full" id="compareBtn">Compare paths</button>
       </form>
     </div>
@@ -846,7 +856,7 @@ function startSync() {
    5. RENDER
    ========================================================= */
 function render() {
-  renderHome(); renderIncome(); renderGroups(); renderSavings(); renderSubs(); renderProperty(); renderBuffer(); renderWishlist(); renderCashflow(); renderQuickIncome();
+  renderHome(); renderIncome(); renderGroups(); renderSavings(); renderSubs(); renderProperty(); renderBuffer(); renderAdvice(); renderWishlist(); renderCashflow(); renderQuickIncome();
   if (currentView === "stats") renderStats();
   renderAccountSelects(); renderAccounts(); renderPaydaySetting(); scheduleApply();
 }
@@ -1582,7 +1592,10 @@ function moveWish(id, dir) {
 }
 function wishPlanLine(w, left) {
   const plan = datePlan(left, w.neededBy);
-  return plan ? '<div class="sub wrap">' + planHtml(plan, w.neededBy) + "</div>" : "";
+  if (!plan) return "";
+  const info = deadlineInfo({ remaining: left, deadline: w.neededBy, perPay: Number(w.perPay) || 0 });
+  const flag = info && info.behind && !info.late ? ' <span class="warn">Behind: needs ' + money(info.required) + "/fortnight</span>" : "";
+  return '<div class="sub wrap">' + planHtml(plan, w.neededBy) + flag + "</div>";
 }
 function wishRow(w, pos, n) {
   const left = Math.max(0, w.cost - w.saved), done = left <= 0.005;
@@ -1601,23 +1614,34 @@ function renderWishlist() {
   $("wishList").innerHTML = rows.length ? rows.map((w) => wishRow(w, open.indexOf(w), open.length)).join("") : '<li class="empty">Nothing on your wishlist yet.</li>';
 }
 function showWishEdit(w) {
-  const wrap = document.createElement("div");
+  const wrap = document.createElement("div"), open = wishOpen(), rank = open.findIndex((x) => x.id === w.id) + 1;
   wrap.className = "overlay sheet";
-  const num = (id, label, v, step) => '<label class="sec">' + label + '<input id="' + id + '" type="number" min="0" step="' + step + '" inputmode="decimal" value="' + v + '"></label>';
+  const num = (id, label, v, step, min) => '<label class="sec">' + label + '<input id="' + id + '" type="number" min="' + (min ?? 0) + '" step="' + step + '" inputmode="decimal" value="' + v + '"></label>';
   wrap.innerHTML = '<div class="card"><h3>Edit wishlist item</h3><label class="sec">Name<input id="weName" style="text-align:left" value="' + esc(w.name) + '"></label>' +
-    num("weCost", "Total cost", w.cost, "0.01") + num("wePerPay", "Save per fortnight", w.perPay, "0.01") + num("weSaved", "Saved so far", w.saved || 0, "0.01") +
-    '<label class="sec">Needed by (optional)<input id="weDate" type="date" value="' + esc(w.neededBy || "") + '"></label>' +
+    (rank ? num("weRank", "Priority rank (1 = top)", rank, "1", 1) : "") +
+    num("weCost", "Target cost", w.cost, "0.01") + num("wePerPay", "Save per fortnight", w.perPay, "0.01") + num("weSaved", "Saved so far", w.saved || 0, "0.01") +
+    '<label class="sec">Target deadline (optional)<input id="weDate" type="date" value="' + esc(w.neededBy || "") + '"></label>' +
     '<div class="actions"><button class="plain" data-a="no">Cancel</button><button data-a="yes">Save</button></div></div>';
   wrap.addEventListener("click", (e) => {
     const a = e.target.dataset.a;
     if (a === "yes") {
       const name = $("weName").value.trim(), cost = parseFloat($("weCost").value), perPay = parseFloat($("wePerPay").value), saved = parseFloat($("weSaved").value) || 0;
       if (!name || !(cost > 0) || !(perPay > 0)) { toast("Enter a name, a cost and a fortnightly amount."); return; }
-      save("wishlist", w.id, { name: name, cost: round2(cost), perPay: round2(perPay), saved: round2(saved), neededBy: $("weDate").value });
+      const batch = writeBatch(db), fields = { name: name, cost: round2(cost), perPay: round2(perPay), saved: round2(saved), neededBy: $("weDate").value };
+      if (rank) { const orders = rankOrders(w.id, parseInt($("weRank").value, 10) || rank); Object.keys(orders).forEach((id) => { if (id === w.id) fields.order = orders[id]; else batch.update(doc(db, "users", uid, "wishlist", id), { order: orders[id] }); }); }
+      batch.update(doc(db, "users", uid, "wishlist", w.id), fields);
+      batch.commit().catch((err) => toast("Save failed: " + err.message));
     }
     if (a || e.target === wrap) wrap.remove();
   });
   document.body.appendChild(wrap);
+}
+// New priority order when `id` is put at `rank` (1 = top); everyone else keeps their relative order.
+function rankOrders(id, rank) {
+  const ids = wishOpen().map((w) => w.id).filter((x) => x !== id), at = rank > 0 ? Math.min(rank - 1, ids.length) : ids.length, out = {};
+  ids.splice(at, 0, id);
+  ids.forEach((x, n) => { out[x] = n * 10; });
+  return out;
 }
 function showAmountPrompt(title, value, onSave) {
   const wrap = document.createElement("div");
@@ -1757,7 +1781,7 @@ function spSplitHtml() {
     '<ul class="list" style="margin-top:6px">' + targets.map(spSplitRow).join("") + '</ul><div class="opt" id="spTotal"></div></div>';
 }
 function spRender() {
-  const modes = [["top", "Top goal"], ["split", "Split"], ["keep", "Keep"]].map((m) =>
+  const modes = [["top", "Top goal"], ["split", "Split"], ["smart", "Smart"], ["keep", "Keep"]].map((m) =>
     '<button data-sp-mode="' + m[0] + '"' + (sp.mode === m[0] ? ' class="on"' : "") + ">" + m[1] + "</button>").join("");
   const body = sp.mode === "top" ? spTopHtml() : sp.mode === "split" ? spSplitHtml()
     : '<div class="sec lede">Leave the full ' + money(sp.pay) + " in your everyday account. Nothing changes.</div>";
@@ -1825,7 +1849,8 @@ function spApply() {
 function spClick(e) {
   const d = e.target.dataset;
   if (e.target === spWrap || d.spKeep !== undefined) { spClose(); return; }
-  if (d.spMode) { sp.mode = d.spMode; spRender(); }
+  if (d.spMode === "smart") { const amt = sp.surplus; spClose(); openSmart(amt); }
+  else if (d.spMode) { sp.mode = d.spMode; spRender(); }
   else if (d.spPct) { sp.pct = Number(d.spPct); spRender(); }
   else if (d.spEven) {
     if (d.spEven === "clear") sp.amounts = {};
@@ -2666,7 +2691,7 @@ function openCompare() {
   const f = $("affordForm").elements, cost = parseFloat(f.cost.value) || 0;
   if (!(cost > 0)) { toast("Enter a total cost first."); return; }
   const surplus = Math.max(0, disposable()), sug = suggestSplit(surplus, cost, f.neededBy.value);
-  ac = { name: f.name.value.trim() || "This item", cost: cost, kind: f.kind.value, neededBy: f.neededBy.value, tab: "a", surplus: surplus, primary: sug ? sug.amount : 0, secKey: "", secAmt: 0 };
+  ac = { name: f.name.value.trim() || "This item", cost: cost, kind: f.kind.value, neededBy: f.neededBy.value, rank: parseInt(f.rank.value, 10) || 0, saved: Math.max(0, parseFloat(f.saved.value) || 0), tab: "a", surplus: surplus, primary: sug ? sug.amount : 0, secKey: "", secAmt: 0 };
   acWrap = document.createElement("div");
   acWrap.className = "overlay sheet";
   acWrap.addEventListener("click", acClick);
@@ -2744,8 +2769,9 @@ function acChange(e) {
 }
 function acSave() {
   if (!(ac.primary > 0)) { toast("Put an amount toward the item first."); return; }
-  const batch = writeBatch(db), ref = doc(col("wishlist")), top = ST.wishlist.reduce((m, w) => Math.max(m, w.order ?? -1), -1);
-  batch.set(ref, { name: ac.name, cost: ac.cost, kind: ac.kind, perPay: round2(ac.primary), saved: 0, neededBy: ac.neededBy || "", order: top + 1, created: serverTimestamp() });
+  const batch = writeBatch(db), ref = doc(col("wishlist")), orders = rankOrders(ref.id, ac.rank);
+  batch.set(ref, { name: ac.name, cost: ac.cost, kind: ac.kind, perPay: round2(ac.primary), saved: round2(ac.saved), neededBy: ac.neededBy || "", order: orders[ref.id], created: serverTimestamp() });
+  Object.keys(orders).forEach((id) => { if (id !== ref.id) batch.update(doc(db, "users", uid, "wishlist", id), { order: orders[id] }); });
   if (ac.secKey.startsWith("w:") && ac.secAmt > 0) batch.update(doc(db, "users", uid, "wishlist", ac.secKey.slice(2)), { perPay: round2(ac.secAmt) });
   batch.set(doc(db, "users", uid, "settings", "split"), { primaryId: ref.id, secKey: ac.secKey, secAmt: round2(ac.secAmt), updated: serverTimestamp() }, { merge: true });
   batch.commit().catch((err) => toast("Save failed: " + err.message));
@@ -2761,6 +2787,118 @@ function acClick(e) {
   else if (d.acSetup !== undefined) { acClose(); openBufferSetup(); }
 }
 $("compareBtn").addEventListener("click", openCompare);
+
+/* =========================================================
+   6r. GOAL PRIORITY and DEADLINES — deadline goals are funded first, then the priority order
+   ========================================================= */
+// Items the engine can fund: open wishlist items (rank = position in the priority order) and goal pots that have a deadline.
+function smartItems() {
+  const out = [];
+  wishOpen().forEach((w, i) => out.push({ key: "w:" + w.id, kind: "w", id: w.id, name: w.name, remaining: wishLeft(w), deadline: w.neededBy || "", perPay: Number(w.perPay) || 0, rank: i + 1, raw: w }));
+  ST.goals.forEach((g) => {
+    const rem = Math.max(0, round2((g.target || 0) - goalBalance(g)));
+    if (g.targetDate && rem > 0.005) out.push({ key: "g:" + g.id, kind: "g", id: g.id, name: g.name, remaining: rem, deadline: g.targetDate, perPay: 0, rank: 999, raw: g });
+  });
+  return out;
+}
+// Required rate = remaining ÷ fortnights (paydays) left until the deadline; "behind" means the planned rate is lower than that.
+function deadlineInfo(it) {
+  if (!it.deadline || !(it.remaining > 0.005)) return null;
+  const late = dayNum(it.deadline) < dayNum(today()), pays = Math.max(1, paysBefore(it.deadline));
+  const required = round2(it.remaining / pays), weeks = Math.max(0, Math.round((dayNum(it.deadline) - dayNum(today())) / 7));
+  return { late: late, pays: pays, required: required, weeks: weeks, behind: late || required > (it.perPay || 0) + 0.005 };
+}
+// Deadline goals that are behind come first (soonest deadline first), then the rest cascade down the priority order.
+function smartPlan(amount) {
+  let left = round2(Math.max(0, amount));
+  const items = smartItems(), steps = [];
+  const bump = (it, give, reason, required) => {
+    const ex = steps.find((s) => s.key === it.key);
+    if (ex) ex.amount = round2(ex.amount + give);
+    else steps.push({ key: it.key, kind: it.kind, id: it.id, name: it.name, deadline: it.deadline, rank: it.rank, amount: give, reason: reason, required: required, raw: it.raw });
+    left = round2(left - give);
+  };
+  items.filter((i) => i.deadline).map((i) => ({ it: i, dl: deadlineInfo(i) })).filter((x) => x.dl && x.dl.behind)
+    .sort((a, b) => a.it.deadline.localeCompare(b.it.deadline)).forEach((x) => {
+      const give = round2(Math.min(x.dl.late ? x.it.remaining : x.dl.required, x.it.remaining, left));
+      if (give > 0) bump(x.it, give, "deadline", x.dl.required);
+    });
+  items.filter((i) => i.kind === "w").sort((a, b) => a.rank - b.rank).forEach((i) => {
+    const got = (steps.find((s) => s.key === i.key) || {}).amount || 0;
+    const want = Math.min(i.perPay > 0 ? i.perPay : i.remaining, i.remaining) - got, give = round2(Math.min(Math.max(0, want), left));
+    if (give > 0) bump(i, give, "priority", 0);
+  });
+  return { steps: steps, toBuffer: left, amount: round2(Math.max(0, amount)) };
+}
+function adviceList() {
+  const items = smartItems(), top = items.filter((i) => i.kind === "w").sort((a, b) => a.rank - b.rank)[0], out = [];
+  items.filter((i) => i.deadline).map((i) => ({ it: i, dl: deadlineInfo(i) })).filter((x) => x.dl && x.dl.behind).sort((a, b) => a.it.deadline.localeCompare(b.it.deadline)).slice(0, 3).forEach((x) => {
+    if (x.dl.late) { out.push({ warn: true, text: "⚠️ " + x.it.name + "'s deadline (" + fmtLong(x.it.deadline) + ") has passed with " + money(x.it.remaining) + " still to fund." }); return; }
+    const before = top && top.key !== x.it.key && !top.deadline ? " We recommend funding " + x.it.name + " before " + top.name + " this pay cycle." : "";
+    out.push({ warn: true, text: "⚠️ " + x.it.name + " is in " + x.dl.weeks + (x.dl.weeks === 1 ? " week" : " weeks") + " and needs " + money(x.dl.required) + "/fortnight to hit its deadline." + before });
+  });
+  if (!out.length && top) out.push({ warn: false, text: "No deadlines at risk. Priority 1 is " + top.name + "." });
+  return out;
+}
+const adviceHtml = () => adviceList().map((a) => '<div class="advice' + (a.warn ? " warn" : "") + '">' + esc(a.text) + "</div>").join("");
+function renderAdvice() {
+  const html = adviceHtml();
+  $("adviceCard").classList.toggle("hidden", !html);
+  $("adviceText").innerHTML = html;
+}
+
+let sm = null, smWrap = null; // sm = { amount }
+function openSmart(amount) {
+  const left = Math.max(0, round2(periodStats().left));
+  sm = { amount: amount != null ? round2(amount) : (left > 0 ? left : Math.max(0, disposable())) };
+  smWrap = document.createElement("div");
+  smWrap.className = "overlay sheet";
+  smWrap.addEventListener("click", smClick);
+  smWrap.addEventListener("input", smInput);
+  document.body.appendChild(smWrap);
+  smRender();
+}
+function smClose() { if (smWrap) smWrap.remove(); smWrap = null; sm = null; }
+function smRow(s) {
+  const why = s.reason === "deadline" ? "Deadline " + fmtLong(s.deadline) + " · needs " + money(s.required) + "/fortnight" : "Priority " + s.rank;
+  return '<li><div class="main"><div>' + esc(s.name) + '</div><div class="sub wrap">' + esc(why) + '</div></div><span class="amt">' + money(s.amount) + "</span></li>";
+}
+function smList() {
+  const plan = smartPlan(sm.amount), buf = bufferAccount();
+  const rows = plan.steps.length ? plan.steps.map(smRow).join("") : '<li class="empty">Nothing to fund yet.</li>';
+  return rows + '<li><div class="main"><div>' + (buf ? "Into " + esc(buf.name) + " (Big Savings)" : "Stays in checking") + '</div><div class="sub">Left over after your goals</div></div><span class="amt">' + money(plan.toBuffer) + "</span></li>";
+}
+function smRender() {
+  smWrap.innerHTML = '<div class="card"><h3>Smart split</h3>' + adviceHtml() + '<label class="sec">Amount to split<input id="smAmt" type="number" min="0" step="0.01" inputmode="decimal" value="' + sm.amount + '"></label>' +
+    '<ul class="list" id="smList" style="margin-top:6px">' + smList() + '</ul><div class="actions"><button class="plain" data-sm-close>Cancel</button><button data-sm-apply>Smart Apply</button></div></div>';
+}
+function smInput(e) {
+  if (e.target.id !== "smAmt") return;
+  sm.amount = Math.max(0, parseFloat(e.target.value) || 0);
+  $("smList").innerHTML = smList();
+}
+// Executes the split: goals get their share, the rest goes into Big Savings. Each part is recorded so Left over drops by what was placed.
+function smApply() {
+  const plan = smartPlan(sm.amount);
+  if (!(plan.amount > 0)) { toast("Enter an amount to split first."); return; }
+  const batch = writeBatch(db), buf = bufferAccount();
+  const record = (amount, name, toId) => batch.set(doc(col("allotments")), { date: today(), amount: round2(amount), fromId: "", toId: toId || "", target: name, created: serverTimestamp() });
+  plan.steps.forEach((s) => {
+    if (s.kind === "w") batch.update(doc(db, "users", uid, "wishlist", s.id), { saved: round2((s.raw.saved || 0) + s.amount) });
+    else batch.set(doc(col("transfers")), { goalId: s.id, type: "add", amount: s.amount, date: today(), note: "Smart split", created: serverTimestamp() });
+    record(s.amount, s.name, "");
+  });
+  if (buf && plan.toBuffer > 0) { batch.update(doc(db, "users", uid, "accounts", buf.id), { balance: increment(plan.toBuffer) }); record(plan.toBuffer, buf.name, buf.id); }
+  batch.commit().catch((err) => toast("Save failed: " + err.message));
+  smClose();
+  toast("Split " + money(plan.amount) + ": " + plan.steps.length + (plan.steps.length === 1 ? " goal" : " goals") + (buf ? " and " + money(plan.toBuffer) + " into Big Savings." : "."));
+}
+function smClick(e) {
+  const d = e.target.dataset;
+  if (e.target === smWrap || d.smClose !== undefined) smClose();
+  else if (d.smApply !== undefined) smApply();
+}
+$("smartBtn").addEventListener("click", () => openSmart());
 
 /* =========================================================
    7. AUTH
