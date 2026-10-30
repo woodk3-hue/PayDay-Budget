@@ -42,6 +42,7 @@ window.DEMO = /[?&]demo\b/.test(location.search) || window.FIREBASE_CONFIG.apiKe
   document.head.appendChild(s);
 })();
 </script>
+<script>try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;var a=localStorage.getItem("accent");if(a)document.documentElement.dataset.accent=a}catch(e){}</script>
 <style>
 /* Apple HIG styling — iOS system colours, SF type scale, inset grouped lists, glass bars */
 :root{
@@ -56,13 +57,39 @@ window.DEMO = /[?&]demo\b/.test(location.search) || window.FIREBASE_CONFIG.apiKe
   color-scheme:light dark;
 }
 @media (prefers-color-scheme:dark){
-  :root{--bg:#09130e;--card:#12241a;--ink:#ffffff;--muted:rgba(235,235,245,.6);--line:rgba(84,84,88,.6);
+  :root:not([data-theme=light]){--bg:#09130e;--card:#12241a;--ink:#ffffff;--muted:rgba(235,235,245,.6);--line:rgba(84,84,88,.6);
         --fill:rgba(118,118,128,.24);--brand:#3fb97a;--brand-soft:rgba(63,185,122,.18);
         --green:#30d158;--red:#ff453a;--red-soft:rgba(255,69,58,.18);--amber:#ff9f0a;
         --glass:rgba(14,28,21,.72);--shadow:0 10px 30px rgba(0,0,0,.40);
         --pane:rgba(24,48,36,.55);--tile:rgba(255,255,255,.07);--edge:rgba(255,255,255,.16);--pill:rgba(255,255,255,.16);
         --wash:radial-gradient(1000px 700px at 15% -12%,#14402a 0,rgba(20,64,42,0) 55%),radial-gradient(900px 600px at 110% 10%,#2a2a10 0,rgba(42,42,16,0) 55%),linear-gradient(180deg,#12241a 0%,#0d1a13 55%,#09130e 100%)}
 }
+:root[data-theme=dark]{--bg:#09130e;--card:#12241a;--ink:#ffffff;--muted:rgba(235,235,245,.6);--line:rgba(84,84,88,.6);
+        --fill:rgba(118,118,128,.24);--brand:#3fb97a;--brand-soft:rgba(63,185,122,.18);
+        --green:#30d158;--red:#ff453a;--red-soft:rgba(255,69,58,.18);--amber:#ff9f0a;
+        --glass:rgba(14,28,21,.72);--shadow:0 10px 30px rgba(0,0,0,.40);
+        --pane:rgba(24,48,36,.55);--tile:rgba(255,255,255,.07);--edge:rgba(255,255,255,.16);--pill:rgba(255,255,255,.16);
+        --wash:radial-gradient(1000px 700px at 15% -12%,#14402a 0,rgba(20,64,42,0) 55%),radial-gradient(900px 600px at 110% 10%,#2a2a10 0,rgba(42,42,16,0) 55%),linear-gradient(180deg,#12241a 0%,#0d1a13 55%,#09130e 100%)}
+:root[data-accent=black]{--brand:#1c1c1e;--brand-soft:rgba(28,28,30,0.14);--bg:#f0f0f0;--shadow:0 10px 30px rgba(51,51,51,0.1);--wash:radial-gradient(1100px 720px at 18% -10%,#e6e6e6 0,rgba(230,230,230,0) 60%),radial-gradient(900px 520px at 110% 0%,#ebebeb 0,rgba(235,235,235,0) 55%),linear-gradient(180deg,#f0f0f0 0%,#f5f5f5 55%,#f5f5f5 100%)}
+:root[data-accent=purple]{--brand:#7c5cff;--brand-soft:rgba(124,92,255,0.14);--bg:#eeebf4;--shadow:0 10px 30px rgba(37,23,79,0.1);--wash:radial-gradient(1100px 720px at 18% -10%,#ded7f4 0,rgba(222,215,244,0) 60%),radial-gradient(900px 520px at 110% 0%,#f4dff6 0,rgba(244,223,246,0) 55%),linear-gradient(180deg,#edebf5 0%,#f4f3f7 55%,#f4f3f7 100%)}
+:root[data-accent=red]{--brand:#d62d20;--brand-soft:rgba(214,45,32,0.14);--bg:#f4eceb;--shadow:0 10px 30px rgba(82,24,20,0.1);--wash:radial-gradient(1100px 720px at 18% -10%,#f5d8d6 0,rgba(245,216,214,0) 60%),radial-gradient(900px 520px at 110% 0%,#f7f0de 0,rgba(247,240,222,0) 55%),linear-gradient(180deg,#f5ebea 0%,#f7f3f2 55%,#f7f3f2 100%)}
+:root[data-accent=yellow]{--brand:#a67c00;--brand-soft:rgba(166,124,0,0.14);--bg:#f5f2ea;--shadow:0 10px 30px rgba(87,69,15,0.1);--wash:radial-gradient(1100px 720px at 18% -10%,#f7eed4 0,rgba(247,238,212,0) 60%),radial-gradient(900px 520px at 110% 0%,#edf9dc 0,rgba(237,249,220,0) 55%),linear-gradient(180deg,#f6f3e9 0%,#f8f6f2 55%,#f8f6f2 100%)}
+:root[data-accent=pink]{--brand:#d6336c;--brand-soft:rgba(214,51,108,0.14);--bg:#f4ebef;--shadow:0 10px 30px rgba(82,20,46,0.1);--wash:radial-gradient(1100px 720px at 18% -10%,#f5d6e3 0,rgba(245,214,227,0) 60%),radial-gradient(900px 520px at 110% 0%,#f7e4de 0,rgba(247,228,222,0) 55%),linear-gradient(180deg,#f5eaef 0%,#f7f2f4 55%,#f7f2f4 100%)}
+:root[data-accent=blue]{--brand:#0a64d8;--brand-soft:rgba(10,100,216,0.14);--bg:#ebeff5;--shadow:0 10px 30px rgba(18,49,84,0.1);--wash:radial-gradient(1100px 720px at 18% -10%,#d5e4f6 0,rgba(213,228,246,0) 60%),radial-gradient(900px 520px at 110% 0%,#e3ddf8 0,rgba(227,221,248,0) 55%),linear-gradient(180deg,#eaeff6 0%,#f2f5f7 55%,#f2f5f7 100%)}
+@media (prefers-color-scheme:dark){
+:root:not([data-theme=light])[data-accent=black]{--brand:#e5e5ea;--brand-soft:rgba(229,229,234,0.18);--on-brand:#000;--bg:#0f0f0f;--card:#1c1c1c;--glass:rgba(23,23,23,0.72);--pane:rgba(41,41,41,0.55);--wash:radial-gradient(1000px 700px at 15% -12%,#2e2e2e 0,rgba(46,46,46,0) 55%),radial-gradient(900px 600px at 110% 10%,#242424 0,rgba(36,36,36,0) 55%),linear-gradient(180deg,#1c1c1c 0%,#141414 55%,#0f0f0f 100%)}
+:root:not([data-theme=light])[data-accent=purple]{--brand:#9a86ff;--brand-soft:rgba(154,134,255,0.18);--on-brand:#fff;--bg:#0d0b14;--card:#191721;--glass:rgba(20,18,28,0.72);--pane:rgba(37,33,49,0.55);--wash:radial-gradient(1000px 700px at 15% -12%,#261f3d 0,rgba(38,31,61,0) 55%),radial-gradient(900px 600px at 110% 10%,#2c1a2e 0,rgba(44,26,46,0) 55%),linear-gradient(180deg,#191721 0%,#121019 55%,#0d0b14 100%)}
+:root:not([data-theme=light])[data-accent=red]{--brand:#ff6b5e;--brand-soft:rgba(255,107,94,0.18);--on-brand:#fff;--bg:#140b0b;--card:#221716;--glass:rgba(28,18,17,0.72);--pane:rgba(49,33,32,0.55);--wash:radial-gradient(1000px 700px at 15% -12%,#3e201d 0,rgba(62,32,29,0) 55%),radial-gradient(900px 600px at 110% 10%,#2e2919 0,rgba(46,41,25,0) 55%),linear-gradient(180deg,#221716 0%,#191010 55%,#140b0b 100%)}
+:root:not([data-theme=light])[data-accent=yellow]{--brand:#ffd60a;--brand-soft:rgba(255,214,10,0.18);--on-brand:#000;--bg:#15120a;--card:#231f15;--glass:rgba(29,26,17,0.72);--pane:rgba(51,46,31,0.55);--wash:radial-gradient(1000px 700px at 15% -12%,#41381b 0,rgba(65,56,27,0) 55%),radial-gradient(900px 600px at 110% 10%,#263017 0,rgba(38,48,23,0) 55%),linear-gradient(180deg,#231f15 0%,#1a170f 55%,#15120a 100%)}
+:root:not([data-theme=light])[data-accent=pink]{--brand:#ff7eb3;--brand-soft:rgba(255,126,179,0.18);--on-brand:#fff;--bg:#140b0f;--card:#22161b;--glass:rgba(28,17,22,0.72);--pane:rgba(49,32,39,0.55);--wash:radial-gradient(1000px 700px at 15% -12%,#3e1d2b 0,rgba(62,29,43,0) 55%),radial-gradient(900px 600px at 110% 10%,#2e1e19 0,rgba(46,30,25,0) 55%),linear-gradient(180deg,#22161b 0%,#191014 55%,#140b0f 100%)}
+:root:not([data-theme=light])[data-accent=blue]{--brand:#5aa9ff;--brand-soft:rgba(90,169,255,0.18);--on-brand:#fff;--bg:#0a0f14;--card:#161c22;--glass:rgba(17,23,29,0.72);--pane:rgba(32,40,50,0.55);--wash:radial-gradient(1000px 700px at 15% -12%,#1c2d40 0,rgba(28,45,64,0) 55%),radial-gradient(900px 600px at 110% 10%,#1d182f 0,rgba(29,24,47,0) 55%),linear-gradient(180deg,#161c22 0%,#0f141a 55%,#0a0f14 100%)}
+}
+:root[data-theme=dark][data-accent=black]{--brand:#e5e5ea;--brand-soft:rgba(229,229,234,0.18);--on-brand:#000;--bg:#0f0f0f;--card:#1c1c1c;--glass:rgba(23,23,23,0.72);--pane:rgba(41,41,41,0.55);--wash:radial-gradient(1000px 700px at 15% -12%,#2e2e2e 0,rgba(46,46,46,0) 55%),radial-gradient(900px 600px at 110% 10%,#242424 0,rgba(36,36,36,0) 55%),linear-gradient(180deg,#1c1c1c 0%,#141414 55%,#0f0f0f 100%)}
+:root[data-theme=dark][data-accent=purple]{--brand:#9a86ff;--brand-soft:rgba(154,134,255,0.18);--on-brand:#fff;--bg:#0d0b14;--card:#191721;--glass:rgba(20,18,28,0.72);--pane:rgba(37,33,49,0.55);--wash:radial-gradient(1000px 700px at 15% -12%,#261f3d 0,rgba(38,31,61,0) 55%),radial-gradient(900px 600px at 110% 10%,#2c1a2e 0,rgba(44,26,46,0) 55%),linear-gradient(180deg,#191721 0%,#121019 55%,#0d0b14 100%)}
+:root[data-theme=dark][data-accent=red]{--brand:#ff6b5e;--brand-soft:rgba(255,107,94,0.18);--on-brand:#fff;--bg:#140b0b;--card:#221716;--glass:rgba(28,18,17,0.72);--pane:rgba(49,33,32,0.55);--wash:radial-gradient(1000px 700px at 15% -12%,#3e201d 0,rgba(62,32,29,0) 55%),radial-gradient(900px 600px at 110% 10%,#2e2919 0,rgba(46,41,25,0) 55%),linear-gradient(180deg,#221716 0%,#191010 55%,#140b0b 100%)}
+:root[data-theme=dark][data-accent=yellow]{--brand:#ffd60a;--brand-soft:rgba(255,214,10,0.18);--on-brand:#000;--bg:#15120a;--card:#231f15;--glass:rgba(29,26,17,0.72);--pane:rgba(51,46,31,0.55);--wash:radial-gradient(1000px 700px at 15% -12%,#41381b 0,rgba(65,56,27,0) 55%),radial-gradient(900px 600px at 110% 10%,#263017 0,rgba(38,48,23,0) 55%),linear-gradient(180deg,#231f15 0%,#1a170f 55%,#15120a 100%)}
+:root[data-theme=dark][data-accent=pink]{--brand:#ff7eb3;--brand-soft:rgba(255,126,179,0.18);--on-brand:#fff;--bg:#140b0f;--card:#22161b;--glass:rgba(28,17,22,0.72);--pane:rgba(49,32,39,0.55);--wash:radial-gradient(1000px 700px at 15% -12%,#3e1d2b 0,rgba(62,29,43,0) 55%),radial-gradient(900px 600px at 110% 10%,#2e1e19 0,rgba(46,30,25,0) 55%),linear-gradient(180deg,#22161b 0%,#191014 55%,#140b0f 100%)}
+:root[data-theme=dark][data-accent=blue]{--brand:#5aa9ff;--brand-soft:rgba(90,169,255,0.18);--on-brand:#fff;--bg:#0a0f14;--card:#161c22;--glass:rgba(17,23,29,0.72);--pane:rgba(32,40,50,0.55);--wash:radial-gradient(1000px 700px at 15% -12%,#1c2d40 0,rgba(28,45,64,0) 55%),radial-gradient(900px 600px at 110% 10%,#1d182f 0,rgba(29,24,47,0) 55%),linear-gradient(180deg,#161c22 0%,#0f141a 55%,#0a0f14 100%)}
 *{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
 body{font-family:var(--font);font-size:17px;line-height:1.3;letter-spacing:-.41px;background:var(--wash) fixed,var(--bg);color:var(--ink);
   -webkit-font-smoothing:antialiased;padding-bottom:calc(100px + env(safe-area-inset-bottom))}
@@ -110,7 +137,7 @@ input::placeholder{color:var(--muted)}
 
 /* Buttons */
 button{font:inherit;font-size:17px;font-weight:600;letter-spacing:-.41px;border:0;border-radius:12px;min-height:50px;padding:0 18px;
-  cursor:pointer;background:linear-gradient(180deg,rgba(255,255,255,.28),rgba(255,255,255,0) 55%),var(--brand);color:#fff;
+  cursor:pointer;background:linear-gradient(180deg,rgba(255,255,255,.28),rgba(255,255,255,0) 55%),var(--brand);color:var(--on-brand,#fff);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 6px 16px var(--brand-soft);transition:opacity .15s,transform .15s}
 button:active{opacity:.7;transform:scale(.98)}
 button.ghost{background:transparent;box-shadow:none;color:var(--brand);font-weight:400;min-height:44px;min-width:44px;padding:0 6px}
@@ -134,7 +161,7 @@ header button.ghost{min-height:32px;font-size:17px}
 
 /* Floating glass tab bar */
 nav{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(10px + env(safe-area-inset-bottom));
-  width:min(560px,calc(100% - 24px));display:flex;padding:5px;border-radius:32px;z-index:10;--i:0;--n:6;
+  width:min(560px,calc(100% - 24px));display:flex;padding:5px;border-radius:32px;z-index:10;--i:0;--n:5;
   background:var(--glass);-webkit-backdrop-filter:blur(30px) saturate(2);backdrop-filter:blur(30px) saturate(2);
   box-shadow:0 12px 36px rgba(20,30,80,.22),inset 0 1px 0 var(--edge),inset 0 0 0 .5px var(--line)}
 nav::before{content:"";position:absolute;top:5px;bottom:5px;left:5px;width:calc((100% - 10px)/var(--n));border-radius:26px;
@@ -236,6 +263,10 @@ nav.none::before{opacity:0}
 @keyframes pop{from{transform:scale(1.1);opacity:0}}
 
 /* Segmented control */
+.swatches{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px}
+.swatches button{width:44px;height:44px;min-height:44px;padding:0;border-radius:50%;background:var(--sw);box-shadow:inset 0 0 0 1px rgba(128,128,128,.35)}
+.swatches button.on{box-shadow:0 0 0 3px var(--card),0 0 0 5px var(--sw)}
+.subh{font-size:13px;font-weight:600;color:var(--muted);margin:6px 0 4px}
 .toggle{display:flex;background:var(--tile);border-radius:12px;padding:3px;box-shadow:inset 0 0 0 .5px var(--line)}
 .toggle button{flex:1;background:none;box-shadow:none;color:var(--ink);min-height:34px;border-radius:9px;font-size:13px;font-weight:500;padding:0}
 .toggle button.on{background:var(--pill);font-weight:600;box-shadow:inset 0 1px 0 var(--edge),0 3px 8px rgba(0,0,0,.12)}
@@ -273,7 +304,7 @@ input[type=file]{padding:9px 12px}
   <span id="syncPill" class="pill">Synced</span>
   <button id="statsBtn" class="ghost hbtn hidden" aria-label="Stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V11M12 20V4M19 20v-6"/></svg></button>
   <button id="addBtn" class="ghost hbtn hidden" aria-label="Add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button>
-  <button id="signOutBtn" class="ghost hidden">Sign out</button>
+  <button id="settingsBtn" class="ghost hbtn hidden" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
 </header>
 
 <main>
@@ -363,19 +394,24 @@ input[type=file]{padding:9px 12px}
     <div class="card"><h2>Recent moves</h2><ul class="list" id="transferList"></ul></div>
   </section>
 
-  <!-- SUBSCRIPTIONS & PURCHASES -->
-  <section id="view-subs" class="view hidden">
-    <div class="card alerts">
+  <!-- SETTINGS -->
+  <section id="view-settings" class="view hidden">
+    <div class="card"><h2>Reminders</h2>
+    <div class="alerts">
       <p id="alertsText">Get a phone alert before things renew.</p>
       <button id="alertsBtn">Turn on alerts</button>
     </div>
-    <div class="card">
-      <h2>All subscriptions & purchases</h2>
-      <div class="grid" style="margin-bottom:8px">
-        <div class="stat"><small>Recurring per fortnight</small><b id="subsFn">$0</b></div>
-        <div class="stat"><small>Recurring per year</small><b id="subsYr">$0</b></div>
+    </div>
+    <div class="card"><h2>Appearance</h2>
+      <h3 class="subh">Colour</h3>
+      <div class="swatches" id="accentPick"><button type="button" data-accent="green" aria-label="Green" style="--sw:#1f7a4d"></button><button type="button" data-accent="black" aria-label="Black" style="--sw:#1c1c1e"></button><button type="button" data-accent="purple" aria-label="Purple" style="--sw:#7c5cff"></button><button type="button" data-accent="red" aria-label="Red" style="--sw:#d62d20"></button><button type="button" data-accent="yellow" aria-label="Yellow" style="--sw:#e6b800"></button><button type="button" data-accent="pink" aria-label="Pink" style="--sw:#d6336c"></button><button type="button" data-accent="blue" aria-label="Blue" style="--sw:#0a64d8"></button></div>
+      <h3 class="subh">Mode</h3>
+      <div class="toggle" id="themeToggle">
+        <button type="button" data-theme="auto">Auto</button><button type="button" data-theme="light">Light</button><button type="button" data-theme="dark">Dark</button>
       </div>
-      <ul class="list" id="subList"></ul>
+    </div>
+    <div class="card"><h2>Account</h2>
+      <button id="signOutBtn" class="ghost">Sign out</button>
     </div>
   </section>
 
@@ -543,6 +579,13 @@ input[type=file]{padding:9px 12px}
         <label class="full">Name<input name="description" required placeholder="e.g. Woolworths"></label>
         <label class="full">Paid from<select name="accountId" class="acctSel"></select></label>
         <label class="check full"><input type="checkbox" name="manual"> I pay this one myself</label>
+        <label class="full">Remind me before it's due?
+          <select name="remindDays">
+            <option value="">No reminder</option><option value="0">On the day</option><option value="1">1 day before</option>
+            <option value="2">2 days before</option><option value="3">3 days before</option><option value="5">5 days before</option><option value="7">7 days before</option>
+          </select>
+        </label>
+        <p id="remindNote" class="alerts hidden"><span>Alerts are off on this phone.</span><button type="button" id="remindEnable">Turn on</button></p>
         <button class="full" type="submit">Save expense</button>
       </form>
     </div>
@@ -681,7 +724,6 @@ input[type=file]{padding:9px 12px}
   <button data-v="income" aria-label="Income"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v9M8.5 13l3.5 3.5 3.5-3.5"/></svg><span>Income</span></button>
   <button data-v="expenses" aria-label="Expenses"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M2.5 10h19M6 15h4"/></svg><span>Expenses</span></button>
   <button data-v="savings" aria-label="Goals"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 8.2a4.3 4.3 0 0 1 7.5 2.6C19.5 16.4 12 21 12 21z"/></svg><span>Goals</span></button>
-  <button data-v="subs" aria-label="Subs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4.5h-4.5"/><path d="M12 8v4.2l2.6 1.6"/></svg><span>Subs</span></button>
   <button data-v="property" aria-label="Property"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V9l8-5 8 5v12"/><path d="M9 21v-6h6v6M2.5 21h19"/></svg><span>Property</span></button>
 </nav>
 
@@ -878,24 +920,12 @@ function dueBadge(next, remindDays) {
   const txt = n < 0 ? "Overdue" : n === 0 ? "Today" : n === 1 ? "Tomorrow" : "In " + n + " days";
   return '<span class="badge' + (n <= (remindDays ?? 3) ? " soon" : "") + '">' + txt + "</span>";
 }
-function subRow(s) {
-  const freq = s.frequency === "once" ? "One-off" : s.frequency.charAt(0).toUpperCase() + s.frequency.slice(1);
-  return '<li><div class="main"><div>' + esc(s.name) + '</div><div class="sub">' + freq + " · " +
-    (s.next ? fmtDate(s.next) + " " : "") + dueBadge(s.next, s.remindDays) + '</div></div>' +
-    '<span class="amt">' + money(s.amount) + '</span>' +
-    '<button class="ghost" data-edit-sub="' + s.id + '">Edit</button>' +
-    '<button class="ghost" data-del="subscriptions:' + s.id + '">✕</button></li>';
-}
 function upcomingRow(s) {
   return '<li><div class="main"><div>' + esc(s.name) + '</div><div class="sub">' + fmtDate(s.next) + '</div></div>' +
     dueBadge(s.next, s.remindDays) + '<span class="amt">' + money(s.amount) + '</span></li>';
 }
 function renderSubs() {
   const rows = subsSorted();
-  const fn = rows.reduce((t, s) => t + s.amount * (FREQ_PER_FORTNIGHT[s.frequency] || 0), 0);
-  $("subsFn").textContent = money(fn);
-  $("subsYr").textContent = money(fn * 26);
-  $("subList").innerHTML = rows.length ? rows.map(subRow).join("") : '<li class="empty">Nothing added yet.</li>';
   const soon = rows.filter((s) => daysUntil(s.next) >= 0 && daysUntil(s.next) <= 14);
   $("upcomingList").innerHTML = soon.length ? soon.map(upcomingRow).join("") : '<li class="empty">Nothing due in the next 14 days.</li>';
 }
@@ -1062,6 +1092,7 @@ $("expenseForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const d = formData(e.target), g = groupById(d.groupId);
   d.category = g ? g.name : "Other";
+  const rd = e.target.elements.remindDays.value; d.remindDays = rd === "" ? null : Number(rd); d.lastNotified = null;
   linkFields(d, d.date, ST.expenses.find((x) => x.id === editing.expenses));
   save("expenses", editing.expenses, d);
   resetForm(e.target, "expenses");
@@ -1173,6 +1204,10 @@ function deviceName() {
   const ua = navigator.userAgent;
   return /Android/.test(ua) ? "Android phone" : /iPhone|iPad/.test(ua) ? "iPhone/iPad" : /Mac/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows PC" : "Device";
 }
+let alertsOn = false;
+function updateRemindNote() {
+  $("remindNote").classList.toggle("hidden", !$("expenseForm").elements.remindDays.value || alertsOn || !!window.DEMO);
+}
 async function refreshAlertsButton() {
   const btn = $("alertsBtn"), txt = $("alertsText");
   if (window.DEMO) { btn.classList.add("hidden"); txt.textContent = "Alerts are off in preview mode."; return; }
@@ -1182,9 +1217,12 @@ async function refreshAlertsButton() {
   const reg = await navigator.serviceWorker.ready;
   const sub = await reg.pushManager.getSubscription();
   const on = !!sub && Notification.permission === "granted";
+  alertsOn = on; updateRemindNote();
   btn.textContent = on ? "Turn off" : "Turn on alerts";
   txt.textContent = on ? "Alerts are on for this " + deviceName() + "." : "Get a phone alert before things renew.";
 }
+$("expenseForm").elements.remindDays.addEventListener("change", updateRemindNote);
+$("remindEnable").addEventListener("click", () => $("alertsBtn").click());
 $("alertsBtn").addEventListener("click", async () => {
   try {
     const reg = await navigator.serviceWorker.ready;
@@ -1203,8 +1241,8 @@ $("alertsBtn").addEventListener("click", async () => {
   refreshAlertsButton();
 });
 
-const TITLES = { home: "PayDay Budget", income: "Income", expenses: "Expenses", savings: "Goals", subs: "Subscriptions", property: "Property & Bills" };
-TITLES.stats = "Stats"; TITLES.accounts = "Accounts";
+const TITLES = { home: "PayDay Budget", income: "Income", expenses: "Expenses", savings: "Goals", property: "Property & Bills" };
+TITLES.stats = "Stats"; TITLES.settings = "Settings"; TITLES.accounts = "Accounts";
 let currentView = "home";
 function showView(v) {
   const tabs = [...$("tabs").children], idx = tabs.findIndex((b) => b.dataset.v === v);
@@ -1892,7 +1930,6 @@ const ADD_FORMS = {
   income: [["incomeCard", "Add income"], ["srcCard", "Add income source"]],
   expenses: [["expenseCard", "Add expense"]],
   savings: [["transferCard", "Move money"], ["goalCard", "New goal"], ["bufferSetCard", "Big Savings setup"]],
-  subs: [["subCard", "Add subscription, bill or purchase"]],
   property: [["billCard", "Add a bill or receipt"]]
 };
 let sheetBack = null;
@@ -1945,6 +1982,21 @@ $("addBtn").addEventListener("click", () => {
   document.body.appendChild(wrap);
 });
 $("statsBtn").addEventListener("click", () => showView("stats"));
+$("settingsBtn").addEventListener("click", () => showView("settings"));
+function applyTheme(t) {
+  if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  try { localStorage.setItem("theme", t); } catch (e) { /* private mode */ }
+  document.querySelectorAll("#themeToggle button").forEach((b) => b.classList.toggle("on", b.dataset.theme === t));
+}
+function applyAccent(a) {
+  if (a && a !== "green") document.documentElement.dataset.accent = a; else delete document.documentElement.dataset.accent;
+  try { localStorage.setItem("accent", a || "green"); } catch (e) { /* private mode */ }
+  document.querySelectorAll("#accentPick button").forEach((b) => b.classList.toggle("on", b.dataset.accent === (a || "green")));
+}
+$("accentPick").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) applyAccent(b.dataset.accent); });
+applyAccent((() => { try { return localStorage.getItem("accent") || "green"; } catch (e) { return "green"; } })());
+$("themeToggle").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) applyTheme(b.dataset.theme); });
+applyTheme((() => { try { return localStorage.getItem("theme") || "auto"; } catch (e) { return "auto"; } })());
 
 let statsView = "fortnight", statsOffset = 0;
 // A fortnight follows your pay periods; month and year are calendar periods. k scales per-fortnight amounts to the period.
@@ -3013,14 +3065,13 @@ onAuthStateChanged(auth, (user) => {
   uid = user ? user.uid : null;
   $("login").classList.toggle("hidden", !!user);
   $("tabs").classList.toggle("hidden", !user);
-  $("signOutBtn").classList.toggle("hidden", !user);
+  $("settingsBtn").classList.toggle("hidden", !user);
   $("statsBtn").classList.toggle("hidden", !user);
   if (!user) $("addBtn").classList.add("hidden");
   $("view-home").classList.toggle("hidden", !user);
   if (!user) { document.querySelectorAll(".view").forEach((s) => s.classList.add("hidden")); return; }
   document.querySelectorAll("form input[type=date]:not([data-blank])").forEach((i) => (i.value = today()));
   startSync();
-  if (location.hash === "#subs") document.querySelector('nav [data-v="subs"]').click();
 });
 
 /* =========================================================
