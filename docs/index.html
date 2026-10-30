@@ -308,11 +308,6 @@ input[type=file]{padding:9px 12px}
 
   <!-- EXPENSES -->
   <section id="view-expenses" class="view hidden">
-    <div class="card">
-      <div class="toggle" id="grpPeriod">
-        <button data-f="fortnight" class="on">Fortnight</button><button data-f="month">Month</button><button data-f="year">Year</button>
-      </div>
-    </div>
     <div id="groupCards"></div>
   </section>
 
@@ -2487,7 +2482,8 @@ const DEFAULT_GROUPS = [
 ];
 const GROUP_KINDS = { personal: "Personal", property: "Property", transfers: "Transfers" };
 const PERIOD_K = { fortnight: 1, month: 26 / 12, year: 26 };
-let grpPeriod = "fortnight", seedingGroups = false;
+const grpPeriods = {}, grpOpen = {}, GROUP_SHOWN = 4;
+let seedingGroups = false;
 const groupById = (id) => ST.groups.find((g) => g.id === id);
 // Items with no group of their own start in the matching starter group.
 function defaultGroupKey(coll, x) {
@@ -2508,8 +2504,7 @@ function expenseItems() {
   return out;
 }
 const EDIT_ATTR = { expenses: "data-edit-expense", subscriptions: "data-edit-sub", bills: "data-edit-bill", acctTransfers: "data-edit-xfer" };
-function itemRow(it) {
-  const k = PERIOD_K[grpPeriod];
+function itemRow(it, k) {
   const meta = it.freq === "once" ? "One-off" : cap(it.freq) + " " + money(it.amount);
   const due = it.due ? " · " + (it.coll === "acctTransfers" ? "next " : "due ") + fmtDate(it.due) : "";
   return '<li><div class="main"><div>' + esc(it.name) + '</div><div class="sub wrap">' + meta + due + '</div></div><span class="amt">' + (it.fn ? money(it.fn * k) : "—") + '</span>' +
@@ -2517,13 +2512,20 @@ function itemRow(it) {
     '<button class="ghost" ' + EDIT_ATTR[it.coll] + '="' + it.x.id + '">Edit</button>' +
     '<button class="ghost" data-del="' + it.coll + ":" + it.x.id + '">✕</button></li>';
 }
+// Each group has its own Fortnight / Month / Year switch and shows 4 items until you expand it.
 function groupCard(g, items) {
-  const total = items.reduce((t, it) => t + it.fn, 0) * PERIOD_K[grpPeriod];
+  const key = g.id || "_", per = grpPeriods[key] || "fortnight", k = PERIOD_K[per], open = !!grpOpen[key];
+  const total = items.reduce((t, it) => t + it.fn, 0) * k;
   const sorted = items.slice().sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999") || a.name.localeCompare(b.name));
+  const shown = open ? sorted : sorted.slice(0, GROUP_SHOWN);
+  const toggle = '<div class="toggle">' + [["fortnight", "Fortnight"], ["month", "Month"], ["year", "Year"]].map((x) =>
+    '<button data-gp="' + key + ":" + x[0] + '"' + (per === x[0] ? ' class="on"' : "") + ">" + x[1] + "</button>").join("") + "</div>";
   const btns = g.id ? '<button class="ghost" data-grp-edit="' + g.id + '">Rename</button><button class="ghost" data-grp-del="' + g.id + '">Remove</button>' : "";
-  return '<div class="card"><div class="bankhead"><b>' + esc(g.name) + '</b><span class="amt">' + money(total) + '</span></div><div class="sub note">' +
-    (GROUP_KINDS[g.kind] ? GROUP_KINDS[g.kind] + " · " : "") + items.length + (items.length === 1 ? " item" : " items") + '</div><div class="bankbtns">' + btns + '</div><ul class="list">' +
-    (sorted.length ? sorted.map(itemRow).join("") : '<li class="empty">Nothing here.</li>') + "</ul></div>";
+  const more = sorted.length > GROUP_SHOWN ? '<button class="ghost" style="width:100%" data-gx="' + key + '">' +
+    (open ? "Show less" : "Show all " + sorted.length) + "</button>" : "";
+  return '<div class="card"><div class="bankhead"><b>' + esc(g.name) + '</b><span class="amt">' + money(total) + '</span></div>' + toggle +
+    '<div class="sub note" style="margin-top:6px">' + (GROUP_KINDS[g.kind] ? GROUP_KINDS[g.kind] + " · " : "") + items.length + (items.length === 1 ? " item" : " items") +
+    '</div><div class="bankbtns">' + btns + '</div><ul class="list">' + (shown.length ? shown.map((it) => itemRow(it, k)).join("") : '<li class="empty">Nothing here.</li>') + "</ul>" + more + "</div>";
 }
 function renderGroups() {
   const opts = PROP_IDS.map((id) => '<option value="' + id + '">' + esc(propName(id)) + "</option>").join("");
@@ -2535,11 +2537,10 @@ function renderGroups() {
   if (loose.length) cards.push(groupCard({ id: "", name: "Ungrouped", kind: "" }, loose));
   $("groupCards").innerHTML = cards.join("") || '<div class="card"><p class="empty">No groups yet.</p></div>';
 }
-$("grpPeriod").addEventListener("click", (e) => {
-  if (!e.target.dataset.f) return;
-  grpPeriod = e.target.dataset.f;
-  [...$("grpPeriod").children].forEach((b) => b.classList.toggle("on", b === e.target));
-  renderGroups();
+$("groupCards").addEventListener("click", (e) => {
+  const t = e.target;
+  if (t.dataset.gp) { const [key, per] = t.dataset.gp.split(":"); grpPeriods[key] = per; renderGroups(); }
+  if (t.dataset.gx) { grpOpen[t.dataset.gx] = !grpOpen[t.dataset.gx]; renderGroups(); }
 });
 
 function syncGroupForm() { $("groupPropWrap").classList.toggle("hidden", $("groupForm").elements.kind.value !== "property"); }
