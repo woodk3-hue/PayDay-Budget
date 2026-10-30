@@ -9,10 +9,10 @@
 6. Open `index.html`, find **1. FIREBASE CONFIG** near the bottom, and paste your values over the `PASTE_...` placeholders.
 
 ## 2. Host it free on GitHub Pages
-1. On github.com, click **New repository** → name it `budget-sync` → Public → Create.
+1. On github.com, click **New repository** → name it `PayDay-Budget` → Public → Create.
 2. Click **uploading an existing file**, then drag in the six files from **budget-sync.zip**: `index.html`, `sw.js`, `manifest.json`, `icon-192.png`, `icon-512.png`, `firestore.rules` → **Commit changes**. (Leave the notifier out; it goes on the OptiPlex.)
 3. **Settings → Pages** → Source: **Deploy from a branch** → Branch `main`, folder `/docs` → Save.
-4. After about a minute, your app is live at `https://woodk3-hue.github.io/budget-sync/`.
+4. After about a minute, your app is live at `https://woodk3-hue.github.io/PayDay-Budget/`.
 
 ## 3. Allow your site to sign in
 Back in Firebase, go to **Authentication → Settings → Authorised domains → Add domain** → `woodk3-hue.github.io`.
