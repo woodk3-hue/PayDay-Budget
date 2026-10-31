@@ -416,6 +416,10 @@ input[type=file]{padding:9px 12px}
       <button id="alertsBtn">Turn on alerts</button>
     </div>
     </div>
+    <div class="card"><h2>Big Savings</h2>
+      <div id="setBuf"></div>
+      <button id="setBufBtn" class="ghost" style="margin-top:6px">Change targets</button>
+    </div>
     <div class="card"><h2>Appearance</h2>
       <h3 class="subh">Colour</h3>
       <div class="swatches" id="accentPick"><button type="button" data-accent="green" aria-label="Green" style="--sw:#1f7a4d"></button><button type="button" data-accent="black" aria-label="Black" style="--sw:#1c1c1e"></button><button type="button" data-accent="purple" aria-label="Purple" style="--sw:#7c5cff"></button><button type="button" data-accent="red" aria-label="Red" style="--sw:#d62d20"></button><button type="button" data-accent="yellow" aria-label="Yellow" style="--sw:#e6b800"></button><button type="button" data-accent="pink" aria-label="Pink" style="--sw:#d6336c"></button><button type="button" data-accent="blue" aria-label="Blue" style="--sw:#0a64d8"></button></div>
@@ -2911,6 +2915,7 @@ function surplusSplit(amount) {
   return { restore: round2(restore), wealth: round2(amount - restore) };
 }
 function renderBuffer() {
+  renderSetBuf();
   const a = bufferAccount(), target = bufferTarget(), wealth = wealthGoal(), bal = bufferBalance(), st = $("bufStatus"), L = bufferLayers(bal);
   $("bufAcct").textContent = a ? "Big Savings · " + acctLabel(a) : "Big Savings";
   $("bufHealthLbl").textContent = "Buffer health" + (target ? " (" + money(target) + " safety net)" : "");
@@ -2924,6 +2929,12 @@ function renderBuffer() {
   $("bufWealth").textContent = a ? money(bal) + (wealth ? " of " + money(wealth) : "") : "—";
   $("bufWealthSub").textContent = a && wealth ? (L.toWealth > 0 ? money(L.toWealth) + " to go" : "Goal reached") : "";
 }
+function renderSetBuf() {
+  const a = bufferAccount();
+  $("setBuf").innerHTML = infoRow("Account", a ? esc(acctLabel(a)) : "Not set") + infoRow("Safety-net buffer", bufferTarget() ? money(bufferTarget()) : "Not set") +
+    infoRow("Overall wealth goal", wealthGoal() ? money(wealthGoal()) : "Not set");
+}
+$("setBufBtn").addEventListener("click", () => openBufferSetup());
 function bufferInfoHtml() {
   const a = bufferAccount(), target = bufferTarget(), bal = bufferBalance(), L = bufferLayers(bal), wealth = wealthGoal();
   if (!a) return '<div class="inote">Set up your Big Savings account first (tap the card).</div>';
