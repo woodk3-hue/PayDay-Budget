@@ -716,9 +716,10 @@ input[type=file]{padding:9px 12px}
       <h2 id="propFormTitle">Add property</h2>
       <form id="propForm">
         <label class="full">Name or address<input name="name" required placeholder="e.g. 12 Smith St"></label>
-        <label class="full">Linked bank account<select name="accountId" class="acctSel"></select></label>
+        <label class="full">Dedicated Bank Account<select name="accountId" class="acctSel" data-ph="Choose an account…" required></select></label>
         <label><span data-pl="Rent per {noun}">Rent per fortnight</span><input type="number" name="rentEst" step="0.01" min="0" inputmode="decimal" value="0"></label>
         <label><span data-pl="Costs per {noun}">Costs per fortnight</span><input type="number" name="costEst" step="0.01" min="0" inputmode="decimal" value="0"></label>
+        <label class="full">Target maintenance float<input type="number" name="maintFloat" step="1" min="0" inputmode="decimal" value="0"></label>
         <label class="full"><span data-pl="Maintenance set-aside per {noun}">Maintenance set-aside per fortnight</span><input type="number" name="maintFn" step="0.01" min="0" inputmode="decimal" value="0"></label>
         <details class="full propyearly"><summary>Yearly costs (optional)</summary>
           <div class="grid" style="margin-top:8px">
@@ -954,6 +955,7 @@ function save(name, id, data) {
 }
 function remove(name, id) {
   if (name === "income") { const row = ST.income.find((x) => x.id === id); if (row && row.accountId) bumpAccount(row.accountId, -row.amount); }
+  if (name === "bills") { const b = ST.bills.find((x) => x.id === id); if (b && b.category === "maintenance" && b.accountId) bumpAccount(b.accountId, b.amount); }
   deleteDoc(doc(db, "users", uid, name, id)).catch((e) => toast("Delete failed: " + e.message));
   if (name === "bills") deleteDoc(doc(db, "users", uid, "billFiles", id)).catch(() => {});
 }
@@ -1301,6 +1303,7 @@ function propInfoHtml(id) {
     infoRow("Yearly costs set aside", money(c.base) + pfS()) + infoRow("Bills set aside", money(c.extra) + pfS()) +
     infoRow("Other property costs", money(groupPropertyCosts(id)) + pfS()) + (p.costEst ? infoRow("Cost estimate", money(p.costEst) + pfS()) : "") +
     infoRow("Required " + PF().label + " Set-Aside", money(requiredSetAside(id)) + pfS()) +
+    infoRow("Pool balance", money(propPool(id).pool)) + infoRow("Bills before next payday", money(propPool(id).bills)) + infoRow("Target maintenance float", money(propPool(id).float)) +
     infoRow("Maintenance put aside", money(maintContrib(id)) + (p.maintFn ? " (" + money(p.maintFn) + pfS() + ")" : "")) +
     infoRow("Maintenance receipts", money(maintReceipts(id))) + infoRow("Maintenance reserve", money(maintReserve(id)));
 }
@@ -1359,6 +1362,7 @@ $("incomeForm").addEventListener("submit", (e) => {
   d.accountId = d.accountId || "";
   const old = isNew ? null : ST.income.find((x) => x.id === editing.income), src = ST.incomeSources.find((x) => x.name === d.source);
   d.wages = src ? !!src.wages : old ? isWages(old) : d.source === PAY_SOURCE;
+  if (src && !d.wages && src.propertyId && propAccount(src.propertyId)) d.accountId = propAccount(src.propertyId);
   adjustIncomeAccount(old, d);
   save("income", editing.income, d);
   resetForm(e.target, "income");
@@ -1371,6 +1375,7 @@ $("expenseForm").addEventListener("submit", (e) => {
   const d = formData(e.target), g = groupById(d.groupId);
   d.category = g ? g.name : "Other";
   const rd = e.target.elements.remindDays.value; d.remindDays = rd === "" ? null : Number(rd); d.lastNotified = null;
+  if (g && g.kind === "property" && propAccount(g.propertyId)) d.accountId = propAccount(g.propertyId);
   linkFields(d, d.date, ST.expenses.find((x) => x.id === editing.expenses));
   save("expenses", editing.expenses, d);
   resetForm(e.target, "expenses");
@@ -1661,13 +1666,31 @@ function flowRow(label, rent, costs) {
 const propRent = (id) => rentFortnight(id) || Number(propData(id).rentEst || 0);
 const propCostNow = (id) => propCosts(id) || Number(propData(id).costEst || 0);
 const HOUSE_SVG = '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22 24 7l18 15M10 20v21h28V20"/><path d="M20 41V28h8v13"/></svg>';
+// Property pool: the linked account's balance against what the property must keep: bills due before the next payday + the target maintenance float.
+function propPool(id) {
+  const p = propData(id), a = acctById(p.accountId), from = today(), to = isoFromDay(nextPayday()), seen = {};
+  let bills = 0;
+  expenseItems().forEach((it) => {
+    const own = it.coll === "bills" ? it.x.category === "property" && it.x.propertyId === id : it.coll !== "acctTransfers" && it.group && it.group.kind === "property" && (it.group.propertyId || "") === id;
+    if (!own || seen[it.coll + it.x.id]) return;
+    seen[it.coll + it.x.id] = true; bills += occurrencesIn(it, from, to).length * it.amount;
+  });
+  const float = Number(p.maintFloat) || 0, pool = a ? Number(a.balance) || 0 : 0, reserved = round2(bills + float);
+  return { linked: !!a, acct: a, pool: pool, bills: round2(bills), float: float, reserved: reserved, net: round2(pool - reserved) };
+}
+function poolRows(id) {
+  const q = propPool(id);
+  if (!q.linked) return '<div class="pl small"><span>No linked account</span><b>Edit to link</b></div>';
+  return '<div class="pl small"><span>Pool balance</span><b>' + money(q.pool) + '</b></div>' +
+    '<div class="pl small"><span>Reserved (bills + maintenance)</span><b>' + money(q.reserved) + '</b></div>' +
+    '<div class="pl small"><span>' + (q.net >= 0 ? "Available surplus" : "Shortfall") + '</span><b class="' + (q.net >= 0 ? "pos" : "neg") + '">' + money(Math.abs(q.net)) + "</b></div>";
+}
 function propCardHtml(id) {
   const p = propData(id), rent = propRent(id), costs = propCostNow(id), net = rent - costs;
   return '<div class="pcard' + (propFilter === id ? " sel" : "") + '" data-sid="' + esc(id) + '">' + infoBtn("prop", id) + '<h3>' + esc(propName(id)) + '</h3>' +
     '<div class="pl"><span>Rent</span><b>' + money(rent) + '</b></div><div class="pl"><span>Costs</span><b>' + money(costs) + '</b></div>' +
     '<div class="pnet ' + (net >= 0 ? "pos" : "neg") + '">' + money(net) + '</div>' +
-    '<div class="pl small"><span>Required ' + PF().label + ' set-aside</span><b>' + money(requiredSetAside(id)) + '</b></div>' +
-    '<div class="pl small"><span>Maint. reserve</span><b class="' + (maintReserve(id) >= 0 ? "pos" : "neg") + '">' + money(maintReserve(id)) + '</b></div>' +
+poolRows(id) +
     '<button class="ghost" data-edit-prop="' + esc(id) + '">Edit</button></div>';
 }
 function renderPropertyFlows() {
@@ -1715,6 +1738,16 @@ function renderProperty() {
   $("receiptList").innerHTML = rec.length ? rec.map(receiptRow).join("") : '<li class="empty">No receipts logged yet.</li>';
 }
 
+// A property's linked account is its own money pool: rent lands in it and its bills and receipts come out of it.
+const propAccount = (id) => { const a = id ? acctById(propData(id).accountId) : null; return a ? a.id : ""; };
+// Each property keeps its own account: accounts already used by another property are greyed out in the list.
+function markTakenAccounts(forId) {
+  const sel = $("propForm").elements.accountId;
+  [...sel.options].forEach((o) => {
+    const q = ST.properties.find((x) => x.accountId === o.value && o.value && x.id !== forId);
+    o.disabled = !!q; o.textContent = o.textContent.replace(/ \(used by .*\)$/, "") + (q ? " (used by " + (q.name || "another property") + ")" : "");
+  });
+}
 function resetPropForm() {
   editing.properties = null; $("propForm").reset();
   $("propFormTitle").textContent = "Add property"; $("propSubmit").textContent = "Save property"; $("propDelete").classList.add("hidden");
@@ -1724,28 +1757,39 @@ function startEditProp(id) {
   const f = $("propForm"), p = propData(id);
   f.elements.name.value = p.name || "Property " + id;
   f.elements.accountId.value = p.accountId || "";
-  ["rentEst", "costEst", "maintFn"].concat(PROP_COSTS).forEach((k) => { f.elements[k].value = p[k] ?? 0; });
-  editing.properties = id;
+  ["rentEst", "costEst", "maintFn", "maintFloat"].concat(PROP_COSTS).forEach((k) => { f.elements[k].value = p[k] ?? 0; });
+  editing.properties = id; markTakenAccounts(id);
   $("propFormTitle").textContent = "Edit property"; $("propSubmit").textContent = "Update"; $("propDelete").classList.remove("hidden");
   openSheet("propCard");
 }
 $("propForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const d = formData(e.target);
-  ["rentEst", "costEst", "maintFn"].forEach((k) => { d[k] = Math.round(parseFloat(d[k] || 0) * 100) / 100; });
+  ["rentEst", "costEst", "maintFn", "maintFloat"].forEach((k) => { d[k] = Math.round(parseFloat(d[k] || 0) * 100) / 100; });
   // Changing the maintenance amount banks what was put aside so far and starts counting from today.
   if (!editing.properties) { d.maintBase = 0; d.maintStart = today(); }
   else if (d.maintFn !== Number(propData(editing.properties).maintFn || 0)) { d.maintBase = maintContrib(editing.properties); d.maintStart = today(); }
   d.name = d.name.trim(); d.accountId = d.accountId || "";
-  if (editing.properties) setDoc(doc(db, "users", uid, "properties", editing.properties), d, { merge: true }).catch((err) => toast("Save failed: " + err.message));
-  else save("properties", null, d);
+  if (!d.accountId || !acctById(d.accountId)) { toast("Choose a dedicated bank account for this property."); return; }
+  const taken = ST.properties.find((q) => q.accountId === d.accountId && q.id !== editing.properties);
+  if (taken) { toast(acctName(d.accountId) + " is already " + (taken.name || "another property") + "'s account. Each property needs its own."); return; }
+  const batch = writeBatch(db), ref = editing.properties ? doc(db, "users", uid, "properties", editing.properties) : doc(col("properties"));
+  batch.set(ref, editing.properties ? d : { ...d, created: serverTimestamp() }, { merge: true });
+  // Bind what already belongs to this property to its pool.
+  const pid = ref.id;
+  ST.incomeSources.filter((x) => !x.wages && x.propertyId === pid && x.accountId !== d.accountId).forEach((x) => batch.update(doc(db, "users", uid, "incomeSources", x.id), { accountId: d.accountId }));
+  ST.bills.filter((b) => b.category === "property" && b.propertyId === pid && b.accountId !== d.accountId).forEach((b) => {
+    const nd = linkFields({ ...b, accountId: d.accountId }, billDue(b), b);
+    batch.update(doc(db, "users", uid, "bills", b.id), { accountId: nd.accountId, manual: nd.manual, nextApply: nd.nextApply });
+  });
+  batch.commit().catch((err) => toast("Save failed: " + err.message));
   resetPropForm(); closeSheets(false);
 });
 $("propDelete").addEventListener("click", () => {
   const id = editing.properties; if (!id) return;
   showInlineConfirm("Delete " + propName(id) + "? Its bills stay in the list.", () => { remove("properties", id); resetPropForm(); closeSheets(false); });
 });
-$("addPropBtn").addEventListener("click", () => openSheet("propCard"));
+$("addPropBtn").addEventListener("click", () => { markTakenAccounts(null); openSheet("propCard"); });
 $("propFilter").addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
   propFilter = b.dataset.pf; renderProperty();
@@ -1947,10 +1991,11 @@ $("billForm").addEventListener("submit", (e) => {
   if (d.propertyId === "__personal") { d.propertyId = ""; d.category = "personal"; d.frequency = d.frequency || "once"; }
   if (d.category === "maintenance") d.frequency = "once";
   d.paid = d.category === "maintenance";
-  if (d.category === "maintenance") { d.accountId = ""; d.manual = false; d.nextApply = ""; d.groupId = ""; }
+  if (d.category === "maintenance") { d.accountId = propAccount(d.propertyId); d.manual = false; d.nextApply = ""; d.groupId = ""; adjustReceiptAccount(editing.bills ? ST.bills.find((x) => x.id === editing.bills) : null, d); }
   else {
     const g = groupById(d.groupId);
     if (g) { d.category = g.kind === "property" ? "property" : "personal"; d.propertyId = g.kind === "property" ? g.propertyId || d.propertyId || "A" : ""; }
+    if (d.category === "property" && propAccount(d.propertyId)) d.accountId = propAccount(d.propertyId);
     linkFields(d, d.dueDate, ST.bills.find((x) => x.id === editing.bills));
   }
   const batch = writeBatch(db);
@@ -2097,6 +2142,7 @@ $("srcForm").addEventListener("submit", (e) => {
   d.recurring = !!d.recurring;
   if (d.recurring && !d.nextApply) { toast("Pick the next date for this recurring income."); return; }
   if (!d.recurring) d.nextApply = "";
+  if (d.propertyId && propAccount(d.propertyId)) d.accountId = propAccount(d.propertyId);
   save("incomeSources", editing.incomeSources, d);
   editing.incomeSources = null; e.target.reset(); syncSrcForm();
   $("srcSubmit").textContent = "Save source";
@@ -2295,6 +2341,7 @@ function openSheet(id) {
   sheetBack.addEventListener("click", () => closeSheets(true));
   document.body.appendChild(sheetBack);
   $(id).classList.add("open");
+  if (id === "propCard") markTakenAccounts(editing.properties || null);
   dueCalcs.forEach((x) => x.refresh());
 }
 function closeSheets(cancel) {
@@ -2442,6 +2489,11 @@ function bumpAccount(id, delta) {
   if (!id || !delta) return;
   updateDoc(doc(db, "users", uid, "accounts", id), { balance: increment(round2(delta)) }).catch(() => {});
 }
+// A maintenance receipt is already paid: it comes straight out of the property's pool (and goes back if it is edited or deleted).
+function adjustReceiptAccount(old, d) {
+  if (old && old.category === "maintenance" && old.accountId) bumpAccount(old.accountId, old.amount);
+  if (d.accountId) bumpAccount(d.accountId, -d.amount);
+}
 function adjustIncomeAccount(old, d) {
   if (old && old.accountId) bumpAccount(old.accountId, -old.amount);
   if (d.accountId) bumpAccount(d.accountId, d.amount);
@@ -2469,8 +2521,9 @@ function renderAccountSelects() {
     const list = accts.map((a) => '<option value="' + esc(a.id) + '">' + esc(acctLabel(a)) + "</option>").join("");
     const bankList = banks.map((b) => '<option value="' + esc(b.id) + '">' + esc(b.name) + "</option>").join("");
     document.querySelectorAll("select.bankSel").forEach((sel) => setOptions(sel, '<option value="">No bank</option>' + bankList));
-    document.querySelectorAll("select.acctSel").forEach((sel) => setOptions(sel, acctOptionsHtml()));
+    document.querySelectorAll("select.acctSel").forEach((sel) => { setOptions(sel, acctOptionsHtml()); if (sel.dataset.ph) sel.options[0].textContent = sel.dataset.ph; });
     document.querySelectorAll("select.acctExt").forEach((sel) => setOptions(sel, '<option value="">Outside my accounts</option>' + list));
+    markTakenAccounts(editing.properties || null);
   } catch (e) { console.warn("Account lists couldn't be built:", e.message); }
 }
 function showTextPrompt(title, onSave) {
@@ -2583,13 +2636,18 @@ function acctProjection(a) {
   const outbound = on ? ST.acctTransfers.filter((t) => t.trigger === "payday" && t.fromId === a.id) : [];
   const wages = ST.incomeSources.filter((x) => x.wages && x.accountId === a.id).reduce((t, x) => t + toFortnight(x.amount, x.frequency), 0);
   const inTotal = round2(inbound.reduce((t, x) => t + (Number(x.amount) || 0), 0)), outTotal = round2(outbound.reduce((t, x) => t + (Number(x.amount) || 0), 0));
-  const sched = round2(inTotal + wages - outTotal), buf = bufferAccount(), buffer = buf && buf.id === a.id ? 0 : Number(a.minBuffer) || 0;
-  const bal = Number(a.balance) || 0, net = round2(bal + sched - total - buffer);
-  const active = bills.length > 0 || inTotal > 0 || outTotal > 0 || wages > 0;
+  const sched = round2(inTotal + wages - outTotal), buf = bufferAccount();
+  // A property pool also keeps its target maintenance float, and rent due before payday counts as money coming in.
+  const floats = ST.properties.filter((q) => q.accountId === a.id).reduce((t, q) => t + (Number(q.maintFloat) || 0), 0);
+  const buffer = buf && buf.id === a.id ? 0 : (Number(a.minBuffer) || 0) + floats;
+  const rentDue = ST.incomeSources.filter((x) => !x.wages && x.propertyId && x.accountId === a.id && x.recurring && x.nextApply)
+    .reduce((t, x) => t + occurrencesIn({ due: x.nextApply, freq: x.frequency }, from, to).length * (Number(x.amount) || 0), 0);
+  const bal = Number(a.balance) || 0, net = round2(bal + sched + rentDue - total - buffer);
+  const active = bills.length > 0 || inTotal > 0 || outTotal > 0 || wages > 0 || rentDue > 0 || floats > 0;
   const state = !active ? "idle" : net < -0.005 ? (bal + sched < total ? "short" : "tight") : net <= 5 ? "balanced" : "covered";
   const trim = state === "covered" ? round2(Math.min(net, inTotal)) : 0;
   const adj = state === "short" || state === "tight" ? round2(-net) : -trim;
-  return { from: from, to: to, bills: bills, total: total, inbound: inbound, inTotal: inTotal, outTotal: outTotal, wages: wages, sched: sched, buffer: buffer, bal: bal, net: net, state: state, adj: adj, on: on };
+  return { rentDue: round2(rentDue), from: from, to: to, bills: bills, total: total, inbound: inbound, inTotal: inTotal, outTotal: outTotal, wages: wages, sched: sched, buffer: buffer, bal: bal, net: net, state: state, adj: adj, on: on };
 }
 function acctStatus(p) {
   if (p.state === "short" || p.state === "tight") return ['<span class="pstat ' + (p.state === "short" ? "red" : "amber") + '">Shortfall: Add ' + money(p.adj) + " extra on payday</span>"];
@@ -2603,8 +2661,8 @@ function acctInfoHtml(id) {
   const items = p.bills.length ? p.bills.map((b) => '<div class="irow"><span>' + esc(b.name) + " · " + fmtDate(b.date) + "</span><b>−" + money(b.amount) + "</b></div>").join("") : '<div class="inote">Nothing due before payday.</div>';
   return infoRow("Current balance", money(p.bal)) +
     '<div class="inote" style="padding-bottom:0">Upcoming bills this cycle (to ' + fmtDate(p.to) + ")</div>" + items +
-    infoRow("Total bills", "−" + money(p.total)) + (p.buffer ? infoRow("Keep at least", "−" + money(p.buffer)) : "") +
-    infoRow("Scheduled payday deposit", signed(p.sched)) + (p.on ? "" : '<div class="inote">Payday transfers are switched off, so none are counted.</div>') +
+    infoRow("Total bills", "−" + money(p.total)) + (p.buffer ? infoRow("Keep at least (incl. maintenance float)", "−" + money(p.buffer)) : "") +
+    (p.rentDue ? infoRow("Rent due before payday", "+" + money(p.rentDue)) : "") + infoRow("Scheduled payday deposit", signed(p.sched)) + (p.on ? "" : '<div class="inote">Payday transfers are switched off, so none are counted.</div>') +
     infoRow("Projected after payday", money(p.net)) +
     infoRow("Recommended net adjustment", p.adj ? signed(p.adj) : "None");
 }

@@ -36,8 +36,8 @@ const store = {
     { name: "MacBook", amount: 2399, type: "purchase", frequency: "once", dueDate: day(60), remindDays: 7 }
   ],
   properties: [
-    { id: "A", name: "12 Smith St", rates: 2200, water: 900, insurance: 1800, landTax: 1500 },
-    { id: "B", name: "4/8 Park Rd", rates: 1400, water: 700, insurance: 1100, landTax: 0 }
+    { id: "A", name: "12 Smith St", accountId: "acc4", maintFloat: 500, rates: 2200, water: 900, insurance: 1800, landTax: 1500 },
+    { id: "B", name: "4/8 Park Rd", accountId: "acc3", maintFloat: 300, rates: 1400, water: 700, insurance: 1100, landTax: 0 }
   ],
   bills: [
     { category: "property", propertyId: "A", vendor: "Brisbane City Council", amount: 550, dueDate: day(12), frequency: "quarterly", paid: false, fileStatus: "filed" },
