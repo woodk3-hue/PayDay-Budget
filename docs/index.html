@@ -732,6 +732,7 @@ input[type=file]{padding:9px 12px}
         <label class="hidden" id="rentLastAmtWrap">Last Rent Amount Received<input type="number" name="rentLastAmount" step="0.01" min="0" inputmode="decimal"></label>
         <span class="duechip" id="rentChip" style="grid-column:1/-1"></span>
         <label class="full">Costs per rent cycle<input type="number" name="costEst" step="0.01" min="0" inputmode="decimal" value="0"></label>
+        <label class="full">3-month safety buffer target (optional)<input type="number" name="bufferTarget" step="1" min="0" inputmode="decimal" value="0"></label>
         <label class="full">Target maintenance float<input type="number" name="maintFloat" step="1" min="0" inputmode="decimal" value="0"></label>
         <label class="full"><span data-pl="Maintenance set-aside per {noun}">Maintenance set-aside per fortnight</span><input type="number" name="maintFn" step="0.01" min="0" inputmode="decimal" value="0"></label>
         <details class="full propyearly"><summary>Yearly costs (optional)</summary>
@@ -1314,6 +1315,7 @@ function propInfoHtml(id) {
   return infoRow("Linked account", esc(p.accountId ? acctName(p.accountId) : "None")) +
     infoRow("Rent Coming In", money(propRentExpected(id))) + infoRow("Total Property Bills", "-" + money(propCycleCosts(id))) +
     infoRow("Net Rent Cashflow", money((propRentReceived(id) || propRentExpected(id)) - propCycleCosts(id))) +
+    (propData(id).bufferTarget ? infoRow("Safety buffer target", money(propData(id).bufferTarget)) + infoRow("Available cash above bills", money(propPool(id).pool - propPool(id).bills)) : "") +
     infoRow("Reserved (Bills + Maintenance)", "-" + money(propPool(id).reserved)) + infoRow("Available Surplus", money(propPool(id).net)) +
     infoRow("Rent frequency", cycleName(propRentFreq(id))) + (propLastRent(id) ? infoRow("Last rent received", money(propLastRent(id).amount) + " · " + fmtDate(propLastRent(id).date)) : "") + infoRow("Cycle", fmtDate(propCycle(id).start) + " – " + fmtDate(propCycle(id).end)) +
     infoRow("Rent received this cycle", money(propRentReceived(id))) + infoRow("Next rent due", fmtDate(propPool(id).nextRent)) +
@@ -1756,6 +1758,14 @@ function propCardHtml(id) {
   const foot = '<button class="ghost" data-edit-prop="' + esc(id) + '">Edit</button></div>';
   if (!q.linked) return head + '<div class="pstatus">No linked account. Edit to choose one.</div>' + foot;
   const when = fmtDate(q.nextRent), short = q.bills > q.pool, spare = Math.max(0, round2(q.pool - q.bills - q.float));
+  const buf = Number(propData(id).bufferTarget) || 0;
+  if (buf > 0) {
+    // Passive buffer: rent just accumulates. No deposit prompts or shortfall alerts, only progress and, once funded, what is safe to take out.
+    const avail = round2(q.pool - q.bills), top = Math.max(0, avail), surplus = Math.max(0, round2(avail - buf));
+    const head2 = head + '<div class="pl big"><span>Bank Balance</span><b>' + money(q.pool) + '</b></div><div class="pl big"><span>Upcoming Bills Due</span><b>' + money(q.bills) + "</b></div>";
+    if (avail < buf) return head2 + '<div class="pstate">🛡️ Building 3-Month Buffer (' + money(top) + " / " + money(buf) + ')</div><div class="pstatus">Next rent arriving ' + when + "</div>" + foot;
+    return head2 + '<div class="pstate ok">🎉 3-Month Buffer Fully Funded!</div>' + (surplus > 0 ? '<div class="pact ok">📤 Safe to move ' + money(surplus) + " OUT of account</div>" : "") + foot;
+  }
   const status = short ? '<div class="pstate bad">⚠️ Shortfall until next rent (' + when + ")</div>" : '<div class="pstate ok">✅ Covered until next rent (' + when + ")</div>";
   const action = short ? '<div class="pact bad">📥 Move ' + money(round2(q.bills - q.pool)) + " INTO this account</div>"
     : spare > 0 ? '<div class="pact ok">📤 Safe to move ' + money(spare) + " OUT of account</div>"
@@ -1845,7 +1855,7 @@ function startEditProp(id) {
   f.elements.name.value = p.name || "Property " + id;
   f.elements.accountId.value = p.accountId || ""; f.elements.rentFreq.value = propRentFreq(id);
   f.elements.rentLastDate.value = p.rentLastDate || ""; f.elements.rentLastAmount.value = p.rentLastAmount || ""; setRentMode(p.rentMode === "last" ? "last" : "fixed");
-  ["rentEst", "costEst", "maintFn", "maintFloat"].concat(PROP_COSTS).forEach((k) => { f.elements[k].value = p[k] ?? 0; });
+  ["rentEst", "costEst", "maintFn", "maintFloat", "bufferTarget"].concat(PROP_COSTS).forEach((k) => { f.elements[k].value = p[k] ?? 0; });
   editing.properties = id; markTakenAccounts(id);
   $("propFormTitle").textContent = "Edit property"; $("propSubmit").textContent = "Update"; $("propDelete").classList.remove("hidden");
   openSheet("propCard");
@@ -1853,7 +1863,7 @@ function startEditProp(id) {
 $("propForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const d = formData(e.target);
-  ["rentEst", "costEst", "maintFn", "maintFloat"].forEach((k) => { d[k] = Math.round(parseFloat(d[k] || 0) * 100) / 100; });
+  ["rentEst", "costEst", "maintFn", "maintFloat", "bufferTarget"].forEach((k) => { d[k] = Math.round(parseFloat(d[k] || 0) * 100) / 100; });
   // Changing the maintenance amount banks what was put aside so far and starts counting from today.
   if (!editing.properties) { d.maintBase = 0; d.maintStart = today(); }
   else if (d.maintFn !== Number(propData(editing.properties).maintFn || 0)) { d.maintBase = maintContrib(editing.properties); d.maintStart = today(); }
@@ -2738,14 +2748,17 @@ function acctProjection(a) {
   const bal = Number(a.balance) || 0, net = round2(bal + sched + rentDue - total - buffer);
   const active = bills.length > 0 || inTotal > 0 || outTotal > 0 || wages > 0 || rentDue > 0 || floats > 0;
   const state = !active ? "idle" : net < -0.005 ? (bal + sched < total ? "short" : "tight") : net <= 5 ? "balanced" : "covered";
-  const trim = state === "covered" ? round2(Math.min(net, inTotal)) : 0;
-  const adj = state === "short" || state === "tight" ? round2(-net) : -trim;
-  return { rentDue: round2(rentDue), from: from, to: to, bills: bills, total: total, inbound: inbound, inTotal: inTotal, outTotal: outTotal, wages: wages, sched: sched, buffer: buffer, bal: bal, net: net, state: state, adj: adj, on: on };
+  const building = ST.properties.some((q) => q.accountId === a.id && Number(q.bufferTarget) > 0);
+  const state2 = building && (state === "short" || state === "tight") ? "building" : state;
+  const trim = state2 === "covered" ? round2(Math.min(net, inTotal)) : 0;
+  const adj = state2 === "short" || state2 === "tight" ? round2(-net) : -trim;
+  return { rentDue: round2(rentDue), from: from, to: to, bills: bills, total: total, inbound: inbound, inTotal: inTotal, outTotal: outTotal, wages: wages, sched: sched, buffer: buffer, bal: bal, net: net, state: state2, adj: adj, on: on };
 }
 function acctStatus(p) {
   if (p.state === "short" || p.state === "tight") return ['<span class="pstat ' + (p.state === "short" ? "red" : "amber") + '">Shortfall: Add ' + money(p.adj) + " extra on payday</span>"];
   if (p.state === "covered") return ['<span class="pstat green">Covered (Surplus ' + money(p.net) + ")</span>"];
   if (p.state === "balanced") return ['<span class="pstat blue">Balanced</span>'];
+  if (p.state === "building") return ['<span class="pstat blue">Building buffer</span>'];
   return ['<span class="pstat idle">No bills before payday</span>'];
 }
 function acctInfoHtml(id) {
