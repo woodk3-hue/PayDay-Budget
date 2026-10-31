@@ -268,7 +268,17 @@ nav.none::before{opacity:0}
 .pcard{background:var(--card);border-radius:20px;padding:14px;box-shadow:var(--shadow);box-shadow:inset 0 0 0 .5px var(--line),var(--shadow);display:flex;flex-direction:column;gap:4px}
 .pcard.sel{box-shadow:inset 0 0 0 2px var(--brand),var(--shadow)}
 .pcard h3{font-size:17px;font-weight:600;word-break:break-word}
-.pcard .acct{font-size:13px;color:var(--muted)}
+.pcard{position:relative}
+.pcard h3{padding-right:34px}
+.pcard .infobtn{position:absolute;top:2px;right:2px}
+.infobtn{width:44px;height:44px;min-height:44px;padding:0;background:none;box-shadow:none;color:var(--muted);display:inline-flex;align-items:center;justify-content:center;flex:none;transition:color .15s,transform .15s}
+.infobtn:active{transform:scale(.9);color:var(--brand)}
+.infobtn svg{width:22px;height:22px;pointer-events:none}
+.irow{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-top:.5px solid var(--line);font-size:16px;text-align:left}
+.irow:first-child{border-top:0}
+.irow b{font-variant-numeric:tabular-nums;text-align:right}
+.inote,.sec .chain{padding:8px 0;font-size:15px;color:var(--muted);text-align:left}
+.sec .sub.wrap{text-align:left}
 .pcard .pl{display:flex;justify-content:space-between;font-size:15px}
 .pcard .pl b{font-variant-numeric:tabular-nums}
 .pcard .pnet{font-family:var(--rounded);font-size:22px;font-weight:700;margin-top:4px}
@@ -606,6 +616,8 @@ input[type=file]{padding:9px 12px}
         <label>Target<input type="number" name="target" step="0.01" min="0" inputmode="decimal" required></label>
         <label>Starting balance<input type="number" name="opening" step="0.01" min="0" inputmode="decimal" value="0"></label>
         <label class="full">Needed by (optional)<input type="date" name="targetDate" data-blank></label>
+        <label class="full">Linked account (e.g. Travel account)<select name="accountId" class="acctSel"></select></label>
+        <label class="full">Funding order in that account (1 = first)<input type="number" name="order" min="1" step="1" inputmode="numeric" placeholder="e.g. 1"></label>
         <button class="full" type="submit" id="goalSubmit">Add goal</button>
       </form>
     </div>
@@ -955,7 +967,25 @@ function renderSubs() {
   $("upcomingList").innerHTML = soon.length ? soon.map(upcomingRow).join("") : '<li class="empty">Nothing due in the next 14 days.</li>';
 }
 
+// Goals linked to an account are funded from its balance, in funding order: the first goal fills to its target, then the overflow rolls into the next.
+const linkedGoals = (accountId) => ST.goals.filter((g) => g.accountId === accountId).sort((a, b) => (a.order || 9999) - (b.order || 9999) || String(a.name).localeCompare(b.name));
+function linkedFunding(accountId) {
+  const a = acctById(accountId);
+  let left = Math.max(0, Number(a && a.balance) || 0);
+  const alloc = {};
+  linkedGoals(accountId).forEach((g) => { const x = Math.min(left, Math.max(0, g.target || 0)); alloc[g.id] = x; left -= x; });
+  return { alloc: alloc, extra: left };
+}
+const isLinked = (g) => !!g.accountId && !!acctById(g.accountId);
+// Adding to / spending from a linked goal moves its account balance, which is what drives the progress.
+function bumpGoalAccount(goalId, delta, batch) {
+  const g = ST.goals.find((x) => x.id === goalId);
+  if (!g || !isLinked(g)) return;
+  const ref = doc(db, "users", uid, "accounts", g.accountId), upd = { balance: increment(round2(delta)) };
+  if (batch) batch.update(ref, upd); else updateDoc(ref, upd).catch((e) => toast("Save failed: " + e.message));
+}
 function goalBalance(g) {
+  if (isLinked(g)) return linkedFunding(g.accountId).alloc[g.id] || 0;
   return ST.transfers.filter((t) => t.goalId === g.id)
     .reduce((s, t) => s + (t.type === "add" ? t.amount : -t.amount), Number(g.opening || 0));
 }
@@ -1041,11 +1071,15 @@ function renderPastIncome() {
     '</summary><div class="note">' + esc(pastSummary(names[n])) + '</div><ul class="list">' + names[n].map(pastRow).join("") + "</ul></details></div>").join("");
 }
 
+function goalsOrdered() {
+  const key = (g) => (isLinked(g) ? acctLabel(acctById(g.accountId)) : "\uffff");
+  return ST.goals.map((g, i) => ({ g: g, i: i })).sort((a, b) => key(a.g).localeCompare(key(b.g)) || (isLinked(a.g) ? (a.g.order || 9999) - (b.g.order || 9999) : 0) || a.i - b.i).map((x) => x.g);
+}
 function renderSavings() {
   const sel = $("goalSelect"), keep = sel.value;
   sel.innerHTML = ST.goals.map((g) => '<option value="' + g.id + '">' + esc(g.name) + "</option>").join("");
   if (keep) sel.value = keep;
-  $("goalList").innerHTML = ST.goals.length ? ST.goals.map(goalRow).join("") : '<li class="empty">No goals yet.</li>';
+  $("goalList").innerHTML = ST.goals.length ? goalsOrdered().map(goalRow).join("") : '<li class="empty">No goals yet.</li>';
   const recent = ST.transfers.slice(0, 30);
   $("transferList").innerHTML = recent.length ? recent.map(transferRow).join("") : '<li class="empty">No moves yet.</li>';
 }
@@ -1064,12 +1098,49 @@ function planHtml(plan, dateStr) {
   const note = plan.spare <= 0 ? "no spare cash per pay right now" : plan.fits ? "fits your spare " + money(plan.spare) + "/pay" : "more than your spare " + money(plan.spare) + "/pay";
   return "By " + fmtLong(dateStr) + ": set aside " + money(plan.perPay) + "/pay × " + plan.pays + ' · <span class="' + (plan.fits ? "ok" : "warn") + '">' + note + "</span>";
 }
+function linkLine(g, bal) {
+  if (!isLinked(g)) return "";
+  const chain = linkedGoals(g.accountId), a = acctById(g.accountId);
+  let html = '<div class="sub wrap">Linked: ' + esc(acctLabel(a)) + (bal >= g.target && g.target > 0 ? " · funded ✓" : "") + "</div>";
+  if (chain.length > 1) html += '<div class="sub wrap chain">' + chain.map((x, i) => (x.id === g.id ? "<b>" : "") + (i + 1) + ". " + esc(x.name) + (x.id === g.id ? "</b>" : "")).join(" → ") + "</div>";
+  return html;
+}
+const INFO_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="8" r=".6" fill="currentColor"/></svg>';
+const infoBtn = (kind, id) => '<button class="infobtn" data-info="' + kind + ":" + esc(id) + '" aria-label="Details">' + INFO_SVG + "</button>";
+function infoRow(label, value) { return '<div class="irow"><span>' + label + "</span><b>" + value + "</b></div>"; }
+function goalInfoHtml(g) {
+  const bal = goalBalance(g), plan = datePlan(Math.max(0, g.target - bal), g.targetDate);
+  let h = infoRow("Saved", money(bal)) + infoRow("Target", money(g.target)) + infoRow("Still to go", money(Math.max(0, g.target - bal)));
+  if (g.targetDate) h += infoRow("Needed by", fmtDate(g.targetDate));
+  if (plan) h += '<div class="inote">' + planHtml(plan, g.targetDate) + "</div>";
+  if (isLinked(g)) h += infoRow("Linked account", esc(acctLabel(acctById(g.accountId)))) + linkLine(g, bal).replace(/^<div class="sub wrap">Linked:[^]*?<\/div>/, "");
+  else h += '<div class="inote">Not linked to an account.</div>';
+  return h;
+}
+function propInfoHtml(id) {
+  const p = propData(id), c = propSetAside(id), live = rentFortnight(id);
+  return infoRow("Linked account", esc(p.accountId ? acctName(p.accountId) : "None")) +
+    infoRow("Rent this fortnight", money(live) + (live ? "" : " (estimate " + money(p.rentEst || 0) + ")")) +
+    infoRow("Yearly costs set aside", money(c.base) + "/fn") + infoRow("Bills set aside", money(c.extra) + "/fn") +
+    infoRow("Other property costs", money(groupPropertyCosts(id)) + "/fn") + (p.costEst ? infoRow("Cost estimate", money(p.costEst) + "/fn") : "");
+}
+function showInfo(title, html) {
+  const wrap = document.createElement("div");
+  wrap.className = "overlay sheet";
+  wrap.innerHTML = '<div class="card"><h3>' + esc(title) + '</h3><div class="sec">' + html + '</div><div class="actions"><button class="plain" data-x>Close</button></div></div>';
+  wrap.addEventListener("click", (e) => { if (e.target === wrap || e.target.dataset.x !== undefined) wrap.remove(); });
+  document.body.appendChild(wrap);
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-info]"); if (!b) return;
+  const [kind, id] = b.dataset.info.split(/:(.*)/);
+  if (kind === "goal") { const g = ST.goals.find((x) => x.id === id); if (g) showInfo(g.name, goalInfoHtml(g)); }
+  else if (kind === "prop") showInfo(propName(id), propInfoHtml(id));
+});
 function goalRow(g) {
   const bal = goalBalance(g), pct = g.target ? Math.max(0, Math.min(100, (bal / g.target) * 100)) : 0;
-  const plan = datePlan(Math.max(0, g.target - bal), g.targetDate);
-  const planLine = plan ? '<div class="sub wrap">' + planHtml(plan, g.targetDate) + "</div>" : "";
   return '<li><div class="main"><div>' + esc(g.name) + '</div><div class="sub">' + money(bal) + " of " + money(g.target) +
-    '</div>' + planLine + '<div class="bar"><span style="width:' + pct.toFixed(0) + '%"></span></div></div>' +
+    '</div><div class="bar"><span style="width:' + pct.toFixed(0) + '%"></span></div></div>' + infoBtn("goal", g.id) +
     '<button class="ghost" data-goal-add="' + g.id + '">Add</button>' +
     '<button class="ghost" data-edit-goal="' + g.id + '">Edit</button>' +
     '<button class="ghost" data-del="goals:' + g.id + '">✕</button></li>';
@@ -1149,7 +1220,8 @@ function startEditSub(s) {
 
 $("goalForm").addEventListener("submit", (e) => {
   e.preventDefault();
-  save("goals", editing.goals || null, formData(e.target));
+  const gd = formData(e.target); gd.order = Number(gd.order) || 0; gd.accountId = gd.accountId || "";
+  save("goals", editing.goals || null, gd);
   editing.goals = null; e.target.reset();
   $("goalFormTitle").textContent = "New goal"; $("goalSubmit").textContent = "Add goal";
   closeSheets(false);
@@ -1157,6 +1229,7 @@ $("goalForm").addEventListener("submit", (e) => {
 function startEditGoal(g) {
   const f = $("goalForm").elements;
   f.name.value = g.name; f.target.value = g.target; f.opening.value = g.opening ?? 0; f.targetDate.value = g.targetDate || "";
+  f.accountId.value = g.accountId || ""; f.order.value = g.order || "";
   editing.goals = g.id;
   $("goalFormTitle").textContent = "Editing " + g.name; $("goalSubmit").textContent = "Update goal";
   openSheet("goalCard");
@@ -1170,7 +1243,9 @@ function startEditTransfer(t) {
 }
 $("transferForm").addEventListener("submit", (e) => {
   e.preventDefault();
-  save("transfers", editing.transfers || null, formData(e.target));
+  const td = formData(e.target);
+  if (!editing.transfers) bumpGoalAccount(td.goalId, td.type === "add" ? td.amount : -td.amount);
+  save("transfers", editing.transfers || null, td);
   editing.transfers = null;
   $("transferFormTitle").textContent = "Move money"; $("transferSubmit").textContent = "Save";
   const keepGoal = e.target.goalId.value; e.target.reset();
@@ -1203,7 +1278,7 @@ document.addEventListener("click", (e) => {
   if (t.dataset.goalAdd) {
     const g = ST.goals.find((x) => x.id === t.dataset.goalAdd), plan = datePlan(Math.max(0, g.target - goalBalance(g)), g.targetDate);
     showAmountPrompt("Add extra to " + g.name, plan ? plan.perPay : "", (v) =>
-      save("transfers", null, { goalId: g.id, type: "add", amount: round2(v), date: today(), note: "Extra" }));
+      { save("transfers", null, { goalId: g.id, type: "add", amount: round2(v), date: today(), note: "Extra" }); bumpGoalAccount(g.id, v); });
   }
   if (t.dataset.editTransfer) startEditTransfer(ST.transfers.find((x) => x.id === t.dataset.editTransfer));
   if (t.dataset.editBill) startEditBill(ST.bills.find((x) => x.id === t.dataset.editBill));
@@ -1379,8 +1454,7 @@ const propRent = (id) => rentFortnight(id) || Number(propData(id).rentEst || 0);
 const propCostNow = (id) => propCosts(id) || Number(propData(id).costEst || 0);
 function propCardHtml(id) {
   const p = propData(id), rent = propRent(id), costs = propCostNow(id), net = rent - costs;
-  const acct = p.accountId ? acctName(p.accountId) : "No linked account";
-  return '<div class="pcard' + (propFilter === id ? " sel" : "") + '"><h3>' + esc(propName(id)) + '</h3><div class="acct">' + esc(acct) + '</div>' +
+  return '<div class="pcard' + (propFilter === id ? " sel" : "") + '">' + infoBtn("prop", id) + '<h3>' + esc(propName(id)) + '</h3>' +
     '<div class="pl"><span>Rent</span><b>' + money(rent) + '</b></div><div class="pl"><span>Costs</span><b>' + money(costs) + '</b></div>' +
     '<div class="pnet ' + (net >= 0 ? "pos" : "neg") + '">' + money(net) + '</div>' +
     '<button class="ghost" data-edit-prop="' + esc(id) + '">Edit</button></div>';
@@ -1963,7 +2037,7 @@ function spApply() {
     total += amt;
     if (t.type === "buf") batch.update(doc(db, "users", uid, "accounts", t.item.id), { balance: increment(round2(amt)) });
     else if (t.type === "wish") batch.update(doc(db, "users", uid, "wishlist", t.item.id), { saved: round2((t.item.saved || 0) + amt) });
-    else batch.set(doc(col("transfers")), { goalId: t.item.id, type: "add", amount: round2(amt), date: today(), note: "Surplus pay", created: serverTimestamp() });
+    else { batch.set(doc(col("transfers")), { goalId: t.item.id, type: "add", amount: round2(amt), date: today(), note: "Surplus pay", created: serverTimestamp() }); bumpGoalAccount(t.item.id, amt, batch); }
   };
   if (sp.mode === "top") give(spTargets().find((t) => t.type === "wish"), spTopAmount());
   else spTargets().forEach((t) => give(t, sp.amounts[t.key] || 0));
@@ -3047,7 +3121,7 @@ function applySmartAmount(amount) {
   const record = (amount, name, toId) => batch.set(doc(col("allotments")), { date: today(), amount: round2(amount), fromId: "", toId: toId || "", target: name, created: serverTimestamp() });
   plan.steps.forEach((s) => {
     if (s.kind === "w") batch.update(doc(db, "users", uid, "wishlist", s.id), { saved: round2((s.raw.saved || 0) + s.amount) });
-    else batch.set(doc(col("transfers")), { goalId: s.id, type: "add", amount: s.amount, date: today(), note: "Smart split", created: serverTimestamp() });
+    else { batch.set(doc(col("transfers")), { goalId: s.id, type: "add", amount: s.amount, date: today(), note: "Smart split", created: serverTimestamp() }); bumpGoalAccount(s.id, s.amount, batch); }
     record(s.amount, s.name, "");
   });
   if (buf && plan.toBuffer > 0) { batch.update(doc(db, "users", uid, "accounts", buf.id), { balance: increment(plan.toBuffer) }); record(plan.toBuffer, buf.name, buf.id); }
