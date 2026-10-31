@@ -281,6 +281,8 @@ nav.none::before{opacity:0}
 .infobtn{width:44px;height:44px;min-height:44px;padding:0;background:none;box-shadow:none;color:var(--muted);display:inline-flex;align-items:center;justify-content:center;flex:none;transition:color .15s,transform .15s}
 .infobtn:active{transform:scale(.9);color:var(--brand)}
 .infobtn svg{width:22px;height:22px;pointer-events:none}
+.isect{margin:16px 0 2px;text-align:left;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+.isect:first-child{margin-top:0}
 .irow{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-top:.5px solid var(--line);font-size:16px;text-align:left}
 .irow:first-child{border-top:0}
 .irow b{font-variant-numeric:tabular-nums;text-align:right}
@@ -1313,21 +1315,17 @@ function goalInfoHtml(g) {
   else h += '<div class="inote">Not linked to an account.</div>';
   return h;
 }
+// Property details, in three scannable sections. Optional lines at $0 are left out.
+const infoSect = (title, rows) => '<div class="isect">' + esc(title) + "</div>" + rows;
+const infoIf = (label, n, text) => (Math.abs(n) > 0.004 ? infoRow(label, text || money(n)) : "");
 function propInfoHtml(id) {
-  const p = propData(id), c = propSetAside(id);
-  return infoRow("Linked account", esc(p.accountId ? acctName(p.accountId) : "None")) +
-    infoRow("Rent Coming In", money(propRentExpected(id))) + infoRow("Total Property Bills", "-" + money(propCycleCosts(id))) +
-    infoRow("Net Rent Cashflow", money((propRentReceived(id) || propRentExpected(id)) - propCycleCosts(id))) +
-    (propData(id).bufferTarget ? infoRow("Safety buffer target", money(propData(id).bufferTarget)) + infoRow("Available cash above bills", money(propPool(id).pool - propPool(id).bills)) : "") +
-    infoRow("Reserved (Bills + Maintenance)", "-" + money(propPool(id).reserved)) + infoRow("Available Surplus", money(propPool(id).net)) +
-    infoRow("Rent frequency", cycleName(propRentFreq(id))) + (propLastRent(id) ? infoRow("Last rent received", money(propLastRent(id).amount) + " · " + fmtDate(propLastRent(id).date)) : "") + infoRow("Cycle", fmtDate(propCycle(id).start) + " – " + fmtDate(propCycle(id).end)) +
-    infoRow("Rent received this cycle", money(propRentReceived(id))) + infoRow("Next rent due", fmtDate(propPool(id).nextRent)) +
-    infoRow("Yearly costs set aside", money(c.base) + pfS()) + infoRow("Bills set aside", money(c.extra) + pfS()) +
-    infoRow("Other property costs", money(groupPropertyCosts(id)) + pfS()) + (p.costEst ? infoRow("Cost estimate", money(p.costEst) + pfS()) : "") +
-    infoRow("Required " + PF().label + " Set-Aside", money(requiredSetAside(id)) + pfS()) +
-    infoRow("Bank Account Balance", money(propPool(id).pool)) + infoRow("Bills before next rent", money(propPool(id).bills)) + infoRow("Expected rent deposit", money(propPool(id).expectedRent)) + infoRow("Bank balance after rent lands", money(propPool(id).afterRent)) + infoRow("Target maintenance float", money(propPool(id).float)) +
-    infoRow("Maintenance put aside", money(maintContrib(id)) + (p.maintFn ? " (" + money(p.maintFn) + pfS() + ")" : "")) +
-    infoRow("Maintenance receipts", money(maintReceipts(id))) + infoRow("Maintenance reserve", money(maintReserve(id)));
+  const p = propData(id), q = propPool(id), f = propRentFreq(id), lr = propRentAnchor(id), costs = propCycleCosts(id), rent = propRentReceived(id) || propRentExpected(id);
+  const buf = Number(p.bufferTarget) || 0, avail = round2(q.pool - q.bills);
+  const rentRows = infoRow("Rent", cycleName(f) + " · " + money(propRentExpected(id))) + (lr ? infoRow("Last received", fmtDate(lr.date) + (lr.amount ? " · " + money(lr.amount) : "")) : "") + infoRow("Next rent due", fmtDate(q.nextRent));
+  const flowRows = infoRow("Rent Coming In", money(propRentExpected(id))) + infoRow("Total Property Bills", "-" + money(costs)) + infoRow("Net Cashflow", money(rent - costs));
+  const acctRows = infoRow("Account", esc(p.accountId ? acctName(p.accountId) : "None")) + infoRow("Current Bank Balance", money(q.pool)) + infoIf("Reserved Maintenance Float", q.float) +
+    (buf ? infoRow("Target 3-Month Buffer", money(buf)) + infoRow("Saved Progress", money(Math.max(0, avail)) + " / " + money(buf) + " (" + Math.min(100, Math.round(Math.max(0, avail) / buf * 100)) + "%)") : "");
+  return infoSect("Rent & Cycle", rentRows) + infoSect(cycleName(f) + " Cashflow", flowRows) + infoSect("Account & Safety Buffer", acctRows);
 }
 function showInfo(title, html) {
   const wrap = document.createElement("div");
