@@ -321,6 +321,8 @@ nav.none::before{opacity:0}
 .duecalc .toggle button{font-size:14px;min-height:40px}
 .duecalc .calc{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .duechip{display:inline-block;justify-self:start;padding:7px 12px;border-radius:99px;background:var(--brand-soft);color:var(--brand);font-size:14px;font-weight:600}
+.pstat{font-size:13px;font-weight:600;margin-top:2px}
+.pstat.red{color:var(--red)}.pstat.amber{color:var(--amber)}.pstat.green{color:var(--green)}.pstat.blue{color:#0a84ff}.pstat.idle{color:var(--muted);font-weight:400}
 .swatches{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px}
 .swatches button{width:44px;height:44px;min-height:44px;padding:0;border-radius:50%;background:var(--sw);box-shadow:inset 0 0 0 1px rgba(128,128,128,.35)}
 .swatches button.on{box-shadow:0 0 0 3px var(--card),0 0 0 5px var(--sw)}
@@ -543,6 +545,8 @@ input[type=file]{padding:9px 12px}
     <div class="card">
       <h2>Payday transfers (optional)</h2>
       <label class="check"><input type="checkbox" id="paydayOn"> Run my payday transfers when I log my pay</label>
+      <label class="check" style="margin-top:10px"><input type="checkbox" id="optOn"> Optimize transfers</label>
+      <div id="optPanel" class="hidden" style="margin-top:8px"></div>
     </div>
     <div class="card"><h2>Transfers</h2><ul class="list" id="xferList"></ul></div>
     <div class="card">
@@ -774,6 +778,7 @@ input[type=file]{padding:9px 12px}
         <label class="full">Account name<input name="name" required placeholder="e.g. Bills account"></label>
         <label class="full">Bank<select name="bankId" class="bankSel"></select></label>
         <label class="full">Current balance<input type="number" name="balance" step="0.01" inputmode="decimal" required value="0"></label>
+        <label class="full">Keep at least (optional)<input type="number" name="minBuffer" step="1" min="0" inputmode="decimal" placeholder="e.g. 200"></label>
         <button class="full" type="submit" id="acctSubmit">Save account</button>
       </form>
     </div>
@@ -1309,7 +1314,8 @@ function showInfo(title, html) {
 document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-info]"); if (!b) return;
   const [kind, id] = b.dataset.info.split(/:(.*)/);
-  if (kind === "goal") { const g = ST.goals.find((x) => x.id === id); if (g) showInfo(g.name, goalInfoHtml(g)); }
+  if (kind === "acct") showInfo((acctById(id) || {}).name || "Account", acctInfoHtml(id));
+  else if (kind === "goal") { const g = ST.goals.find((x) => x.id === id); if (g) showInfo(g.name, goalInfoHtml(g)); }
   else if (kind === "prop") showInfo(propName(id), propInfoHtml(id));
   else if (kind === "buf") showInfo("Big Savings", bufferInfoHtml());
 });
@@ -2558,12 +2564,90 @@ function acctFlows(id) {
     list.forEach((x) => { if (x.accountId === id) out += toFortnight(x.amount, x.frequency); }));
   return { inn: inn, out: out };
 }
+/* ---- Per-account cashflow: balance + payday transfers vs the bills due before the next payday ---- */
+function occurrencesIn(it, from, to) {
+  const out = []; let d = it.due;
+  if (!d) return out;
+  for (let i = 0; i < 60 && d <= to; i++) { if (d >= from) out.push(d); if (!it.freq || it.freq === "once") break; d = addCycle(d, it.freq); }
+  return out;
+}
+function acctProjection(a) {
+  const from = today(), to = isoFromDay(nextPayday()), bills = [];
+  expenseItems().forEach((it) => {
+    const x = it.x, mine = it.coll === "acctTransfers" ? x.fromId === a.id && x.trigger !== "payday" : x.accountId === a.id;
+    if (mine) occurrencesIn(it, from, to).forEach((d) => bills.push({ name: it.name, date: d, amount: it.amount }));
+  });
+  bills.sort((x, y) => x.date.localeCompare(y.date));
+  const total = round2(bills.reduce((t, b) => t + b.amount, 0)), on = paydayOn();
+  const inbound = on ? ST.acctTransfers.filter((t) => t.trigger === "payday" && t.toId === a.id) : [];
+  const outbound = on ? ST.acctTransfers.filter((t) => t.trigger === "payday" && t.fromId === a.id) : [];
+  const wages = ST.incomeSources.filter((x) => x.wages && x.accountId === a.id).reduce((t, x) => t + toFortnight(x.amount, x.frequency), 0);
+  const inTotal = round2(inbound.reduce((t, x) => t + (Number(x.amount) || 0), 0)), outTotal = round2(outbound.reduce((t, x) => t + (Number(x.amount) || 0), 0));
+  const sched = round2(inTotal + wages - outTotal), buf = bufferAccount(), buffer = buf && buf.id === a.id ? 0 : Number(a.minBuffer) || 0;
+  const bal = Number(a.balance) || 0, net = round2(bal + sched - total - buffer);
+  const active = bills.length > 0 || inTotal > 0 || outTotal > 0 || wages > 0;
+  const state = !active ? "idle" : net < -0.005 ? (bal + sched < total ? "short" : "tight") : net <= 5 ? "balanced" : "covered";
+  const trim = state === "covered" ? round2(Math.min(net, inTotal)) : 0;
+  const adj = state === "short" || state === "tight" ? round2(-net) : -trim;
+  return { from: from, to: to, bills: bills, total: total, inbound: inbound, inTotal: inTotal, outTotal: outTotal, wages: wages, sched: sched, buffer: buffer, bal: bal, net: net, state: state, adj: adj, on: on };
+}
+function acctStatus(p) {
+  if (p.state === "short" || p.state === "tight") return ['<span class="pstat ' + (p.state === "short" ? "red" : "amber") + '">Shortfall: Add ' + money(p.adj) + " extra on payday</span>"];
+  if (p.state === "covered") return ['<span class="pstat green">Covered (Surplus ' + money(p.net) + ")</span>"];
+  if (p.state === "balanced") return ['<span class="pstat blue">Balanced</span>'];
+  return ['<span class="pstat idle">No bills before payday</span>'];
+}
+function acctInfoHtml(id) {
+  const a = acctById(id); if (!a) return "";
+  const p = acctProjection(a), signed = (n) => (n >= 0 ? "+" : "−") + money(Math.abs(n));
+  const items = p.bills.length ? p.bills.map((b) => '<div class="irow"><span>' + esc(b.name) + " · " + fmtDate(b.date) + "</span><b>−" + money(b.amount) + "</b></div>").join("") : '<div class="inote">Nothing due before payday.</div>';
+  return infoRow("Current balance", money(p.bal)) +
+    '<div class="inote" style="padding-bottom:0">Upcoming bills this cycle (to ' + fmtDate(p.to) + ")</div>" + items +
+    infoRow("Total bills", "−" + money(p.total)) + (p.buffer ? infoRow("Keep at least", "−" + money(p.buffer)) : "") +
+    infoRow("Scheduled payday deposit", signed(p.sched)) + (p.on ? "" : '<div class="inote">Payday transfers are switched off, so none are counted.</div>') +
+    infoRow("Projected after payday", money(p.net)) +
+    infoRow("Recommended net adjustment", p.adj ? signed(p.adj) : "None");
+}
 function acctRow(a) {
-  const f = acctFlows(a.id), net = f.inn - f.out;
+  const f = acctFlows(a.id), net = f.inn - f.out, p = acctProjection(a);
   return '<li><div class="main"><div>' + esc(a.name) + '</div><div class="sub wrap">' + "In " + money(f.inn) + " · out " + money(f.out) +
-    ' · <span class="' + (net >= 0 ? "ok" : "bad") + '">net ' + money(net) + pfS() + '</span></div></div><span class="amt">' + money(a.balance || 0) + '</span>' +
+    ' · <span class="' + (net >= 0 ? "ok" : "bad") + '">net ' + money(net) + pfS() + '</span></div>' + acctStatus(p)[0] + '</div><span class="amt">' + money(a.balance || 0) + '</span>' + infoBtn("acct", a.id) +
     '<button class="ghost" data-edit-acct="' + a.id + '">Edit</button><button class="ghost" data-del="accounts:' + a.id + '">✕</button></li>';
 }
+/* ---- Optimize transfers: one-tap payday transfer adjustments from the projections ---- */
+let optOn = false;
+function optSuggestions() {
+  const out = [];
+  ST.accounts.forEach((a) => {
+    const p = acctProjection(a); if (!p.adj) return;
+    const inb = p.inbound.slice().sort((x, y) => y.amount - x.amount);
+    if (!inb.length) { out.push({ acct: a, none: true, adj: p.adj }); return; }
+    if (p.adj > 0) out.push({ acct: a, t: inb[0], from: inb[0].amount, to: round2(inb[0].amount + p.adj) });
+    else { let left = -p.adj; inb.forEach((t) => { if (left <= 0.005) return; const cut = Math.min(left, t.amount); out.push({ acct: a, t: t, from: t.amount, to: round2(t.amount - cut) }); left = round2(left - cut); }); }
+  });
+  return out;
+}
+function optRow(x) {
+  if (x.none) return '<li><div class="main"><div>' + esc(x.acct.name) + '</div><div class="sub wrap">Needs ' + money(x.adj) + ' extra, but no payday transfer goes into it. Add one under Transfers.</div></div></li>';
+  const d = round2(x.to - x.from);
+  return '<li><div class="main"><div>' + esc(x.t.name) + '</div><div class="sub wrap">into ' + esc(x.acct.name) + " · " + money(x.from) + " → " + money(x.to) + '</div></div><span class="amt ' + (d >= 0 ? "bad" : "ok") + '">' + (d >= 0 ? "+" : "−") + money(Math.abs(d)) + "</span></li>";
+}
+function renderOptimizer() {
+  const panel = $("optPanel"); $("optOn").checked = optOn;
+  panel.classList.toggle("hidden", !optOn);
+  if (!optOn) return;
+  if (!paydayOn()) { panel.innerHTML = '<p class="note">Switch on "Run my payday transfers" first, so there are transfers to adjust.</p>'; return; }
+  const sug = optSuggestions(), doable = sug.filter((x) => !x.none);
+  panel.innerHTML = sug.length ? '<ul class="list">' + sug.map(optRow).join("") + "</ul>" + (doable.length ? '<button style="width:100%;margin-top:8px" data-opt-apply>Apply all</button><p class="note">Source accounts aren\'t re-checked after a change.</p>' : "")
+    : '<p class="note">Every account is covered. Nothing to adjust.</p>';
+}
+function optApply() {
+  const doable = optSuggestions().filter((x) => !x.none);
+  doable.forEach((x) => save("acctTransfers", x.t.id, { amount: x.to }));
+  toast(doable.length ? "Updated " + doable.length + (doable.length === 1 ? " transfer." : " transfers.") : "Nothing to change.");
+}
+$("optOn").addEventListener("change", (e) => { optOn = e.target.checked; renderOptimizer(); });
+$("optPanel").addEventListener("click", (e) => { if (e.target.dataset.optApply !== undefined) optApply(); });
 function xferRow(t) {
   const kind = t.fromId && t.toId ? "internal" : "external";
   return '<li><div class="main"><div>' + esc(t.name) + '</div><div class="sub wrap">' + esc(acctName(t.fromId, t.externalName)) + " → " + esc(acctName(t.toId, t.externalName)) +
@@ -2599,13 +2683,14 @@ function renderAccounts() {
   const due = manualDue();
   $("manualCard").classList.toggle("hidden", !due.length);
   $("manualList").innerHTML = due.map(manualRow).join("");
+  renderOptimizer();
 }
 $("homeAccounts").addEventListener("click", () => showView("accounts"));
 $("homeGoals").addEventListener("click", () => showView("savings"));
 $("acctForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const d = formData(e.target), bank = ST.banks.find((b) => b.id === d.bankId);
-  d.bank = bank ? bank.name : "";
+  d.bank = bank ? bank.name : ""; d.minBuffer = round2(Number(d.minBuffer) || 0);
   save("accounts", editing.accounts, d);
   editing.accounts = null; e.target.reset();
   $("acctSubmit").textContent = "Save account"; $("acctFormTitle").textContent = "Add account";
@@ -2649,7 +2734,7 @@ document.addEventListener("click", (e) => {
   if (t.dataset.editAcct) {
     const a = acctById(t.dataset.editAcct), f = $("acctForm").elements;
     const match = ST.banks.find((b) => b.name.toLowerCase() === String(a.bank || "").toLowerCase());
-    f.name.value = a.name; f.bankId.value = a.bankId || (match ? match.id : ""); f.balance.value = a.balance ?? 0;
+    f.minBuffer.value = a.minBuffer || ""; f.name.value = a.name; f.bankId.value = a.bankId || (match ? match.id : ""); f.balance.value = a.balance ?? 0;
     editing.accounts = a.id; $("acctSubmit").textContent = "Update"; $("acctFormTitle").textContent = "Editing " + a.name;
     openSheet("acctCard");
   }
@@ -3464,8 +3549,12 @@ function openQuickPay() {
   qpWrap.innerHTML = '<div class="card"><h3>Log ' + PF().label.toLowerCase() + ' pay</h3><label class="sec">Amount<input id="qpAmt" type="number" step="0.01" min="0" inputmode="decimal" placeholder="$0.00" value="' + (qp.base || "") + '"></label>' +
     '<label class="sec">Received<input id="qpDate" type="date" value="' + today() + '"></label>' +
     '<label class="check sec hidden" id="qpUsualWrap"><input type="checkbox" id="qpUsual"> Set as my usual pay</label>' +
-    '<div class="actions"><button class="plain" data-qp-close>Cancel</button><button data-qp-save id="qpSave"></button></div></div>';
+    qpOptNote() + '<div class="actions"><button class="plain" data-qp-close>Cancel</button><button data-qp-save id="qpSave"></button></div></div>';
   qpInput();
+}
+function qpOptNote() {
+  const n = ST.accounts.filter((a) => { const st = acctProjection(a).state; return st === "short" || st === "tight"; }).length;
+  return n ? '<div class="sec"><p class="note">' + n + (n === 1 ? " account needs" : " accounts need") + ' a top-up before payday.</p><button class="plain" style="width:100%" data-qp-opt>Optimize transfers</button></div>' : "";
 }
 function qpClose() { if (qpWrap) qpWrap.remove(); qpWrap = null; qp = null; }
 function qpInput() {
@@ -3494,6 +3583,7 @@ function qpClick(e) {
   const d = e.target.dataset;
   if (e.target === qpWrap || d.qpClose !== undefined) qpClose();
   else if (d.qpSave !== undefined) qpSave();
+  else if (d.qpOpt !== undefined) { qpClose(); optOn = true; showView("accounts"); renderOptimizer(); }
 }
 $("incomeTile").addEventListener("click", openQuickPay);
 
