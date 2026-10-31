@@ -287,6 +287,7 @@ nav.none::before{opacity:0}
 .inote,.sec .chain{padding:8px 0;font-size:15px;color:var(--muted);text-align:left}
 .sec .sub.wrap{text-align:left}
 .pcard .pl{display:flex;justify-content:space-between;font-size:15px}
+.pcard .pstatus{margin:4px 0;padding:6px 8px;border-radius:10px;background:var(--brand-soft);color:var(--brand);font-size:13px;font-weight:600;line-height:1.3}
 .pcard .psep{margin-top:8px;padding-top:6px;border-top:.5px solid var(--line);font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
 .pcard .pl.small{font-size:13px;color:var(--muted)}
 .pcard .pl.small b{font-weight:600}
@@ -719,10 +720,10 @@ input[type=file]{padding:9px 12px}
         <label class="full">Name or address<input name="name" required placeholder="e.g. 12 Smith St"></label>
         <label class="full">Dedicated Bank Account<select name="accountId" class="acctSel" data-ph="Choose an account…" required></select></label>
         <div class="toggle full" id="rentMode"><button type="button" data-rm="fixed" class="on">Fixed amount</button><button type="button" data-rm="last">Calculate from last payment</button></div>
-        <label>Rent frequency<select name="rentFreq"><option value="weekly">Weekly</option><option value="fortnightly" selected>Fortnightly</option><option value="semimonthly">Semi-monthly</option><option value="monthly">Monthly</option></select></label>
+        <label>Frequency<select name="rentFreq"><option value="weekly">Weekly</option><option value="fortnightly" selected>Fortnightly</option><option value="semimonthly">Semi-monthly</option><option value="monthly">Monthly</option></select></label>
         <label id="rentFixedWrap">Rent amount<input type="number" name="rentEst" step="0.01" min="0" inputmode="decimal" value="0"></label>
-        <label class="hidden" id="rentLastDateWrap">Last payment date<input type="date" name="rentLastDate" data-blank></label>
-        <label class="hidden" id="rentLastAmtWrap">Last amount received<input type="number" name="rentLastAmount" step="0.01" min="0" inputmode="decimal"></label>
+        <label class="hidden" id="rentLastDateWrap">Last Rent Deposit Date<input type="date" name="rentLastDate" data-blank></label>
+        <label class="hidden" id="rentLastAmtWrap">Last Rent Amount Received<input type="number" name="rentLastAmount" step="0.01" min="0" inputmode="decimal"></label>
         <span class="duechip" id="rentChip" style="grid-column:1/-1"></span>
         <label class="full">Costs per rent cycle<input type="number" name="costEst" step="0.01" min="0" inputmode="decimal" value="0"></label>
         <label class="full">Target maintenance float<input type="number" name="maintFloat" step="1" min="0" inputmode="decimal" value="0"></label>
@@ -1310,7 +1311,7 @@ function propInfoHtml(id) {
     infoRow("Yearly costs set aside", money(c.base) + pfS()) + infoRow("Bills set aside", money(c.extra) + pfS()) +
     infoRow("Other property costs", money(groupPropertyCosts(id)) + pfS()) + (p.costEst ? infoRow("Cost estimate", money(p.costEst) + pfS()) : "") +
     infoRow("Required " + PF().label + " Set-Aside", money(requiredSetAside(id)) + pfS()) +
-    infoRow("Pool balance", money(propPool(id).pool)) + infoRow("Bills before next rent", money(propPool(id).bills)) + infoRow("Expected rent deposit", money(propPool(id).expectedRent)) + infoRow("Pool after rent lands", money(propPool(id).afterRent)) + infoRow("Target maintenance float", money(propPool(id).float)) +
+    infoRow("Bank Account Balance", money(propPool(id).pool)) + infoRow("Bills before next rent", money(propPool(id).bills)) + infoRow("Expected rent deposit", money(propPool(id).expectedRent)) + infoRow("Bank balance after rent lands", money(propPool(id).afterRent)) + infoRow("Target maintenance float", money(propPool(id).float)) +
     infoRow("Maintenance put aside", money(maintContrib(id)) + (p.maintFn ? " (" + money(p.maintFn) + pfS() + ")" : "")) +
     infoRow("Maintenance receipts", money(maintReceipts(id))) + infoRow("Maintenance reserve", money(maintReserve(id)));
 }
@@ -1742,17 +1743,17 @@ function propPool(id) {
 function poolRows(id) {
   const q = propPool(id);
   if (!q.linked) return '<div class="pl small"><span>No linked account</span><b>Edit to link</b></div>';
-  return '<div class="psep">Bank liquidity</div><div class="pl small"><span>Pool Balance</span><b>' + money(q.pool) + '</b></div>' +
-    '<div class="pl small"><span>Reserved (bills + maintenance)</span><b>' + money(q.reserved) + '</b></div>' +
+  return '<div class="psep">Bank liquidity</div><div class="pl small"><span>Bank Account Balance</span><b>' + money(q.pool) + '</b></div>' +
+    '<div class="pl small"><span>Reserved (Bills + Maintenance)</span><b>-' + money(q.reserved) + '</b></div>' +
     '<div class="pl small"><span>' + (q.net >= 0 ? "Available Surplus" : "Shortfall") + '</span><b class="' + (q.net >= 0 ? "pos" : "neg") + '">' + money(Math.abs(q.net)) + "</b></div>";
 }
 function propCardHtml(id) {
   const cyc = propCycle(id), expected = propRentExpected(id), received = propRentReceived(id), costs = propCycleCosts(id), basis = received || expected, net = basis - costs;
   const q = propPool(id), pending = net < 0 && !received && q.linked && q.net >= 0;
-  const netNote = pending ? '<div class="pl small"><span>Rent due ' + fmtDate(q.nextRent) + "</span><b>Pool covers costs until then</b></div>" : received ? '<div class="pl small"><span>Rent received so far</span><b>' + money(received) + "</b></div>" : "";
+  const netNote = pending ? '<div class="pstatus">Rent due ' + fmtDate(q.nextRent) + " — Pool covers costs until then</div>" : received ? '<div class="pl small"><span>Rent received so far</span><b>' + money(received) + "</b></div>" : "";
   return '<div class="pcard' + (propFilter === id ? " sel" : "") + '" data-sid="' + esc(id) + '">' + infoBtn("prop", id) + '<h3>' + esc(propName(id)) + '</h3>' +
-    '<div class="pl"><span>' + cycleName(cyc.freq) + ' Rent Expected</span><b>' + money(expected) + '</b></div><div class="pl"><span>Cycle Costs Paid/Due</span><b>' + money(costs) + '</b></div>' +
-    '<div class="pl"><span>Period Net</span><b class="' + (pending ? "" : net >= 0 ? "pos" : "neg") + '">' + money(net) + '</b></div>' + netNote +
+    '<div class="pl"><span>Rent Coming In</span><b>' + money(expected) + '</b></div><div class="pl"><span>Total Property Bills</span><b>-' + money(costs) + '</b></div>' +
+    '<div class="pl"><span>Net Rent Cashflow</span><b class="' + (pending ? "" : net >= 0 ? "pos" : "neg") + '">' + money(net) + '</b></div>' + netNote +
     poolRows(id) +
     '<button class="ghost" data-edit-prop="' + esc(id) + '">Edit</button></div>';
 }
