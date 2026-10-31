@@ -56,7 +56,7 @@ const store = {
     { name: "Standing desk", cost: 900, kind: "want", perPay: 100, saved: 100, order: 20 },
     { name: "New phone", cost: 1800, kind: "want", perPay: 80, saved: 0, order: 30, neededBy: day(430) }
   ],
-  settings: [{ id: "payday", enabled: true, updated: 1 }, { id: "buffer", accountId: "acc1", target: 8000, updated: 1 }],
+  settings: [{ id: "payday", enabled: true, updated: 1 }, { id: "buffer", accountId: "acc1", target: 35000, wealth: 100000, updated: 1 }],
   banks: [{ id: "bk1", name: "Bank Australia" }, { id: "bk2", name: "Up" }],
   accounts: [
     { id: "acc1", name: "Big Savings", bank: "Bank Australia", bankId: "bk1", balance: 5200 },

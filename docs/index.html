@@ -285,6 +285,10 @@ nav.none::before{opacity:0}
 .pcard button{align-self:flex-start;margin-top:4px}
 .propyearly summary{cursor:pointer;min-height:44px;display:flex;align-items:center;color:var(--brand);font-weight:600}
 .bankhead .mv{display:inline-flex;margin-left:auto;margin-right:6px}
+.bufrow{margin-top:12px}
+.bufrow .bl{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:15px;color:var(--muted)}
+.bufrow .bl b{font-size:17px;color:var(--ink);font-variant-numeric:tabular-nums}
+.bufrow .bar.bad span{background:var(--red)}
 .swatches{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px}
 .swatches button{width:44px;height:44px;min-height:44px;padding:0;border-radius:50%;background:var(--sw);box-shadow:inset 0 0 0 1px rgba(128,128,128,.35)}
 .swatches button.on{box-shadow:0 0 0 3px var(--card),0 0 0 5px var(--sw)}
@@ -387,13 +391,11 @@ input[type=file]{padding:9px 12px}
 
   <!-- SAVINGS -->
   <section id="view-savings" class="view hidden">
-    <div class="card" id="bufferCard" role="button" tabindex="0" style="cursor:pointer">
-      <h2>Big Savings buffer</h2>
-      <div class="grid">
-        <div class="stat"><small id="bufAcct">Balance</small><b id="bufBal">—</b></div>
-        <div class="stat"><small>Target buffer</small><b id="bufTarget">—</b></div>
-        <div class="stat"><small>Status</small><b id="bufStatus" style="font-size:17px">—</b></div>
-      </div>
+    <div class="card" id="bufferCard" role="button" tabindex="0" style="cursor:pointer;position:relative">
+      <button class="infobtn" data-info="buf:" aria-label="Details" style="position:absolute;top:4px;right:4px"></button>
+      <h2 id="bufAcct">Big Savings</h2>
+      <div class="bufrow"><div class="bl"><span id="bufHealthLbl">Buffer health</span><b id="bufStatus">—</b></div><div class="bar"><span id="bufHealthBar" style="width:0"></span></div><div class="sub" id="bufHealthSub"></div></div>
+      <div class="bufrow"><div class="bl"><span id="bufWealthLbl">Overall wealth goal</span><b id="bufWealth">—</b></div><div class="bar"><span id="bufWealthBar" style="width:0"></span></div><div class="sub" id="bufWealthSub"></div></div>
     </div>
     <div class="card hidden" id="adviceCard">
       <h2>Smart advice</h2>
@@ -516,7 +518,8 @@ input[type=file]{padding:9px 12px}
     <h2>Big Savings setup</h2>
     <form id="bufferSetForm">
       <label class="full">Account<select name="accountId" class="acctSel"></select></label>
-      <label class="full">Target buffer<input type="number" name="target" step="1" min="0" inputmode="decimal" required placeholder="e.g. 30000"></label>
+      <label class="full">Safety-net buffer (3 months with no income)<input type="number" name="target" step="1" min="0" inputmode="decimal" required placeholder="e.g. 35000"></label>
+      <label class="full">Long-term savings goal<input type="number" name="wealth" step="1" min="0" inputmode="decimal" placeholder="e.g. 100000"></label>
       <button class="full" type="submit">Save</button>
     </form>
   </div>
@@ -1136,6 +1139,7 @@ document.addEventListener("click", (e) => {
   const [kind, id] = b.dataset.info.split(/:(.*)/);
   if (kind === "goal") { const g = ST.goals.find((x) => x.id === id); if (g) showInfo(g.name, goalInfoHtml(g)); }
   else if (kind === "prop") showInfo(propName(id), propInfoHtml(id));
+  else if (kind === "buf") showInfo("Big Savings", bufferInfoHtml());
 });
 function goalRow(g) {
   const bal = goalBalance(g), pct = g.target ? Math.max(0, Math.min(100, (bal / g.target) * 100)) : 0;
@@ -2895,25 +2899,56 @@ function suggestSplit(surplus, cost, neededBy) {
   return { amount: amt, pays: n, weeks: n * 2, remainder: round2(surplus - amt) };
 }
 
+const wealthGoal = () => Number(bufferSetting().wealth) || 0;
+// One account, two layers: the first `target` dollars are the safety net, everything above it builds toward the wealth goal.
+function bufferLayers(bal) {
+  const target = bufferTarget(), wealth = wealthGoal();
+  return { deficit: Math.max(0, target - bal), beyond: Math.max(0, bal - target), toWealth: Math.max(0, wealth - bal) };
+}
+// Incoming surplus restores the safety net first, then builds the wealth goal.
+function surplusSplit(amount) {
+  const d = bufferLayers(bufferBalance()).deficit, restore = Math.min(amount, d);
+  return { restore: round2(restore), wealth: round2(amount - restore) };
+}
 function renderBuffer() {
-  const a = bufferAccount(), target = bufferTarget(), bal = bufferBalance(), st = $("bufStatus");
-  $("bufAcct").textContent = a ? acctLabel(a) : "Balance";
-  $("bufBal").textContent = a ? money(bal) : "—";
-  $("bufTarget").textContent = target ? money(target) : "—";
-  if (!a || !target) { st.textContent = "Set up"; st.className = ""; }
-  else if (bal >= target) { st.textContent = "Buffer Intact"; st.className = "pos"; }
-  else { st.textContent = "Buffer Deficit " + money(target - bal); st.className = "neg"; }
+  const a = bufferAccount(), target = bufferTarget(), wealth = wealthGoal(), bal = bufferBalance(), st = $("bufStatus"), L = bufferLayers(bal);
+  $("bufAcct").textContent = a ? "Big Savings · " + acctLabel(a) : "Big Savings";
+  $("bufHealthLbl").textContent = "Buffer health" + (target ? " (" + money(target) + " safety net)" : "");
+  $("bufWealthLbl").textContent = "Overall wealth goal" + (wealth ? " (" + money(wealth) + ")" : "");
+  const hp = target ? Math.min(100, (bal / target) * 100) : 0, wp = wealth ? Math.min(100, (bal / wealth) * 100) : 0;
+  $("bufHealthBar").style.width = hp.toFixed(0) + "%"; $("bufWealthBar").style.width = wp.toFixed(0) + "%";
+  $("bufHealthBar").parentNode.classList.toggle("bad", !!target && bal < target);
+  if (!a || !target) { st.textContent = "Set up"; st.className = ""; $("bufHealthSub").textContent = ""; }
+  else if (bal >= target) { st.textContent = "Intact"; st.className = "pos"; $("bufHealthSub").textContent = money(bal) + " in the account"; }
+  else { st.textContent = "Deficit " + money(L.deficit); st.className = "neg"; $("bufHealthSub").textContent = money(bal) + " of " + money(target); }
+  $("bufWealth").textContent = a ? money(bal) + (wealth ? " of " + money(wealth) : "") : "—";
+  $("bufWealthSub").textContent = a && wealth ? (L.toWealth > 0 ? money(L.toWealth) + " to go" : "Goal reached") : "";
+}
+function bufferInfoHtml() {
+  const a = bufferAccount(), target = bufferTarget(), bal = bufferBalance(), L = bufferLayers(bal), wealth = wealthGoal();
+  if (!a) return '<div class="inote">Set up your Big Savings account first (tap the card).</div>';
+  const surplus = Math.max(0, disposable()), pays = L.deficit > 0 && surplus > 0 ? restorePays(L.deficit, surplus) : 0;
+  let h = infoRow("Account", esc(acctLabel(a))) + infoRow("Balance", money(bal)) +
+    infoRow("Safety net (layer 1)", money(Math.min(bal, target)) + " of " + money(target)) +
+    infoRow(L.deficit > 0 ? "Deficit" : "Buffer", L.deficit > 0 ? money(L.deficit) : "Intact") +
+    infoRow("Beyond the safety net (layer 2)", money(L.beyond)) +
+    (wealth ? infoRow("Wealth goal", money(wealth)) + infoRow("Still to go", money(L.toWealth)) : "");
+  h += '<div class="inote">' + (L.deficit > 0
+    ? "Spare cash after your goals restores the safety net first" + (pays ? " (about " + pays + (pays === 1 ? " pay" : " pays") + " at " + money(surplus) + " a pay)" : "") + ", then builds toward the wealth goal."
+    : "Spare cash after your goals now builds toward the wealth goal.") + "</div>";
+  return h;
 }
 function openBufferSetup() {
   const f = $("bufferSetForm").elements, s = bufferSetting();
-  f.accountId.value = s.accountId || ""; f.target.value = s.target ?? "";
+  f.accountId.value = s.accountId || ""; f.target.value = s.target ?? 35000; f.wealth.value = s.wealth ?? 100000;
   openSheet("bufferSetCard");
 }
-$("bufferCard").addEventListener("click", openBufferSetup);
+$("bufferCard").addEventListener("click", (e) => { if (!e.target.closest(".infobtn")) openBufferSetup(); });
+$("bufferCard").querySelector(".infobtn").innerHTML = INFO_SVG;
 $("bufferSetForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const d = formData(e.target);
-  setDoc(doc(db, "users", uid, "settings", "buffer"), { accountId: d.accountId || "", target: Math.max(0, Number(d.target) || 0), updated: serverTimestamp() }, { merge: true })
+  setDoc(doc(db, "users", uid, "settings", "buffer"), { accountId: d.accountId || "", target: Math.max(0, Number(d.target) || 0), wealth: Math.max(0, Number(d.wealth) || 0), updated: serverTimestamp() }, { merge: true })
     .catch((err) => toast("Save failed: " + err.message));
   closeSheets(false);
 });
@@ -3098,10 +3133,15 @@ function smRow(s) {
   return '<li><div class="main"><div>' + esc(s.name) + '</div><div class="sub wrap">' + esc(why) + '</div></div><span class="amt">' + money(s.amount) + "</span></li>";
 }
 const smList = () => smListFor(sm.amount);
+function leftoverNote(amount) {
+  if (!bufferAccount() || !(bufferTarget() > 0) || !(amount > 0)) return "Left over after your goals";
+  const sp2 = surplusSplit(amount);
+  return sp2.restore > 0 ? money(sp2.restore) + " restores the safety net" + (sp2.wealth > 0 ? " · " + money(sp2.wealth) + " toward the wealth goal" : "") : "Toward the wealth goal";
+}
 function smListFor(amount) {
   const plan = smartPlan(amount), buf = bufferAccount();
   const rows = plan.steps.length ? plan.steps.map(smRow).join("") : '<li class="empty">Nothing to fund yet.</li>';
-  return rows + '<li><div class="main"><div>' + (buf ? "Into " + esc(buf.name) + " (Big Savings)" : "Stays in checking") + '</div><div class="sub">Left over after your goals</div></div><span class="amt">' + money(plan.toBuffer) + "</span></li>";
+  return rows + '<li><div class="main"><div>' + (buf ? "Into " + esc(buf.name) + " (Big Savings)" : "Stays in checking") + '</div><div class="sub wrap">' + leftoverNote(plan.toBuffer) + '</div></div><span class="amt">' + money(plan.toBuffer) + "</span></li>";
 }
 function smRender() {
   smWrap.innerHTML = '<div class="card"><h3>Smart split</h3>' + adviceHtml() + '<label class="sec">Amount to split<input id="smAmt" type="number" min="0" step="0.01" inputmode="decimal" value="' + sm.amount + '"></label>' +
