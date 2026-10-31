@@ -263,6 +263,17 @@ nav.none::before{opacity:0}
 @keyframes pop{from{transform:scale(1.1);opacity:0}}
 
 /* Segmented control */
+.bigadd{min-height:50px;font-size:17px;margin-bottom:12px}
+.propcards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px}
+.pcard{background:var(--card);border-radius:20px;padding:14px;box-shadow:var(--shadow);box-shadow:inset 0 0 0 .5px var(--line),var(--shadow);display:flex;flex-direction:column;gap:4px}
+.pcard.sel{box-shadow:inset 0 0 0 2px var(--brand),var(--shadow)}
+.pcard h3{font-size:17px;font-weight:600;word-break:break-word}
+.pcard .acct{font-size:13px;color:var(--muted)}
+.pcard .pl{display:flex;justify-content:space-between;font-size:15px}
+.pcard .pl b{font-variant-numeric:tabular-nums}
+.pcard .pnet{font-family:var(--rounded);font-size:22px;font-weight:700;margin-top:4px}
+.pcard button{align-self:flex-start;margin-top:4px}
+.propyearly summary{cursor:pointer;min-height:44px;display:flex;align-items:center;color:var(--brand);font-weight:600}
 .swatches{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px}
 .swatches button{width:44px;height:44px;min-height:44px;padding:0;border-radius:50%;background:var(--sw);box-shadow:inset 0 0 0 1px rgba(128,128,128,.35)}
 .swatches button.on{box-shadow:0 0 0 3px var(--card),0 0 0 5px var(--sw)}
@@ -417,6 +428,9 @@ input[type=file]{padding:9px 12px}
 
   <!-- PROPERTY & BILLS -->
   <section id="view-property" class="view hidden">
+    <button id="addPropBtn" class="full bigadd">+ Add Property</button>
+    <div class="toggle" id="propFilter"></div>
+    <div class="propcards" id="propCards"></div>
     <div class="card">
       <h2>Rent vs costs (this fortnight)</h2>
       <div class="grid">
@@ -424,7 +438,6 @@ input[type=file]{padding:9px 12px}
         <div class="stat"><small>Costs</small><b id="ptCost">$0</b></div>
         <div class="stat"><small>Net</small><b id="ptNet">$0</b></div>
       </div>
-      <ul class="list" id="propFlowList" style="margin-top:8px"></ul>
     </div>
     <div class="card">
       <h2>Set aside every pay</h2>
@@ -434,18 +447,6 @@ input[type=file]{padding:9px 12px}
         <div class="stat"><small>Total per pay</small><b id="pTotal">$0</b></div>
       </div>
       <ul class="list" id="propSummaryList" style="margin-top:8px"></ul>
-    </div>
-    <div class="card">
-      <h2>Property details (yearly costs)</h2>
-      <form id="propForm">
-        <label class="full">Property<select name="id" id="propSelect"></select></label>
-        <label class="full">Name or address<input name="name" required placeholder="e.g. 12 Smith St"></label>
-        <label>Rates<input type="number" name="rates" step="0.01" min="0" inputmode="decimal" value="0"></label>
-        <label>Water<input type="number" name="water" step="0.01" min="0" inputmode="decimal" value="0"></label>
-        <label>Insurance<input type="number" name="insurance" step="0.01" min="0" inputmode="decimal" value="0"></label>
-        <label>Land tax<input type="number" name="landTax" step="0.01" min="0" inputmode="decimal" value="0"></label>
-        <button class="full" type="submit">Save property</button>
-      </form>
     </div>
     <div class="card">
       <h2>Bills & receipts</h2>
@@ -645,6 +646,26 @@ input[type=file]{padding:9px 12px}
         <button class="full" type="submit">Save</button>
       </form>
     </div>
+  <div class="card addcard" id="propCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
+      <h2 id="propFormTitle">Add property</h2>
+      <form id="propForm">
+        <label class="full">Name or address<input name="name" required placeholder="e.g. 12 Smith St"></label>
+        <label class="full">Linked bank account<select name="accountId" class="acctSel"></select></label>
+        <label>Rent per fortnight<input type="number" name="rentEst" step="0.01" min="0" inputmode="decimal" value="0"></label>
+        <label>Costs per fortnight<input type="number" name="costEst" step="0.01" min="0" inputmode="decimal" value="0"></label>
+        <details class="full propyearly"><summary>Yearly costs (optional)</summary>
+          <div class="grid" style="margin-top:8px">
+            <label>Rates<input type="number" name="rates" step="0.01" min="0" inputmode="decimal" value="0"></label>
+            <label>Water<input type="number" name="water" step="0.01" min="0" inputmode="decimal" value="0"></label>
+            <label>Insurance<input type="number" name="insurance" step="0.01" min="0" inputmode="decimal" value="0"></label>
+            <label>Land tax<input type="number" name="landTax" step="0.01" min="0" inputmode="decimal" value="0"></label>
+          </div>
+        </details>
+        <button class="full" type="submit" id="propSubmit">Save property</button>
+        <button class="full danger hidden" type="button" id="propDelete">Delete property</button>
+      </form>
+    </div>
   <div class="card addcard" id="billCard">
       <button type="button" class="ghost x" data-close-sheet>Close</button>
       <h2 id="billFormTitle">Add a bill or receipt</h2>
@@ -767,7 +788,7 @@ const PAY_ANCHOR = new Date("2026-11-04T00:00:00");
 const PERIOD_ANCHOR = new Date("2026-10-19T00:00:00");
 const PAY_SOURCE = "QR pay"; // older entries; new income sources carry a "wages" flag instead
 const isWages = (i) => !!i.wages || i.source === PAY_SOURCE;
-let uid = null, unsubs = [], editing = { income: null, expenses: null, subscriptions: null, bills: null, incomeSources: null, accounts: null, acctTransfers: null, banks: null, groups: null }, expenseFilter = "all", schedFilter = "all", billFilter = "all", pendingFile = null;
+let uid = null, unsubs = [], editing = { properties: null, income: null, expenses: null, subscriptions: null, bills: null, incomeSources: null, accounts: null, acctTransfers: null, banks: null, groups: null }, expenseFilter = "all", schedFilter = "all", billFilter = "all", pendingFile = null;
 const pending = { income: false, expenses: false, goals: false, transfers: false, subscriptions: false, properties: false, bills: false, wishlist: false, settings: false, incomeSources: false, accounts: false, acctTransfers: false, banks: false, allotments: false, paydayMoves: false, groups: false };
 
 /* =========================================================
@@ -1255,7 +1276,6 @@ function showView(v) {
   currentView = v;
   closeSheets(true);
   $("addBtn").classList.toggle("hidden", !ADD_FORMS[v]);
-  if (v === "property") fillPropForm();
   if (v === "stats") renderStats();
   if (v === "accounts") renderAccounts();
   window.scrollTo(0, 0);
@@ -1268,7 +1288,10 @@ $("tabs").addEventListener("click", (e) => {
 /* =========================================================
    6c. PROPERTY & BILLS — set-aside maths, PDF reading, saving bills
    ========================================================= */
-const PROP_IDS = ["A", "B"];
+// Properties come from the property docs (A and B are the starter pair until any are added).
+const propIds = () => ST.properties.length ? ST.properties.map((p) => p.id) : ["A", "B"];
+let propFilter = "all";
+const filterIds = () => propFilter === "all" || !propIds().includes(propFilter) ? propIds() : [propFilter];
 const PROP_COSTS = ["rates", "water", "insurance", "landTax"];
 const BILL_LABEL = { property: "Property bill", maintenance: "Maintenance receipt", personal: "Personal bill" };
 const MAX_PDF_BYTES = 700000; // base64 copy must fit in one 1 MB Firestore document
@@ -1347,20 +1370,34 @@ function flowRow(label, rent, costs) {
   return '<li><div class="main"><div>' + esc(label) + '</div><div class="sub wrap">Rent ' + money(rent) + " · costs " + money(costs) +
     '</div></div><span class="amt ' + (net >= 0 ? "pos" : "neg") + '">' + money(net) + "</span></li>";
 }
+// Rent / costs for a property: what actually came in this fortnight, falling back to the estimate you entered.
+const propRent = (id) => rentFortnight(id) || Number(propData(id).rentEst || 0);
+const propCostNow = (id) => propCosts(id) || Number(propData(id).costEst || 0);
+function propCardHtml(id) {
+  const p = propData(id), rent = propRent(id), costs = propCostNow(id), net = rent - costs;
+  const acct = p.accountId ? acctName(p.accountId) : "No linked account";
+  return '<div class="pcard' + (propFilter === id ? " sel" : "") + '"><h3>' + esc(propName(id)) + '</h3><div class="acct">' + esc(acct) + '</div>' +
+    '<div class="pl"><span>Rent</span><b>' + money(rent) + '</b></div><div class="pl"><span>Costs</span><b>' + money(costs) + '</b></div>' +
+    '<div class="pnet ' + (net >= 0 ? "pos" : "neg") + '">' + money(net) + '</div>' +
+    '<button class="ghost" data-edit-prop="' + esc(id) + '">Edit</button></div>';
+}
 function renderPropertyFlows() {
-  const rent = rentEntries().reduce((t, i) => t + i.amount, 0), costs = PROP_IDS.reduce((t, id) => t + propCosts(id), 0), net = rent - costs;
+  const ids = filterIds(), all = propFilter === "all" || !propIds().includes(propFilter);
+  const rent = ids.reduce((t, id) => t + propRent(id), 0) + (all ? rentFortnight("") : 0);
+  const costs = ids.reduce((t, id) => t + propCostNow(id), 0), net = rent - costs;
   [["ptIn", rent], ["ptCost", costs], ["ptNet", net]].forEach((x) => { $(x[0]).textContent = money(x[1]); });
   $("ptNet").className = net >= 0 ? "pos" : "neg";
-  const loose = rentFortnight("");
-  $("propFlowList").innerHTML = PROP_IDS.map((id) => flowRow(propName(id), rentFortnight(id), propCosts(id))).join("") +
-    (loose > 0.005 ? flowRow("Rent not assigned to a property", loose, 0) : "");
 }
 function renderProperty() {
-  const opts = PROP_IDS.map((id) => '<option value="' + id + '">' + esc(propName(id)) + "</option>").join("");
-  setOptions($("propSelect"), opts); setOptions($("billProp"), opts);
+  if (propFilter !== "all" && !propIds().includes(propFilter)) propFilter = "all";
+  const opts = propIds().map((id) => '<option value="' + id + '">' + esc(propName(id)) + "</option>").join("");
+  setOptions($("billProp"), opts);
   setOptions($("srcProp"), '<option value="">No property</option>' + opts);
+  $("propFilter").innerHTML = '<button data-pf="all"' + (propFilter === "all" ? ' class="on"' : "") + ">All</button>" +
+    propIds().map((id) => '<button data-pf="' + esc(id) + '"' + (propFilter === id ? ' class="on"' : "") + ">" + esc(propName(id)) + "</button>").join("");
+  $("propCards").innerHTML = propIds().map(propCardHtml).join("");
 
-  const sums = PROP_IDS.map((id) => ({ id: id, ...propSetAside(id) }));
+  const sums = filterIds().map((id) => ({ id: id, ...propSetAside(id) }));
   const fixed = sums.reduce((t, s) => t + s.base, 0), extra = sums.reduce((t, s) => t + s.extra, 0);
   $("pFixed").textContent = money(fixed);
   $("pExtra").textContent = money(extra);
@@ -1368,7 +1405,7 @@ function renderProperty() {
   $("propSummaryList").innerHTML = sums.map((s) => summaryRow(propName(s.id), s.base, s.extra)).join("");
   renderPropertyFlows();
 
-  const rows = ST.bills.filter((b) => billFilter === "all" || b.category === billFilter)
+  const rows = ST.bills.filter((b) => (billFilter === "all" || b.category === billFilter) && (propFilter === "all" || b.propertyId === propFilter))
     .sort((a, b) => {
       const pa = !isRecurringBill(a) && !!a.paid, pb = !isRecurringBill(b) && !!b.paid;
       return (Number(pa) - Number(pb)) || (pa ? billDue(b).localeCompare(billDue(a)) : billDue(a).localeCompare(billDue(b)));
@@ -1376,7 +1413,7 @@ function renderProperty() {
   $("billList").innerHTML = rows.length ? rows.map(billRow).join("") : '<li class="empty">Nothing here yet.</li>';
 
   const groups = {};
-  ST.bills.filter((b) => b.category === "maintenance").forEach((b) => {
+  ST.bills.filter((b) => b.category === "maintenance" && (propFilter === "all" || b.propertyId === propFilter)).forEach((b) => {
     const fy = taxYear(b.dueDate), k = fy + "|" + b.propertyId;
     const g = groups[k] || (groups[k] = { fy: fy, id: b.propertyId, total: 0, n: 0 });
     g.total += b.amount; g.n++;
@@ -1385,16 +1422,40 @@ function renderProperty() {
   $("receiptList").innerHTML = rec.length ? rec.map(receiptRow).join("") : '<li class="empty">No receipts logged yet.</li>';
 }
 
-function fillPropForm() {
-  const f = $("propForm").elements, id = f.id.value || "A", p = propData(id);
-  f.name.value = p.name || "Property " + id;
-  PROP_COSTS.forEach((k) => { f[k].value = p[k] ?? 0; });
+function resetPropForm() {
+  editing.properties = null; $("propForm").reset();
+  $("propFormTitle").textContent = "Add property"; $("propSubmit").textContent = "Save property"; $("propDelete").classList.add("hidden");
+  $("propForm").querySelector("details").open = false;
 }
-$("propSelect").addEventListener("change", fillPropForm);
+function startEditProp(id) {
+  const f = $("propForm"), p = propData(id);
+  f.elements.name.value = p.name || "Property " + id;
+  f.elements.accountId.value = p.accountId || "";
+  ["rentEst", "costEst"].concat(PROP_COSTS).forEach((k) => { f.elements[k].value = p[k] ?? 0; });
+  editing.properties = id;
+  $("propFormTitle").textContent = "Edit property"; $("propSubmit").textContent = "Update"; $("propDelete").classList.remove("hidden");
+  openSheet("propCard");
+}
 $("propForm").addEventListener("submit", (e) => {
   e.preventDefault();
-  const d = formData(e.target), id = d.id; delete d.id;
-  setDoc(doc(db, "users", uid, "properties", id), d, { merge: true }).catch((err) => toast("Save failed: " + err.message));
+  const d = formData(e.target);
+  ["rentEst", "costEst"].forEach((k) => { d[k] = Math.round(parseFloat(d[k] || 0) * 100) / 100; });
+  d.name = d.name.trim(); d.accountId = d.accountId || "";
+  if (editing.properties) setDoc(doc(db, "users", uid, "properties", editing.properties), d, { merge: true }).catch((err) => toast("Save failed: " + err.message));
+  else save("properties", null, d);
+  resetPropForm(); closeSheets(false);
+});
+$("propDelete").addEventListener("click", () => {
+  const id = editing.properties; if (!id) return;
+  showInlineConfirm("Delete " + propName(id) + "? Its bills stay in the list.", () => { remove("properties", id); resetPropForm(); closeSheets(false); });
+});
+$("addPropBtn").addEventListener("click", () => openSheet("propCard"));
+$("propFilter").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  propFilter = b.dataset.pf; renderProperty();
+});
+$("propCards").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-edit-prop]"); if (b) startEditProp(b.dataset.editProp);
 });
 
 /* ---- PDF reading (PDF.js loads on first use; the service worker caches it for offline) ---- */
@@ -1930,7 +1991,7 @@ const ADD_FORMS = {
   income: [["incomeCard", "Add income"], ["srcCard", "Add income source"]],
   expenses: [["expenseCard", "Add expense"]],
   savings: [["transferCard", "Move money"], ["goalCard", "New goal"], ["bufferSetCard", "Big Savings setup"]],
-  property: [["billCard", "Add a bill or receipt"]]
+  property: [["propCard", "Add property"], ["billCard", "Add a bill or receipt"]]
 };
 let sheetBack = null;
 function openSheet(id) {
@@ -1948,6 +2009,7 @@ function closeSheets(cancel) {
 }
 // Closing without saving drops any half-finished edit so the next "+" starts clean.
 function resetAddForms() {
+  resetPropForm();
   resetForm($("incomeForm"), "income"); resetForm($("expenseForm"), "expenses");
   editing.subscriptions = null; $("subForm").reset(); $("subForm").dueDate.value = today();
   $("subForm").querySelector("button[type=submit]").textContent = "Save"; $("subFormTitle").textContent = "Add subscription, bill or purchase";
@@ -2603,7 +2665,7 @@ function groupCard(g, items) {
     '</div><div class="bankbtns">' + btns + '</div><ul class="list">' + (shown.length ? shown.map((it) => itemRow(it, k)).join("") : '<li class="empty">Nothing here.</li>') + "</ul>" + more + "</div>";
 }
 function renderGroups() {
-  const opts = PROP_IDS.map((id) => '<option value="' + id + '">' + esc(propName(id)) + "</option>").join("");
+  const opts = propIds().map((id) => '<option value="' + id + '">' + esc(propName(id)) + "</option>").join("");
   setOptions($("groupProp"), opts);
   const list = ST.groups.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   document.querySelectorAll("select.grpSel").forEach((sel) => setOptions(sel, '<option value="">' + (sel.required ? "Choose a group" : "Usual group") + "</option>" + list.map((g) => '<option value="' + g.id + '">' + esc(g.name) + "</option>").join("")));
