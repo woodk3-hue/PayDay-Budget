@@ -268,6 +268,9 @@ nav.none::before{opacity:0}
 .pcard{background:var(--card);border-radius:20px;padding:14px;box-shadow:var(--shadow);box-shadow:inset 0 0 0 .5px var(--line),var(--shadow);display:flex;flex-direction:column;gap:4px}
 .pcard.sel{box-shadow:inset 0 0 0 2px var(--brand),var(--shadow)}
 .pcard h3{font-size:17px;font-weight:600;word-break:break-word}
+.emptyprop{text-align:center;padding:28px 18px;grid-column:1/-1;color:var(--muted)}
+.emptyprop svg{width:56px;height:56px;color:var(--brand);margin-bottom:8px}
+.emptyprop p{font-size:16px;line-height:1.35}
 .pcard{position:relative}
 .pcard h3{padding-right:34px}
 .pcard .infobtn{position:absolute;top:2px;right:2px}
@@ -280,6 +283,8 @@ nav.none::before{opacity:0}
 .inote,.sec .chain{padding:8px 0;font-size:15px;color:var(--muted);text-align:left}
 .sec .sub.wrap{text-align:left}
 .pcard .pl{display:flex;justify-content:space-between;font-size:15px}
+.pcard .pl.small{font-size:13px;color:var(--muted)}
+.pcard .pl.small b{font-weight:600}
 .pcard .pl b{font-variant-numeric:tabular-nums}
 .pcard .pnet{font-family:var(--rounded);font-size:22px;font-weight:700;margin-top:4px}
 .pcard button{align-self:flex-start;margin-top:4px}
@@ -438,7 +443,7 @@ input[type=file]{padding:9px 12px}
     <button id="addPropBtn" class="full bigadd">+ Add Property</button>
     <div class="toggle" id="propFilter"></div>
     <div class="propcards" id="propCards"></div>
-    <div class="card">
+    <div class="card" id="cfCard">
       <h2>Rent vs costs (this fortnight)</h2>
       <div class="grid">
         <div class="stat"><small>Rent received</small><b id="ptIn">$0</b></div>
@@ -446,7 +451,7 @@ input[type=file]{padding:9px 12px}
         <div class="stat"><small>Net</small><b id="ptNet">$0</b></div>
       </div>
     </div>
-    <div class="card">
+    <div class="card" id="saCard">
       <h2>Set aside every pay</h2>
       <div class="grid">
         <div class="stat"><small>Fixed costs</small><b id="pFixed">$0</b></div>
@@ -677,6 +682,7 @@ input[type=file]{padding:9px 12px}
         <label class="full">Linked bank account<select name="accountId" class="acctSel"></select></label>
         <label>Rent per fortnight<input type="number" name="rentEst" step="0.01" min="0" inputmode="decimal" value="0"></label>
         <label>Costs per fortnight<input type="number" name="costEst" step="0.01" min="0" inputmode="decimal" value="0"></label>
+        <label class="full">Maintenance set-aside per fortnight<input type="number" name="maintFn" step="0.01" min="0" inputmode="decimal" value="0"></label>
         <details class="full propyearly"><summary>Yearly costs (optional)</summary>
           <div class="grid" style="margin-top:8px">
             <label>Rates<input type="number" name="rates" step="0.01" min="0" inputmode="decimal" value="0"></label>
@@ -695,15 +701,15 @@ input[type=file]{padding:9px 12px}
       <form id="billForm">
         <label class="full">PDF (optional)<input type="file" id="billFile" accept="application/pdf,.pdf"></label>
         <p class="note full" id="scanMsg"></p>
-        <label class="full">Type
+        <label class="full">Category
           <select name="category" id="billCat">
-            <option value="property">Fixed property bill</option>
-            <option value="maintenance">Property maintenance receipt (tax)</option>
-            <option value="personal">General personal bill</option>
+            <option value="property">Fixed bill</option>
+            <option value="maintenance">Maintenance receipt (tax)</option>
+            <option value="other">Other</option>
           </select>
         </label>
-        <label class="full" id="billPropWrap">Property<select name="propertyId" id="billProp"></select></label>
-        <label class="full">Vendor<input name="vendor" required placeholder="e.g. Council"></label>
+        <label class="full" id="billPropWrap">Property tag<select name="propertyId" id="billProp"></select></label>
+        <label class="full">Merchant / name<input name="vendor" required placeholder="e.g. Council"></label>
         <label class="full" id="billFreqWrap">How often is it billed?
           <select name="frequency">
             <option value="once">One-off</option><option value="weekly">Weekly</option><option value="fortnightly">Fortnightly</option>
@@ -1129,7 +1135,10 @@ function propInfoHtml(id) {
   return infoRow("Linked account", esc(p.accountId ? acctName(p.accountId) : "None")) +
     infoRow("Rent this fortnight", money(live) + (live ? "" : " (estimate " + money(p.rentEst || 0) + ")")) +
     infoRow("Yearly costs set aside", money(c.base) + "/fn") + infoRow("Bills set aside", money(c.extra) + "/fn") +
-    infoRow("Other property costs", money(groupPropertyCosts(id)) + "/fn") + (p.costEst ? infoRow("Cost estimate", money(p.costEst) + "/fn") : "");
+    infoRow("Other property costs", money(groupPropertyCosts(id)) + "/fn") + (p.costEst ? infoRow("Cost estimate", money(p.costEst) + "/fn") : "") +
+    infoRow("Required set-aside", money(requiredSetAside(id)) + "/fn") +
+    infoRow("Maintenance put aside", money(maintContrib(id)) + (p.maintFn ? " (" + money(p.maintFn) + "/fn)" : "")) +
+    infoRow("Maintenance receipts", money(maintReceipts(id))) + infoRow("Maintenance reserve", money(maintReserve(id)));
 }
 function showInfo(title, html) {
   const wrap = document.createElement("div");
@@ -1376,16 +1385,26 @@ $("tabs").addEventListener("click", (e) => {
    6c. PROPERTY & BILLS — set-aside maths, PDF reading, saving bills
    ========================================================= */
 // Properties come from the property docs (A and B are the starter pair until any are added).
-const propIds = () => ST.properties.length ? ST.properties.map((p) => p.id) : ["A", "B"];
+// Properties are the saved property docs, plus any older id (A, B...) still used by a bill, income source or group that holds items.
+function propIds() {
+  const ids = ST.properties.map((p) => p.id), add = (i) => { if (i && !ids.includes(i)) ids.push(i); };
+  ST.bills.filter((b) => b.category !== "personal").forEach((b) => add(b.propertyId));
+  ST.incomeSources.forEach((x) => add(x.propertyId));
+  const held = {}; expenseItems().forEach((it) => { if (it.group) held[it.group.id] = true; });
+  ST.groups.filter((g) => g.kind === "property" && held[g.id]).forEach((g) => add(g.propertyId));
+  return ids;
+}
 let propFilter = "all";
-const filterIds = () => propFilter === "all" || !propIds().includes(propFilter) ? propIds() : [propFilter];
+const filterIds = () => propFilter === "_un" ? [] : propFilter === "all" || !propIds().includes(propFilter) ? propIds() : [propFilter];
+const isUnassigned = (b) => b.category !== "personal" && !propIds().includes(b.propertyId || "");
+const matchesPropFilter = (b) => propFilter === "all" || (propFilter === "_un" ? isUnassigned(b) : b.propertyId === propFilter);
 const PROP_COSTS = ["rates", "water", "insurance", "landTax"];
 const BILL_LABEL = { property: "Property bill", maintenance: "Maintenance receipt", personal: "Personal bill" };
 const MAX_PDF_BYTES = 700000; // base64 copy must fit in one 1 MB Firestore document
 const PDFJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
 
 const propData = (id) => ST.properties.find((p) => p.id === id) || {};
-const propName = (id) => propData(id).name || "Property " + id;
+const propName = (id) => propData(id).name || (id ? "Property " + id : "Unassigned Property Expense");
 const dayNum = (s) => Math.round(Date.parse(s + "T00:00:00Z") / 86400000);
 function taxYear(dateStr) {
   const y = Number(dateStr.slice(0, 4)), m = Number(dateStr.slice(5, 7));
@@ -1411,6 +1430,18 @@ function propSetAside(id) {
   return { base: yearly / 26, extra: extra };
 }
 
+// Required set-aside = yearly costs + recurring fixed bills + the property group's own recurring costs, all per fortnight.
+function requiredSetAside(id) {
+  const fixed = ST.bills.filter((b) => b.category === "property" && b.propertyId === id && isRecurringBill(b)).reduce((t, b) => t + toFortnight(b.amount, b.frequency), 0);
+  return round2(propSetAside(id).base + fixed + groupPropertyCosts(id));
+}
+// Maintenance reserve = contributions so far (a saved base + the per-fortnight amount for each full fortnight since it started) minus maintenance receipts.
+function maintContrib(id) {
+  const p = propData(id), days = p.maintStart ? dayNum(today()) - dayNum(p.maintStart) : 0;
+  return round2(Number(p.maintBase || 0) + Number(p.maintFn || 0) * Math.max(0, Math.floor(days / 14)));
+}
+const maintReceipts = (id) => round2(ST.bills.filter((b) => b.category === "maintenance" && b.propertyId === id).reduce((t, b) => t + b.amount, 0));
+const maintReserve = (id) => round2(maintContrib(id) - maintReceipts(id));
 function summaryRow(label, base, extra) {
   const sub = base === null ? "Bills only" : "Fixed " + money(base) + " + bills " + money(extra);
   return '<li><div class="main"><div>' + esc(label) + '</div><div class="sub">' + sub + '</div></div>' +
@@ -1460,28 +1491,35 @@ function flowRow(label, rent, costs) {
 // Rent / costs for a property: what actually came in this fortnight, falling back to the estimate you entered.
 const propRent = (id) => rentFortnight(id) || Number(propData(id).rentEst || 0);
 const propCostNow = (id) => propCosts(id) || Number(propData(id).costEst || 0);
+const HOUSE_SVG = '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22 24 7l18 15M10 20v21h28V20"/><path d="M20 41V28h8v13"/></svg>';
 function propCardHtml(id) {
   const p = propData(id), rent = propRent(id), costs = propCostNow(id), net = rent - costs;
   return '<div class="pcard' + (propFilter === id ? " sel" : "") + '">' + infoBtn("prop", id) + '<h3>' + esc(propName(id)) + '</h3>' +
     '<div class="pl"><span>Rent</span><b>' + money(rent) + '</b></div><div class="pl"><span>Costs</span><b>' + money(costs) + '</b></div>' +
     '<div class="pnet ' + (net >= 0 ? "pos" : "neg") + '">' + money(net) + '</div>' +
+    '<div class="pl small"><span>Set-aside /fn</span><b>' + money(requiredSetAside(id)) + '</b></div>' +
+    '<div class="pl small"><span>Maint. reserve</span><b class="' + (maintReserve(id) >= 0 ? "pos" : "neg") + '">' + money(maintReserve(id)) + '</b></div>' +
     '<button class="ghost" data-edit-prop="' + esc(id) + '">Edit</button></div>';
 }
 function renderPropertyFlows() {
   const ids = filterIds(), all = propFilter === "all" || !propIds().includes(propFilter);
   const rent = ids.reduce((t, id) => t + propRent(id), 0) + (all ? rentFortnight("") : 0);
-  const costs = ids.reduce((t, id) => t + propCostNow(id), 0), net = rent - costs;
+  const costs = ids.reduce((t, id) => t + propCostNow(id), 0) + (propFilter === "_un" ? ST.bills.filter((b) => isUnassigned(b) && openBill(b)).reduce((t, b) => t + billExtra(b), 0) : 0), net = rent - costs;
   [["ptIn", rent], ["ptCost", costs], ["ptNet", net]].forEach((x) => { $(x[0]).textContent = money(x[1]); });
   $("ptNet").className = net >= 0 ? "pos" : "neg";
 }
 function renderProperty() {
-  if (propFilter !== "all" && !propIds().includes(propFilter)) propFilter = "all";
+  const unassignedN = ST.bills.filter(isUnassigned).length;
+  if (propFilter !== "all" && !(propFilter === "_un" && unassignedN) && !propIds().includes(propFilter)) propFilter = "all";
   const opts = propIds().map((id) => '<option value="' + id + '">' + esc(propName(id)) + "</option>").join("");
-  setOptions($("billProp"), opts);
+  setOptions($("billProp"), opts + '<option value="">Unassigned property</option><option value="__personal">Personal</option>');
   setOptions($("srcProp"), '<option value="">No property</option>' + opts);
   $("propFilter").innerHTML = '<button data-pf="all"' + (propFilter === "all" ? ' class="on"' : "") + ">All</button>" +
-    propIds().map((id) => '<button data-pf="' + esc(id) + '"' + (propFilter === id ? ' class="on"' : "") + ">" + esc(propName(id)) + "</button>").join("");
-  $("propCards").innerHTML = propIds().map(propCardHtml).join("");
+    propIds().map((id) => '<button data-pf="' + esc(id) + '"' + (propFilter === id ? ' class="on"' : "") + ">" + esc(propName(id)) + "</button>").join("") +
+    (unassignedN ? '<button data-pf="_un"' + (propFilter === "_un" ? ' class="on"' : "") + ">Unassigned</button>" : "");
+  const none = !propIds().length;
+  ["propFilter", "cfCard", "saCard"].forEach((id) => $(id).classList.toggle("hidden", none && !unassignedN));
+  $("propCards").innerHTML = none ? '<div class="card emptyprop">' + HOUSE_SVG + '<p>No properties added yet. Tap the + button to add your first property.</p></div>' : propIds().map(propCardHtml).join("");
 
   const sums = filterIds().map((id) => ({ id: id, ...propSetAside(id) }));
   const fixed = sums.reduce((t, s) => t + s.base, 0), extra = sums.reduce((t, s) => t + s.extra, 0);
@@ -1491,7 +1529,7 @@ function renderProperty() {
   $("propSummaryList").innerHTML = sums.map((s) => summaryRow(propName(s.id), s.base, s.extra)).join("");
   renderPropertyFlows();
 
-  const rows = ST.bills.filter((b) => (billFilter === "all" || b.category === billFilter) && (propFilter === "all" || b.propertyId === propFilter))
+  const rows = ST.bills.filter((b) => (billFilter === "all" || b.category === billFilter) && matchesPropFilter(b))
     .sort((a, b) => {
       const pa = !isRecurringBill(a) && !!a.paid, pb = !isRecurringBill(b) && !!b.paid;
       return (Number(pa) - Number(pb)) || (pa ? billDue(b).localeCompare(billDue(a)) : billDue(a).localeCompare(billDue(b)));
@@ -1499,7 +1537,7 @@ function renderProperty() {
   $("billList").innerHTML = rows.length ? rows.map(billRow).join("") : '<li class="empty">Nothing here yet.</li>';
 
   const groups = {};
-  ST.bills.filter((b) => b.category === "maintenance" && (propFilter === "all" || b.propertyId === propFilter)).forEach((b) => {
+  ST.bills.filter((b) => b.category === "maintenance" && matchesPropFilter(b)).forEach((b) => {
     const fy = taxYear(b.dueDate), k = fy + "|" + b.propertyId;
     const g = groups[k] || (groups[k] = { fy: fy, id: b.propertyId, total: 0, n: 0 });
     g.total += b.amount; g.n++;
@@ -1517,7 +1555,7 @@ function startEditProp(id) {
   const f = $("propForm"), p = propData(id);
   f.elements.name.value = p.name || "Property " + id;
   f.elements.accountId.value = p.accountId || "";
-  ["rentEst", "costEst"].concat(PROP_COSTS).forEach((k) => { f.elements[k].value = p[k] ?? 0; });
+  ["rentEst", "costEst", "maintFn"].concat(PROP_COSTS).forEach((k) => { f.elements[k].value = p[k] ?? 0; });
   editing.properties = id;
   $("propFormTitle").textContent = "Edit property"; $("propSubmit").textContent = "Update"; $("propDelete").classList.remove("hidden");
   openSheet("propCard");
@@ -1525,7 +1563,10 @@ function startEditProp(id) {
 $("propForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const d = formData(e.target);
-  ["rentEst", "costEst"].forEach((k) => { d[k] = Math.round(parseFloat(d[k] || 0) * 100) / 100; });
+  ["rentEst", "costEst", "maintFn"].forEach((k) => { d[k] = Math.round(parseFloat(d[k] || 0) * 100) / 100; });
+  // Changing the maintenance amount banks what was put aside so far and starts counting from today.
+  if (!editing.properties) { d.maintBase = 0; d.maintStart = today(); }
+  else if (d.maintFn !== Number(propData(editing.properties).maintFn || 0)) { d.maintBase = maintContrib(editing.properties); d.maintStart = today(); }
   d.name = d.name.trim(); d.accountId = d.accountId || "";
   if (editing.properties) setDoc(doc(db, "users", uid, "properties", editing.properties), d, { merge: true }).catch((err) => toast("Save failed: " + err.message));
   else save("properties", null, d);
@@ -1698,9 +1739,8 @@ $("billFile").addEventListener("change", async (e) => {
 
 function syncBillForm() {
   const cat = $("billCat").value;
-  $("billPropWrap").classList.toggle("hidden", cat === "personal");
   $("billAcctWrap").classList.toggle("hidden", cat === "maintenance");
-  $("billFreqWrap").classList.toggle("hidden", cat === "maintenance");
+  $("billFreqWrap").classList.toggle("hidden", cat === "maintenance" || cat === "other");
   $("billDateLabel").textContent = cat === "maintenance" ? "Receipt date" : "Due date";
 }
 $("billCat").addEventListener("change", syncBillForm);
@@ -1717,8 +1757,8 @@ function resetBillForm() {
 }
 function startEditBill(b) {
   const form = $("billForm");
-  form.category.value = b.category; syncBillForm();
-  if (b.propertyId) form.propertyId.value = b.propertyId;
+  form.category.value = b.category === "maintenance" ? "maintenance" : isRecurringBill(b) ? "property" : "other"; syncBillForm();
+  form.propertyId.value = b.category === "personal" ? "__personal" : b.propertyId || "";
   form.vendor.value = b.vendor; form.amount.value = b.amount; form.dueDate.value = b.dueDate;
   form.frequency.value = b.frequency || "once";
   form.elements.accountId.value = b.accountId || ""; form.elements.manual.checked = !!b.manual;
@@ -1733,7 +1773,8 @@ function startEditBill(b) {
 $("billForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const d = formData(e.target);
-  if (d.category === "personal") d.propertyId = "";
+  if (d.category === "other") { d.category = "property"; d.frequency = "once"; }
+  if (d.propertyId === "__personal") { d.propertyId = ""; d.category = "personal"; d.frequency = d.frequency || "once"; }
   if (d.category === "maintenance") d.frequency = "once";
   d.paid = d.category === "maintenance";
   if (d.category === "maintenance") { d.accountId = ""; d.manual = false; d.nextApply = ""; d.groupId = ""; }
