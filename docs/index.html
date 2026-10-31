@@ -274,6 +274,7 @@ nav.none::before{opacity:0}
 .pcard .pnet{font-family:var(--rounded);font-size:22px;font-weight:700;margin-top:4px}
 .pcard button{align-self:flex-start;margin-top:4px}
 .propyearly summary{cursor:pointer;min-height:44px;display:flex;align-items:center;color:var(--brand);font-weight:600}
+.bankhead .mv{display:inline-flex;margin-left:auto;margin-right:6px}
 .swatches{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px}
 .swatches button{width:44px;height:44px;min-height:44px;padding:0;border-radius:50%;background:var(--sw);box-shadow:inset 0 0 0 1px rgba(128,128,128,.35)}
 .swatches button.on{box-shadow:0 0 0 3px var(--card),0 0 0 5px var(--sw)}
@@ -370,6 +371,7 @@ input[type=file]{padding:9px 12px}
 
   <!-- EXPENSES -->
   <section id="view-expenses" class="view hidden">
+    <button id="reorderBtn" class="ghost" style="margin-bottom:8px">Reorder panels</button>
     <div id="groupCards"></div>
   </section>
 
@@ -2650,6 +2652,11 @@ function itemRow(it, k) {
     '<button class="ghost" data-del="' + it.coll + ":" + it.x.id + '">✕</button></li>';
 }
 // Each group has its own Fortnight / Month / Year switch and shows 4 items until you expand it.
+let groupReorder = false;
+function moveBtns(g) {
+  if (!groupReorder || !g.id) return "";
+  return '<span class="mv"><button class="ghost" data-gmove="' + g.id + ':-1" aria-label="Move up">▲</button><button class="ghost" data-gmove="' + g.id + ':1" aria-label="Move down">▼</button></span>';
+}
 function groupCard(g, items) {
   const key = g.id || "_", per = grpPeriods[key] || "fortnight", k = PERIOD_K[per], open = !!grpOpen[key];
   const total = items.reduce((t, it) => t + it.fn, 0) * k;
@@ -2660,7 +2667,7 @@ function groupCard(g, items) {
   const btns = g.id ? '<button class="ghost" data-grp-edit="' + g.id + '">Rename</button><button class="ghost" data-grp-del="' + g.id + '">Remove</button>' : "";
   const more = sorted.length > GROUP_SHOWN ? '<button class="ghost" style="width:100%" data-gx="' + key + '">' +
     (open ? "Show less" : "Show all " + sorted.length) + "</button>" : "";
-  return '<div class="card"><div class="bankhead"><b>' + esc(g.name) + '</b><span class="amt">' + money(total) + '</span></div>' + toggle +
+  return '<div class="card"><div class="bankhead"><b>' + esc(g.name) + '</b>' + moveBtns(g) + '<span class="amt">' + money(total) + '</span></div>' + toggle +
     '<div class="sub note" style="margin-top:6px">' + (GROUP_KINDS[g.kind] ? GROUP_KINDS[g.kind] + " · " : "") + items.length + (items.length === 1 ? " item" : " items") +
     '</div><div class="bankbtns">' + btns + '</div><ul class="list">' + (shown.length ? shown.map((it) => itemRow(it, k)).join("") : '<li class="empty">Nothing here.</li>') + "</ul>" + more + "</div>";
 }
@@ -2674,9 +2681,19 @@ function renderGroups() {
   if (loose.length) cards.push(groupCard({ id: "", name: "Ungrouped", kind: "" }, loose));
   $("groupCards").innerHTML = cards.join("") || '<div class="card"><p class="empty">No groups yet.</p></div>';
 }
+$("reorderBtn").addEventListener("click", () => {
+  groupReorder = !groupReorder; $("reorderBtn").textContent = groupReorder ? "Done" : "Reorder panels"; renderGroups();
+});
 $("groupCards").addEventListener("click", (e) => {
   const t = e.target;
   if (t.dataset.gp) { const [key, per] = t.dataset.gp.split(":"); grpPeriods[key] = per; renderGroups(); }
+  if (t.dataset.gmove) {
+    const [id, dir] = t.dataset.gmove.split(":"), list = ST.groups.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const i = list.findIndex((g) => g.id === id), j = i + Number(dir);
+    if (i < 0 || j < 0 || j >= list.length) return;
+    list.splice(j, 0, list.splice(i, 1)[0]);
+    list.forEach((g, n) => { if (g.order !== n) save("groups", g.id, { order: n }); });
+  }
   if (t.dataset.gx) { grpOpen[t.dataset.gx] = !grpOpen[t.dataset.gx]; renderGroups(); }
 });
 
