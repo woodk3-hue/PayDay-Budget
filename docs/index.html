@@ -800,6 +800,8 @@ input[type=file]{padding:9px 12px}
 const firebaseConfig = window.FIREBASE_CONFIG;
 // Public VAPID key from the OptiPlex notifier setup (SETUP.md, part 5).
 const VAPID_PUBLIC_KEY = "PASTE_VAPID_PUBLIC_KEY";
+// Push alerts switch on by themselves once a real public key is pasted above; until then the feature stays off and silent.
+const PUSH_READY = !/^PASTE_/.test(VAPID_PUBLIC_KEY) && VAPID_PUBLIC_KEY.length > 40;
 
 import { initializeApp } from "firebase-app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut }
@@ -1457,10 +1459,11 @@ function deviceName() {
 }
 let alertsOn = false;
 function updateRemindNote() {
-  $("remindNote").classList.toggle("hidden", !$("expenseForm").elements.remindDays.value || alertsOn || !!window.DEMO);
+  $("remindNote").classList.toggle("hidden", !PUSH_READY || !$("expenseForm").elements.remindDays.value || alertsOn || !!window.DEMO);
 }
 async function refreshAlertsButton() {
   const btn = $("alertsBtn"), txt = $("alertsText");
+  if (!PUSH_READY) { btn.classList.add("hidden"); txt.innerHTML = '<span class="badge">Disabled</span> Push alerts currently disabled (Cloud setup pending)'; alertsOn = false; updateRemindNote(); return; }
   if (window.DEMO) { btn.classList.add("hidden"); txt.textContent = "Alerts are off in preview mode."; return; }
   if (!("PushManager" in window) || !("serviceWorker" in navigator)) {
     btn.classList.add("hidden"); txt.textContent = "This browser can't receive push alerts."; return;
@@ -1475,6 +1478,7 @@ async function refreshAlertsButton() {
 $("expenseForm").elements.remindDays.addEventListener("change", updateRemindNote);
 $("remindEnable").addEventListener("click", () => $("alertsBtn").click());
 $("alertsBtn").addEventListener("click", async () => {
+  if (!PUSH_READY) return;
   try {
     const reg = await navigator.serviceWorker.ready;
     const existing = await reg.pushManager.getSubscription();
