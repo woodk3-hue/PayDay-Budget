@@ -718,8 +718,12 @@ input[type=file]{padding:9px 12px}
       <form id="propForm">
         <label class="full">Name or address<input name="name" required placeholder="e.g. 12 Smith St"></label>
         <label class="full">Dedicated Bank Account<select name="accountId" class="acctSel" data-ph="Choose an account…" required></select></label>
-        <label>Rent amount<input type="number" name="rentEst" step="0.01" min="0" inputmode="decimal" value="0"></label>
-        <label>Rent frequency<select name="rentFreq"><option value="weekly">Weekly</option><option value="fortnightly" selected>Fortnightly</option><option value="monthly">Monthly</option></select></label>
+        <div class="toggle full" id="rentMode"><button type="button" data-rm="fixed" class="on">Fixed amount</button><button type="button" data-rm="last">Calculate from last payment</button></div>
+        <label>Rent frequency<select name="rentFreq"><option value="weekly">Weekly</option><option value="fortnightly" selected>Fortnightly</option><option value="semimonthly">Semi-monthly</option><option value="monthly">Monthly</option></select></label>
+        <label id="rentFixedWrap">Rent amount<input type="number" name="rentEst" step="0.01" min="0" inputmode="decimal" value="0"></label>
+        <label class="hidden" id="rentLastDateWrap">Last payment date<input type="date" name="rentLastDate" data-blank></label>
+        <label class="hidden" id="rentLastAmtWrap">Last amount received<input type="number" name="rentLastAmount" step="0.01" min="0" inputmode="decimal"></label>
+        <span class="duechip" id="rentChip" style="grid-column:1/-1"></span>
         <label class="full">Costs per rent cycle<input type="number" name="costEst" step="0.01" min="0" inputmode="decimal" value="0"></label>
         <label class="full">Target maintenance float<input type="number" name="maintFloat" step="1" min="0" inputmode="decimal" value="0"></label>
         <label class="full"><span data-pl="Maintenance set-aside per {noun}">Maintenance set-aside per fortnight</span><input type="number" name="maintFn" step="0.01" min="0" inputmode="decimal" value="0"></label>
@@ -1301,12 +1305,12 @@ function goalInfoHtml(g) {
 function propInfoHtml(id) {
   const p = propData(id), c = propSetAside(id);
   return infoRow("Linked account", esc(p.accountId ? acctName(p.accountId) : "None")) +
-    infoRow("Rent frequency", cycleName(propRentFreq(id))) + infoRow("Cycle", fmtDate(propCycle(id).start) + " – " + fmtDate(propCycle(id).end)) +
+    infoRow("Rent frequency", cycleName(propRentFreq(id))) + (propLastRent(id) ? infoRow("Last rent received", money(propLastRent(id).amount) + " · " + fmtDate(propLastRent(id).date)) : "") + infoRow("Cycle", fmtDate(propCycle(id).start) + " – " + fmtDate(propCycle(id).end)) +
     infoRow("Rent received this cycle", money(propRentReceived(id))) + infoRow("Next rent due", fmtDate(propPool(id).nextRent)) +
     infoRow("Yearly costs set aside", money(c.base) + pfS()) + infoRow("Bills set aside", money(c.extra) + pfS()) +
     infoRow("Other property costs", money(groupPropertyCosts(id)) + pfS()) + (p.costEst ? infoRow("Cost estimate", money(p.costEst) + pfS()) : "") +
     infoRow("Required " + PF().label + " Set-Aside", money(requiredSetAside(id)) + pfS()) +
-    infoRow("Pool balance", money(propPool(id).pool)) + infoRow("Bills before next rent", money(propPool(id).bills)) + infoRow("Target maintenance float", money(propPool(id).float)) +
+    infoRow("Pool balance", money(propPool(id).pool)) + infoRow("Bills before next rent", money(propPool(id).bills)) + infoRow("Expected rent deposit", money(propPool(id).expectedRent)) + infoRow("Pool after rent lands", money(propPool(id).afterRent)) + infoRow("Target maintenance float", money(propPool(id).float)) +
     infoRow("Maintenance put aside", money(maintContrib(id)) + (p.maintFn ? " (" + money(p.maintFn) + pfS() + ")" : "")) +
     infoRow("Maintenance receipts", money(maintReceipts(id))) + infoRow("Maintenance reserve", money(maintReserve(id)));
 }
@@ -1666,7 +1670,7 @@ function flowRow(label, rent, costs) {
     '</div></div><span class="amt ' + (net >= 0 ? "pos" : "neg") + '">' + money(net) + "</span></li>";
 }
 // A property is judged over its own rent cycle: a monthly rent covers the whole calendar month, weekly / fortnightly rent follows the pay period.
-const RENT_FREQS = ["weekly", "fortnightly", "monthly"];
+const RENT_FREQS = ["weekly", "fortnightly", "semimonthly", "monthly"];
 function propRentFreq(id) {
   const p = propData(id);
   if (RENT_FREQS.includes(p.rentFreq)) return p.rentFreq;
@@ -1677,6 +1681,10 @@ function propRentFreq(id) {
 }
 function propCycle(id) {
   const f = propRentFreq(id);
+  if (f === "semimonthly") {
+    const t = today(), ym = t.slice(0, 8), last = String(new Date(Date.UTC(Number(t.slice(0, 4)), Number(t.slice(5, 7)), 0)).getUTCDate()).padStart(2, "0");
+    return Number(t.slice(8, 10)) <= 15 ? { freq: f, start: ym + "01", end: ym + "15" } : { freq: f, start: ym + "16", end: ym + last };
+  }
   if (f === "monthly") {
     const t = today(), y = Number(t.slice(0, 4)), m = Number(t.slice(5, 7));
     return { freq: f, start: t.slice(0, 8) + "01", end: t.slice(0, 8) + String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, "0") };
@@ -1684,16 +1692,25 @@ function propCycle(id) {
   const q = currentPeriod();
   return { freq: f, start: q.start, end: q.end };
 }
-const cycleName = (f) => (f === "monthly" ? "Monthly" : f === "weekly" ? "Weekly" : "Fortnightly");
+const cycleName = (f) => ({ monthly: "Monthly", weekly: "Weekly", semimonthly: "Semi-monthly" }[f] || "Fortnightly");
+// Variable rent: the last payment (typed in, or the newest rent you've logged for the property) sets the next date and the amount to expect.
+function propLastRent(id) {
+  const p = propData(id);
+  if (p.rentMode !== "last" || !p.rentLastDate) return null;
+  const logged = ST.income.filter((i) => !isWages(i) && sourceProperty(i) === id && i.date >= p.rentLastDate).sort((a, b) => b.date.localeCompare(a.date))[0];
+  return logged ? { date: logged.date, amount: Number(logged.amount) || 0 } : { date: p.rentLastDate, amount: Number(p.rentLastAmount) || 0 };
+}
 const propRentReceived = (id) => { const c = propCycle(id); return ST.income.filter((i) => !isWages(i) && sourceProperty(i) === id && i.date >= c.start && i.date <= c.end).reduce((t, i) => t + i.amount, 0); };
 function propRentExpected(id) {
-  const p = propData(id), f = propRentFreq(id);
+  const p = propData(id), f = propRentFreq(id), lr = propLastRent(id);
+  if (lr) return round2(lr.amount);
   if (Number(p.rentEst) > 0) return round2(Number(p.rentEst));
   return round2(ST.incomeSources.filter((x) => !x.wages && x.propertyId === id && FREQ_PER_YEAR[x.frequency]).reduce((t, x) => t + (Number(x.amount) || 0) * FREQ_PER_YEAR[x.frequency] / FREQ_PER_YEAR[f], 0));
 }
 // The next date rent is due to land: from the rent sources' next dates, else the last rent logged + its frequency, else the next payday.
 function propNextRent(id) {
-  const f = propRentFreq(id), c = [];
+  const f = propRentFreq(id), c = [], lr = propLastRent(id);
+  if (lr) return nextFromLast(lr.date, f);
   ST.incomeSources.filter((x) => !x.wages && x.propertyId === id).forEach((x) => {
     const d = x.nextApply || x.nextDate;
     if (d && x.frequency && x.frequency !== "once") c.push(nextDue({ dueDate: d, frequency: x.frequency }));
@@ -1720,7 +1737,7 @@ function propPool(id) {
     seen[it.coll + it.x.id] = true; bills += occurrencesIn(it, from, to).length * it.amount;
   });
   const float = Number(p.maintFloat) || 0, pool = a ? Number(a.balance) || 0 : 0, reserved = round2(bills + float);
-  return { nextRent: to, linked: !!a, acct: a, pool: pool, bills: round2(bills), float: float, reserved: reserved, net: round2(pool - reserved) };
+  return { expectedRent: propRentExpected(id), afterRent: round2(pool - bills + propRentExpected(id)), nextRent: to, linked: !!a, acct: a, pool: pool, bills: round2(bills), float: float, reserved: reserved, net: round2(pool - reserved) };
 }
 function poolRows(id) {
   const q = propPool(id);
@@ -1794,8 +1811,26 @@ function markTakenAccounts(forId) {
     o.disabled = !!q; o.textContent = o.textContent.replace(/ \(used by .*\)$/, "") + (q ? " (used by " + (q.name || "another property") + ")" : "");
   });
 }
+let rentModeNow = "fixed";
+function setRentMode(m) {
+  rentModeNow = m;
+  document.querySelectorAll("#rentMode [data-rm]").forEach((b) => b.classList.toggle("on", b.dataset.rm === m));
+  $("rentFixedWrap").classList.toggle("hidden", m === "last");
+  $("rentLastDateWrap").classList.toggle("hidden", m !== "last"); $("rentLastAmtWrap").classList.toggle("hidden", m !== "last");
+  refreshRentChip();
+}
+function refreshRentChip() {
+  const f = $("propForm").elements, freq = f.rentFreq.value;
+  if (rentModeNow !== "last") { $("rentChip").style.display = "none"; return; }
+  $("rentChip").style.display = "";
+  const d = nextFromLast(f.rentLastDate.value, freq), amt = Number(f.rentLastAmount.value) || 0;
+  $("rentChip").textContent = d ? dueChipText(d).replace("Next due", "Next rent") + (amt ? " · expect " + money(amt) : "") : "Pick the last payment date";
+}
+$("rentMode").addEventListener("click", (e) => { const b = e.target.closest("[data-rm]"); if (b) setRentMode(b.dataset.rm); });
+$("propForm").addEventListener("input", refreshRentChip);
+$("propForm").addEventListener("change", refreshRentChip);
 function resetPropForm() {
-  editing.properties = null; $("propForm").reset();
+  editing.properties = null; $("propForm").reset(); setRentMode("fixed");
   $("propFormTitle").textContent = "Add property"; $("propSubmit").textContent = "Save property"; $("propDelete").classList.add("hidden");
   $("propForm").querySelector("details").open = false;
 }
@@ -1803,6 +1838,7 @@ function startEditProp(id) {
   const f = $("propForm"), p = propData(id);
   f.elements.name.value = p.name || "Property " + id;
   f.elements.accountId.value = p.accountId || ""; f.elements.rentFreq.value = propRentFreq(id);
+  f.elements.rentLastDate.value = p.rentLastDate || ""; f.elements.rentLastAmount.value = p.rentLastAmount || ""; setRentMode(p.rentMode === "last" ? "last" : "fixed");
   ["rentEst", "costEst", "maintFn", "maintFloat"].concat(PROP_COSTS).forEach((k) => { f.elements[k].value = p[k] ?? 0; });
   editing.properties = id; markTakenAccounts(id);
   $("propFormTitle").textContent = "Edit property"; $("propSubmit").textContent = "Update"; $("propDelete").classList.remove("hidden");
@@ -1815,6 +1851,8 @@ $("propForm").addEventListener("submit", (e) => {
   // Changing the maintenance amount banks what was put aside so far and starts counting from today.
   if (!editing.properties) { d.maintBase = 0; d.maintStart = today(); }
   else if (d.maintFn !== Number(propData(editing.properties).maintFn || 0)) { d.maintBase = maintContrib(editing.properties); d.maintStart = today(); }
+  d.rentMode = rentModeNow; d.rentLastAmount = round2(Number(d.rentLastAmount) || 0); d.rentLastDate = d.rentLastDate || "";
+  if (d.rentMode === "last" && (!d.rentLastDate || !(d.rentLastAmount > 0))) { toast("Enter the last payment date and the amount received."); return; }
   d.name = d.name.trim(); d.accountId = d.accountId || "";
   if (!d.accountId || !acctById(d.accountId)) { toast("Choose a dedicated bank account for this property."); return; }
   const taken = ST.properties.find((q) => q.accountId === d.accountId && q.id !== editing.properties);
@@ -2686,7 +2724,10 @@ function acctProjection(a) {
   // A property pool also keeps its target maintenance float, and rent due before payday counts as money coming in.
   const floats = ST.properties.filter((q) => q.accountId === a.id).reduce((t, q) => t + (Number(q.maintFloat) || 0), 0);
   const buffer = buf && buf.id === a.id ? 0 : (Number(a.minBuffer) || 0) + floats;
-  const rentDue = ST.incomeSources.filter((x) => !x.wages && x.propertyId && x.accountId === a.id && x.recurring && x.nextApply)
+  const lastMode = (x) => ST.properties.some((q) => q.id === x.propertyId && q.rentMode === "last");
+  const propRentIn = ST.properties.filter((q) => q.accountId === a.id && q.rentMode === "last")
+    .reduce((t, q) => t + occurrencesIn({ due: propNextRent(q.id), freq: propRentFreq(q.id) }, from, to).length * propRentExpected(q.id), 0);
+  const rentDue = propRentIn + ST.incomeSources.filter((x) => !x.wages && x.propertyId && x.accountId === a.id && x.recurring && x.nextApply && !lastMode(x))
     .reduce((t, x) => t + occurrencesIn({ due: x.nextApply, freq: x.frequency }, from, to).length * (Number(x.amount) || 0), 0);
   const bal = Number(a.balance) || 0, net = round2(bal + sched + rentDue - total - buffer);
   const active = bills.length > 0 || inTotal > 0 || outTotal > 0 || wages > 0 || rentDue > 0 || floats > 0;
