@@ -263,7 +263,7 @@ nav.none::before{opacity:0}
 @keyframes pop{from{transform:scale(1.1);opacity:0}}
 
 /* Segmented control */
-.bigadd{min-height:50px;font-size:17px;margin-bottom:12px}
+.bigadd{width:100%;min-height:50px;font-size:17px;margin-bottom:12px}
 .propcards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px}
 .pcard{background:var(--card);border-radius:20px;padding:14px;box-shadow:var(--shadow);box-shadow:inset 0 0 0 .5px var(--line),var(--shadow);display:flex;flex-direction:column;gap:4px}
 .pcard.sel{box-shadow:inset 0 0 0 2px var(--brand),var(--shadow)}
@@ -274,6 +274,7 @@ nav.none::before{opacity:0}
 .pcard .pnet{font-family:var(--rounded);font-size:22px;font-weight:700;margin-top:4px}
 .pcard button{align-self:flex-start;margin-top:4px}
 .propyearly summary{cursor:pointer;min-height:44px;display:flex;align-items:center;color:var(--brand);font-weight:600}
+.bankhead .mv{display:inline-flex;margin-left:auto;margin-right:6px}
 .swatches{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px}
 .swatches button{width:44px;height:44px;min-height:44px;padding:0;border-radius:50%;background:var(--sw);box-shadow:inset 0 0 0 1px rgba(128,128,128,.35)}
 .swatches button.on{box-shadow:0 0 0 3px var(--card),0 0 0 5px var(--sw)}
@@ -370,6 +371,7 @@ input[type=file]{padding:9px 12px}
 
   <!-- EXPENSES -->
   <section id="view-expenses" class="view hidden">
+    <button id="reorderBtn" class="ghost" style="margin-bottom:8px">Reorder panels</button>
     <div id="groupCards"></div>
   </section>
 
@@ -388,18 +390,7 @@ input[type=file]{padding:9px 12px}
       <div id="adviceText"></div>
       <button class="full" id="smartBtn" style="width:100%;margin-top:10px">Smart split</button>
     </div>
-    <div class="card">
-      <h2>Can I afford it?</h2>
-      <form id="affordForm">
-        <label class="full">Item<input name="name" placeholder="e.g. MacBook Pro"></label>
-        <label>Total cost<input type="number" name="cost" step="0.01" min="0" inputmode="decimal"></label>
-        <label>Is it a<select name="kind"><option value="want">Want</option><option value="need">Need</option></select></label>
-        <label>Priority rank<input type="number" name="rank" min="1" step="1" inputmode="numeric" placeholder="1 = top"></label>
-        <label>Saved so far<input type="number" name="saved" min="0" step="0.01" inputmode="decimal"></label>
-        <label class="full">Target deadline (optional)<input type="date" name="neededBy" data-blank></label>
-        <button type="button" class="full" id="compareBtn">Compare paths</button>
-      </form>
-    </div>
+    <button id="affordBtn" class="full bigadd">Can I afford it?</button>
     <div class="card"><h2>Wishlist</h2><ul class="list" id="wishList"></ul></div>
     <div class="card"><h2>Goals</h2><ul class="list" id="goalList"></ul></div>
     <div class="card"><h2>Recent moves</h2><ul class="list" id="transferList"></ul></div>
@@ -644,6 +635,19 @@ input[type=file]{padding:9px 12px}
         <label class="full">Paid from<select name="accountId" class="acctSel"></select></label>
         <label class="check full"><input type="checkbox" name="manual"> I pay this one myself</label>
         <button class="full" type="submit">Save</button>
+      </form>
+    </div>
+  <div class="card addcard" id="affordCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
+      <h2>Can I afford it?</h2>
+      <form id="affordForm">
+        <label class="full">Item<input name="name" placeholder="e.g. MacBook Pro"></label>
+        <label>Total cost<input type="number" name="cost" step="0.01" min="0" inputmode="decimal"></label>
+        <label>Is it a<select name="kind"><option value="want">Want</option><option value="need">Need</option></select></label>
+        <label>Priority rank<input type="number" name="rank" min="1" step="1" inputmode="numeric" placeholder="1 = top"></label>
+        <label>Saved so far<input type="number" name="saved" min="0" step="0.01" inputmode="decimal"></label>
+        <label class="full">Target deadline (optional)<input type="date" name="neededBy" data-blank></label>
+        <button type="button" class="full" id="compareBtn">Compare paths</button>
       </form>
     </div>
   <div class="card addcard" id="propCard">
@@ -2650,6 +2654,11 @@ function itemRow(it, k) {
     '<button class="ghost" data-del="' + it.coll + ":" + it.x.id + '">✕</button></li>';
 }
 // Each group has its own Fortnight / Month / Year switch and shows 4 items until you expand it.
+let groupReorder = false;
+function moveBtns(g) {
+  if (!groupReorder || !g.id) return "";
+  return '<span class="mv"><button class="ghost" data-gmove="' + g.id + ':-1" aria-label="Move up">▲</button><button class="ghost" data-gmove="' + g.id + ':1" aria-label="Move down">▼</button></span>';
+}
 function groupCard(g, items) {
   const key = g.id || "_", per = grpPeriods[key] || "fortnight", k = PERIOD_K[per], open = !!grpOpen[key];
   const total = items.reduce((t, it) => t + it.fn, 0) * k;
@@ -2660,7 +2669,7 @@ function groupCard(g, items) {
   const btns = g.id ? '<button class="ghost" data-grp-edit="' + g.id + '">Rename</button><button class="ghost" data-grp-del="' + g.id + '">Remove</button>' : "";
   const more = sorted.length > GROUP_SHOWN ? '<button class="ghost" style="width:100%" data-gx="' + key + '">' +
     (open ? "Show less" : "Show all " + sorted.length) + "</button>" : "";
-  return '<div class="card"><div class="bankhead"><b>' + esc(g.name) + '</b><span class="amt">' + money(total) + '</span></div>' + toggle +
+  return '<div class="card"><div class="bankhead"><b>' + esc(g.name) + '</b>' + moveBtns(g) + '<span class="amt">' + money(total) + '</span></div>' + toggle +
     '<div class="sub note" style="margin-top:6px">' + (GROUP_KINDS[g.kind] ? GROUP_KINDS[g.kind] + " · " : "") + items.length + (items.length === 1 ? " item" : " items") +
     '</div><div class="bankbtns">' + btns + '</div><ul class="list">' + (shown.length ? shown.map((it) => itemRow(it, k)).join("") : '<li class="empty">Nothing here.</li>') + "</ul>" + more + "</div>";
 }
@@ -2674,9 +2683,19 @@ function renderGroups() {
   if (loose.length) cards.push(groupCard({ id: "", name: "Ungrouped", kind: "" }, loose));
   $("groupCards").innerHTML = cards.join("") || '<div class="card"><p class="empty">No groups yet.</p></div>';
 }
+$("reorderBtn").addEventListener("click", () => {
+  groupReorder = !groupReorder; $("reorderBtn").textContent = groupReorder ? "Done" : "Reorder panels"; renderGroups();
+});
 $("groupCards").addEventListener("click", (e) => {
   const t = e.target;
   if (t.dataset.gp) { const [key, per] = t.dataset.gp.split(":"); grpPeriods[key] = per; renderGroups(); }
+  if (t.dataset.gmove) {
+    const [id, dir] = t.dataset.gmove.split(":"), list = ST.groups.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const i = list.findIndex((g) => g.id === id), j = i + Number(dir);
+    if (i < 0 || j < 0 || j >= list.length) return;
+    list.splice(j, 0, list.splice(i, 1)[0]);
+    list.forEach((g, n) => { if (g.order !== n) save("groups", g.id, { order: n }); });
+  }
   if (t.dataset.gx) { grpOpen[t.dataset.gx] = !grpOpen[t.dataset.gx]; renderGroups(); }
 });
 
@@ -2831,6 +2850,7 @@ function openCompare() {
   if (!(cost > 0)) { toast("Enter a total cost first."); return; }
   const surplus = Math.max(0, disposable()), sug = suggestSplit(surplus, cost, f.neededBy.value);
   ac = { name: f.name.value.trim() || "This item", cost: cost, kind: f.kind.value, neededBy: f.neededBy.value, rank: parseInt(f.rank.value, 10) || 0, saved: Math.max(0, parseFloat(f.saved.value) || 0), tab: "a", surplus: surplus, primary: sug ? sug.amount : 0, secKey: "", secAmt: 0 };
+  closeSheets(false);
   acWrap = document.createElement("div");
   acWrap.className = "overlay sheet";
   acWrap.addEventListener("click", acClick);
@@ -2926,6 +2946,7 @@ function acClick(e) {
   else if (d.acSetup !== undefined) { acClose(); openBufferSetup(); }
 }
 $("compareBtn").addEventListener("click", openCompare);
+$("affordBtn").addEventListener("click", () => openSheet("affordCard"));
 
 /* =========================================================
    6r. GOAL PRIORITY and DEADLINES — deadline goals are funded first, then the priority order
