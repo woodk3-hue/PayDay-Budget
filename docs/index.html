@@ -289,7 +289,14 @@ nav.none::before{opacity:0}
 .pcard .pnet{font-family:var(--rounded);font-size:22px;font-weight:700;margin-top:4px}
 .pcard button{align-self:flex-start;margin-top:4px}
 .propyearly summary{cursor:pointer;min-height:44px;display:flex;align-items:center;color:var(--brand);font-weight:600}
-.bankhead .mv{display:inline-flex;margin-left:auto;margin-right:6px}
+.sorting>[data-sid]{position:relative;padding-left:46px}
+.grip{position:absolute;left:0;top:0;bottom:0;width:42px;min-height:44px;padding:0;border-radius:inherit;background:none;box-shadow:none;color:var(--muted);display:flex;align-items:center;justify-content:center;touch-action:none;cursor:grab}
+.grip svg{width:22px;height:22px;pointer-events:none}
+.grip:focus-visible,.grip[aria-pressed=true]{color:var(--brand);outline:2px solid var(--brand);outline-offset:-2px}
+.sortph{border:2px dashed var(--brand);background:var(--brand-soft);border-radius:20px;margin-bottom:12px}
+.sorting>[data-sid].sortlift,.sortlift{position:fixed;z-index:600;margin:0;pointer-events:none;opacity:.92;transform:scale(1.03);box-shadow:0 18px 40px rgba(0,0,0,.28);transition:transform .15s,box-shadow .15s}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){.sortlift{transition:none}}
 .wizard{position:fixed;inset:0;z-index:650;background:var(--wash) fixed,var(--bg);overflow-y:auto;padding:calc(24px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom))}
 .wizard .wbox{max-width:480px;margin:0 auto}
 .wizard h1{font-size:30px;line-height:1.15;margin:8px 0 6px}
@@ -362,7 +369,7 @@ input[type=file]{padding:9px 12px}
 
   <!-- DASHBOARD -->
   <section id="view-home" class="view hidden">
-    <div class="card">
+    <div class="card" data-sid="pay">
       <h2 id="periodTitle">This fortnight</h2>
       <div class="grid">
         <div class="stat" id="incomeTile" role="button" tabindex="0" style="cursor:pointer"><small>Income</small><b id="cIncome">$0</b></div>
@@ -372,19 +379,20 @@ input[type=file]{padding:9px 12px}
       <p class="note" id="periodNote"></p>
       <button class="full" id="allotBtn" style="width:100%;margin-top:10px">Allot left over</button>
     </div>
-    <div class="card hidden" id="homeGoals" role="button" tabindex="0" style="cursor:pointer">
+    <div class="card hidden" data-sid="goals" id="homeGoals" role="button" tabindex="0" style="cursor:pointer">
       <h2>Wishlist & goals</h2>
       <ul class="list" id="homeGoalList"></ul>
     </div>
-    <div class="card hidden" id="manualCard"><h2>Bills you pay yourself</h2><ul class="list" id="manualList"></ul></div>
-    <div class="card">
+    <div class="card hidden" data-sid="manual" id="manualCard"><h2>Bills you pay yourself</h2><ul class="list" id="manualList"></ul></div>
+    <div class="card" data-sid="upcoming">
       <h2>Coming up (next 14 days)</h2>
       <ul class="list" id="upcomingList"></ul>
     </div>
-    <div class="card">
+    <div class="card" data-sid="spend">
       <h2 data-pl="Spending by category (this {noun})">Spending by category (this fortnight)</h2>
       <ul class="list" id="catList"></ul>
     </div>
+    <button id="homeReorderBtn" class="ghost" style="margin-top:4px">Reorder panels</button>
   </section>
 
   <!-- INCOME -->
@@ -458,6 +466,7 @@ input[type=file]{padding:9px 12px}
   <section id="view-property" class="view hidden">
     <button id="addPropBtn" class="full bigadd">+ Add Property</button>
     <div class="toggle" id="propFilter"></div>
+    <button id="propReorderBtn" class="ghost" style="margin-bottom:8px">Reorder properties</button>
     <div class="propcards" id="propCards"></div>
     <div class="card" id="cfCard">
       <h2 data-pl="Rent vs costs (this {noun})">Rent vs costs (this fortnight)</h2>
@@ -1091,11 +1100,13 @@ function maybeWizard() {
   if (!hasData) openWizard();
 }
 function render() {
+  if (sortBusy) { sortDirty = true; return; }
   syncApp();
   renderHome(); renderIncome(); renderGroups(); renderSavings(); renderSubs(); renderProperty(); renderBuffer(); renderAdvice(); renderHomeGoals(); renderWishlist(); renderCashflow(); renderQuickIncome();
   if (currentView === "stats") renderStats();
   renderAccountSelects(); renderAccounts(); renderPaydaySetting(); scheduleApply(); renderSetApp();
   maybeWizard();
+  sorters.forEach((x) => x.refresh());
 }
 
 function subsSorted() {
@@ -1530,7 +1541,7 @@ function propIds() {
   ST.incomeSources.forEach((x) => add(x.propertyId));
   const held = {}; expenseItems().forEach((it) => { if (it.group) held[it.group.id] = true; });
   ST.groups.filter((g) => g.kind === "property" && held[g.id]).forEach((g) => add(g.propertyId));
-  return ids;
+  return savedOrder(ids, "prop");
 }
 let propFilter = "all";
 const filterIds = () => propFilter === "_un" ? [] : propFilter === "all" || !propIds().includes(propFilter) ? propIds() : [propFilter];
@@ -1634,7 +1645,7 @@ const propCostNow = (id) => propCosts(id) || Number(propData(id).costEst || 0);
 const HOUSE_SVG = '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22 24 7l18 15M10 20v21h28V20"/><path d="M20 41V28h8v13"/></svg>';
 function propCardHtml(id) {
   const p = propData(id), rent = propRent(id), costs = propCostNow(id), net = rent - costs;
-  return '<div class="pcard' + (propFilter === id ? " sel" : "") + '">' + infoBtn("prop", id) + '<h3>' + esc(propName(id)) + '</h3>' +
+  return '<div class="pcard' + (propFilter === id ? " sel" : "") + '" data-sid="' + esc(id) + '">' + infoBtn("prop", id) + '<h3>' + esc(propName(id)) + '</h3>' +
     '<div class="pl"><span>Rent</span><b>' + money(rent) + '</b></div><div class="pl"><span>Costs</span><b>' + money(costs) + '</b></div>' +
     '<div class="pnet ' + (net >= 0 ? "pos" : "neg") + '">' + money(net) + '</div>' +
     '<div class="pl small"><span>Required ' + PF().label + ' set-aside</span><b>' + money(requiredSetAside(id)) + '</b></div>' +
@@ -2912,11 +2923,6 @@ function itemRow(it, k) {
     '<button class="ghost" data-del="' + it.coll + ":" + it.x.id + '">✕</button></li>';
 }
 // Each group has its own Fortnight / Month / Year switch and shows 4 items until you expand it.
-let groupReorder = false;
-function moveBtns(g) {
-  if (!groupReorder || !g.id) return "";
-  return '<span class="mv"><button class="ghost" data-gmove="' + g.id + ':-1" aria-label="Move up">▲</button><button class="ghost" data-gmove="' + g.id + ':1" aria-label="Move down">▼</button></span>';
-}
 function groupCard(g, items) {
   const key = g.id || "_", per = grpPeriods[key] || "fortnight", k = PERIOD_K[per], open = !!grpOpen[key];
   const total = items.reduce((t, it) => t + it.fn, 0) * k;
@@ -2927,7 +2933,7 @@ function groupCard(g, items) {
   const btns = g.id ? '<button class="ghost" data-grp-edit="' + g.id + '">Rename</button><button class="ghost" data-grp-del="' + g.id + '">Remove</button>' : "";
   const more = sorted.length > GROUP_SHOWN ? '<button class="ghost" style="width:100%" data-gx="' + key + '">' +
     (open ? "Show less" : "Show all " + sorted.length) + "</button>" : "";
-  return '<div class="card"><div class="bankhead"><b>' + esc(g.name) + '</b>' + moveBtns(g) + '<span class="amt">' + money(total) + '</span></div>' + toggle +
+  return '<div class="card"' + (g.id ? ' data-sid="' + esc(g.id) + '"' : "") + '><div class="bankhead"><b>' + esc(g.name) + '</b><span class="amt">' + money(total) + '</span></div>' + toggle +
     '<div class="sub note" style="margin-top:6px">' + (GROUP_KINDS[g.kind] ? GROUP_KINDS[g.kind] + " · " : "") + items.length + (items.length === 1 ? " item" : " items") +
     '</div><div class="bankbtns">' + btns + '</div><ul class="list">' + (shown.length ? shown.map((it) => itemRow(it, k)).join("") : '<li class="empty">Nothing here.</li>') + "</ul>" + more + "</div>";
 }
@@ -2941,19 +2947,10 @@ function renderGroups() {
   if (loose.length) cards.push(groupCard({ id: "", name: "Ungrouped", kind: "" }, loose));
   $("groupCards").innerHTML = cards.join("") || '<div class="card"><p class="empty">No groups yet.</p></div>';
 }
-$("reorderBtn").addEventListener("click", () => {
-  groupReorder = !groupReorder; $("reorderBtn").textContent = groupReorder ? "Done" : "Reorder panels"; renderGroups();
-});
+
 $("groupCards").addEventListener("click", (e) => {
   const t = e.target;
   if (t.dataset.gp) { const [key, per] = t.dataset.gp.split(":"); grpPeriods[key] = per; renderGroups(); }
-  if (t.dataset.gmove) {
-    const [id, dir] = t.dataset.gmove.split(":"), list = ST.groups.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    const i = list.findIndex((g) => g.id === id), j = i + Number(dir);
-    if (i < 0 || j < 0 || j >= list.length) return;
-    list.splice(j, 0, list.splice(i, 1)[0]);
-    list.forEach((g, n) => { if (g.order !== n) save("groups", g.id, { order: n }); });
-  }
   if (t.dataset.gx) { grpOpen[t.dataset.gx] = !grpOpen[t.dataset.gx]; renderGroups(); }
 });
 
@@ -3444,6 +3441,133 @@ $("signInBtn").addEventListener("click", async () => {
 });
 $("signOutBtn").addEventListener("click", () => signOut(auth));
 
+/* =========================================================
+   DRAG-AND-DROP REORDERING — grip handles, pointer (mouse + touch) and keyboard
+   ========================================================= */
+let sortBusy = false, sortDirty = false;
+const sorters = [];
+// Layouts that live on this device (Home panels, property cards) are kept in localStorage; Expenses groups sync through Firestore.
+function savedOrder(ids, key) {
+  let saved = [];
+  try { saved = JSON.parse(localStorage.getItem("order-" + key) || "[]"); } catch (e) { saved = []; }
+  const rank = (id) => { const n = saved.indexOf(id); return n < 0 ? 9999 : n; };
+  return ids.map((id, i) => ({ id: id, i: i })).sort((a, b) => rank(a.id) - rank(b.id) || a.i - b.i).map((x) => x.id);
+}
+function storeOrder(key, ids) { try { localStorage.setItem("order-" + key, JSON.stringify(ids)); } catch (e) { /* private mode */ } }
+const GRIP_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
+function sortLive(msg) {
+  let el = $("sortLive");
+  if (!el) { el = document.createElement("div"); el.id = "sortLive"; el.className = "sr-only"; el.setAttribute("aria-live", "polite"); document.body.appendChild(el); }
+  el.textContent = msg;
+}
+function makeSortable(box, label, onDone) {
+  let on = false, drag = null, kb = null;
+  const items = () => [...box.children].filter((c) => c.dataset.sid !== undefined && !c.classList.contains("sortph"));
+  const ids = () => items().map((c) => c.dataset.sid);
+  const nameOf = (el) => label(el) || "panel";
+  function refresh() {
+    box.classList.toggle("sorting", on);
+    box.querySelectorAll(":scope > [data-sid] > .grip").forEach((g) => g.remove());
+    if (!on) return;
+    items().forEach((el) => {
+      const g = document.createElement("button");
+      g.type = "button"; g.className = "grip"; g.innerHTML = GRIP_SVG; g.setAttribute("aria-label", "Reorder " + nameOf(el) + ". Press space to grab, arrow keys to move, enter to drop.");
+      g.setAttribute("aria-pressed", "false"); el.prepend(g);
+    });
+  }
+  function finish(changed) {
+    sortBusy = false;
+    if (changed) onDone(ids());
+    if (sortDirty) { sortDirty = false; render(); }
+  }
+  // pointer drag (mouse and touch)
+  box.addEventListener("pointerdown", (e) => {
+    const g = e.target.closest(".grip"); if (!g || !on || e.button > 0 || !box.contains(g)) return;
+    e.preventDefault();
+    const el = g.parentElement, r = el.getBoundingClientRect(), before = ids();
+    const ph = document.createElement("div"); ph.className = "sortph"; ph.style.height = r.height + "px";
+    el.after(ph); sortBusy = true;
+    el.classList.add("sortlift"); el.style.width = r.width + "px"; el.style.left = r.left + "px"; el.style.top = r.top + "px";
+    drag = { el: el, ph: ph, off: e.clientY - r.top, y: e.clientY, before: before, id: e.pointerId, raf: 0 };
+    g.setPointerCapture(e.pointerId);
+    const tick = () => {
+      if (!drag) return;
+      if (drag.y < 70) window.scrollBy(0, -14); else if (drag.y > window.innerHeight - 70) window.scrollBy(0, 14);
+      drag.raf = requestAnimationFrame(tick);
+    };
+    tick();
+  });
+  box.addEventListener("pointermove", (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    drag.y = e.clientY; drag.el.style.top = (e.clientY - drag.off) + "px";
+    const others = items().filter((c) => c !== drag.el);
+    const next = others.find((c) => { const b = c.getBoundingClientRect(); return e.clientY < b.top + b.height / 2; });
+    if (next) { if (drag.ph.nextSibling !== next) box.insertBefore(drag.ph, next); }
+    else { const last = others[others.length - 1]; if (last && last.nextSibling !== drag.ph) last.after(drag.ph); }
+  });
+  const drop = (e, cancel) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const d = drag; drag = null; cancelAnimationFrame(d.raf);
+    d.el.classList.remove("sortlift"); d.el.style.width = d.el.style.left = d.el.style.top = "";
+    if (cancel) {
+      d.ph.remove();
+      const tail = [...box.children].filter((c) => c.dataset.sid === undefined);
+      d.before.forEach((id) => box.appendChild(items().find((x) => x.dataset.sid === id)));
+      tail.forEach((c) => box.appendChild(c));
+    } else d.ph.replaceWith(d.el);
+    finish(!cancel && ids().join() !== d.before.join());
+  };
+  box.addEventListener("pointerup", (e) => drop(e, false));
+  box.addEventListener("pointercancel", (e) => drop(e, true));
+  // keyboard: space/enter grabs, arrows move, enter/space drops, escape cancels
+  box.addEventListener("keydown", (e) => {
+    const g = e.target.closest(".grip"); if (!g || !on) return;
+    const el = g.parentElement;
+    if (!kb && (e.key === " " || e.key === "Enter")) {
+      e.preventDefault(); kb = { before: ids() }; sortBusy = true; g.setAttribute("aria-pressed", "true");
+      sortLive("Grabbed " + nameOf(el) + ". Use arrow keys to move, enter to drop, escape to cancel.");
+    } else if (kb && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+      e.preventDefault();
+      const list = items(), i = list.indexOf(el), j = i + (e.key === "ArrowUp" ? -1 : 1);
+      if (j < 0 || j >= list.length) return;
+      if (e.key === "ArrowUp") box.insertBefore(el, list[j]); else list[j].after(el);
+      el.querySelector(".grip").focus(); el.querySelector(".grip").setAttribute("aria-pressed", "true");
+      sortLive(nameOf(el) + " moved to position " + (j + 1) + " of " + list.length + ".");
+    } else if (kb && (e.key === " " || e.key === "Enter")) {
+      e.preventDefault(); const k = kb; kb = null; g.setAttribute("aria-pressed", "false");
+      sortLive("Dropped " + nameOf(el) + " at position " + (items().indexOf(el) + 1) + ".");
+      finish(ids().join() !== k.before.join());
+    } else if (kb && e.key === "Escape") {
+      e.preventDefault(); const k = kb; kb = null;
+      const tail = [...box.children].filter((c) => c.dataset.sid === undefined);
+      k.before.forEach((id) => box.appendChild(items().find((x) => x.dataset.sid === id)));
+      tail.forEach((c) => box.appendChild(c));
+      g.setAttribute("aria-pressed", "false"); el.querySelector(".grip").focus();
+      sortLive("Move cancelled."); finish(false);
+    }
+  });
+  const api = { setMode: (v) => { on = v; refresh(); }, refresh: () => { if (on && !drag && !kb) refresh(); }, isOn: () => on };
+  sorters.push(api);
+  return api;
+}
+const reorderToggle = (btn, sorter, idle) => btn.addEventListener("click", () => {
+  const v = !sorter.isOn(); sorter.setMode(v); btn.textContent = v ? "Done" : idle;
+});
+const nameFrom = (el) => { const h = el.querySelector("h2, h3, b"); return h ? h.textContent.trim() : ""; };
+// Home panels and property cards: order kept on this device.
+const sortHome = makeSortable($("view-home"), nameFrom, (ids) => storeOrder("home", ids));
+reorderToggle($("homeReorderBtn"), sortHome, "Reorder panels");
+const sortProps = makeSortable($("propCards"), nameFrom, (ids) => { storeOrder("prop", ids); renderProperty(); });
+reorderToggle($("propReorderBtn"), sortProps, "Reorder properties");
+// Expenses groups: order syncs through each group's `order` field.
+const sortGroups = makeSortable($("groupCards"), nameFrom, (ids) => {
+  ids.forEach((id, n) => { const g = ST.groups.find((x) => x.id === id); if (g && g.order !== n) save("groups", id, { order: n }); });
+});
+reorderToggle($("reorderBtn"), sortGroups, "Reorder panels");
+(function applyHomeOrder() {
+  const box = $("view-home"), cards = [...box.children].filter((c) => c.dataset.sid !== undefined), tail = $("homeReorderBtn");
+  savedOrder(cards.map((c) => c.dataset.sid), "home").forEach((id) => box.insertBefore(cards.find((c) => c.dataset.sid === id), tail));
+})();
 onAuthStateChanged(auth, (user) => {
   unsubs.forEach((u) => u()); unsubs = [];
   uid = user ? user.uid : null;
