@@ -287,6 +287,7 @@ nav.none::before{opacity:0}
 .inote,.sec .chain{padding:8px 0;font-size:15px;color:var(--muted);text-align:left}
 .sec .sub.wrap{text-align:left}
 .pcard .pl{display:flex;justify-content:space-between;font-size:15px}
+.pcard .psep{margin-top:8px;padding-top:6px;border-top:.5px solid var(--line);font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
 .pcard .pl.small{font-size:13px;color:var(--muted)}
 .pcard .pl.small b{font-weight:600}
 .pcard .pl b{font-variant-numeric:tabular-nums}
@@ -479,7 +480,7 @@ input[type=file]{padding:9px 12px}
     <button id="propReorderBtn" class="ghost" style="margin-bottom:8px">Reorder properties</button>
     <div class="propcards" id="propCards"></div>
     <div class="card" id="cfCard">
-      <h2 data-pl="Rent vs costs (this {noun})">Rent vs costs (this fortnight)</h2>
+      <h2>Rent vs costs (this rent cycle)</h2>
       <div class="grid">
         <div class="stat"><small>Rent received</small><b id="ptIn">$0</b></div>
         <div class="stat"><small>Costs</small><b id="ptCost">$0</b></div>
@@ -717,8 +718,9 @@ input[type=file]{padding:9px 12px}
       <form id="propForm">
         <label class="full">Name or address<input name="name" required placeholder="e.g. 12 Smith St"></label>
         <label class="full">Dedicated Bank Account<select name="accountId" class="acctSel" data-ph="Choose an account…" required></select></label>
-        <label><span data-pl="Rent per {noun}">Rent per fortnight</span><input type="number" name="rentEst" step="0.01" min="0" inputmode="decimal" value="0"></label>
-        <label><span data-pl="Costs per {noun}">Costs per fortnight</span><input type="number" name="costEst" step="0.01" min="0" inputmode="decimal" value="0"></label>
+        <label>Rent amount<input type="number" name="rentEst" step="0.01" min="0" inputmode="decimal" value="0"></label>
+        <label>Rent frequency<select name="rentFreq"><option value="weekly">Weekly</option><option value="fortnightly" selected>Fortnightly</option><option value="monthly">Monthly</option></select></label>
+        <label class="full">Costs per rent cycle<input type="number" name="costEst" step="0.01" min="0" inputmode="decimal" value="0"></label>
         <label class="full">Target maintenance float<input type="number" name="maintFloat" step="1" min="0" inputmode="decimal" value="0"></label>
         <label class="full"><span data-pl="Maintenance set-aside per {noun}">Maintenance set-aside per fortnight</span><input type="number" name="maintFn" step="0.01" min="0" inputmode="decimal" value="0"></label>
         <details class="full propyearly"><summary>Yearly costs (optional)</summary>
@@ -1297,13 +1299,14 @@ function goalInfoHtml(g) {
   return h;
 }
 function propInfoHtml(id) {
-  const p = propData(id), c = propSetAside(id), live = rentFortnight(id);
+  const p = propData(id), c = propSetAside(id);
   return infoRow("Linked account", esc(p.accountId ? acctName(p.accountId) : "None")) +
-    infoRow("Rent this " + PF().noun, money(live) + (live ? "" : " (estimate " + money(p.rentEst || 0) + ")")) +
+    infoRow("Rent frequency", cycleName(propRentFreq(id))) + infoRow("Cycle", fmtDate(propCycle(id).start) + " – " + fmtDate(propCycle(id).end)) +
+    infoRow("Rent received this cycle", money(propRentReceived(id))) + infoRow("Next rent due", fmtDate(propPool(id).nextRent)) +
     infoRow("Yearly costs set aside", money(c.base) + pfS()) + infoRow("Bills set aside", money(c.extra) + pfS()) +
     infoRow("Other property costs", money(groupPropertyCosts(id)) + pfS()) + (p.costEst ? infoRow("Cost estimate", money(p.costEst) + pfS()) : "") +
     infoRow("Required " + PF().label + " Set-Aside", money(requiredSetAside(id)) + pfS()) +
-    infoRow("Pool balance", money(propPool(id).pool)) + infoRow("Bills before next payday", money(propPool(id).bills)) + infoRow("Target maintenance float", money(propPool(id).float)) +
+    infoRow("Pool balance", money(propPool(id).pool)) + infoRow("Bills before next rent", money(propPool(id).bills)) + infoRow("Target maintenance float", money(propPool(id).float)) +
     infoRow("Maintenance put aside", money(maintContrib(id)) + (p.maintFn ? " (" + money(p.maintFn) + pfS() + ")" : "")) +
     infoRow("Maintenance receipts", money(maintReceipts(id))) + infoRow("Maintenance reserve", money(maintReserve(id)));
 }
@@ -1662,13 +1665,54 @@ function flowRow(label, rent, costs) {
   return '<li><div class="main"><div>' + esc(label) + '</div><div class="sub wrap">Rent ' + money(rent) + " · costs " + money(costs) +
     '</div></div><span class="amt ' + (net >= 0 ? "pos" : "neg") + '">' + money(net) + "</span></li>";
 }
-// Rent / costs for a property: what actually came in this fortnight, falling back to the estimate you entered.
-const propRent = (id) => rentFortnight(id) || Number(propData(id).rentEst || 0);
-const propCostNow = (id) => propCosts(id) || Number(propData(id).costEst || 0);
+// A property is judged over its own rent cycle: a monthly rent covers the whole calendar month, weekly / fortnightly rent follows the pay period.
+const RENT_FREQS = ["weekly", "fortnightly", "monthly"];
+function propRentFreq(id) {
+  const p = propData(id);
+  if (RENT_FREQS.includes(p.rentFreq)) return p.rentFreq;
+  const src = ST.incomeSources.filter((x) => !x.wages && x.propertyId === id);
+  if (src.some((x) => x.frequency === "monthly")) return "monthly";
+  const f = src.find((x) => RENT_FREQS.includes(x.frequency));
+  return f ? f.frequency : "fortnightly";
+}
+function propCycle(id) {
+  const f = propRentFreq(id);
+  if (f === "monthly") {
+    const t = today(), y = Number(t.slice(0, 4)), m = Number(t.slice(5, 7));
+    return { freq: f, start: t.slice(0, 8) + "01", end: t.slice(0, 8) + String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, "0") };
+  }
+  const q = currentPeriod();
+  return { freq: f, start: q.start, end: q.end };
+}
+const cycleName = (f) => (f === "monthly" ? "Monthly" : f === "weekly" ? "Weekly" : "Fortnightly");
+const propRentReceived = (id) => { const c = propCycle(id); return ST.income.filter((i) => !isWages(i) && sourceProperty(i) === id && i.date >= c.start && i.date <= c.end).reduce((t, i) => t + i.amount, 0); };
+function propRentExpected(id) {
+  const p = propData(id), f = propRentFreq(id);
+  if (Number(p.rentEst) > 0) return round2(Number(p.rentEst));
+  return round2(ST.incomeSources.filter((x) => !x.wages && x.propertyId === id && FREQ_PER_YEAR[x.frequency]).reduce((t, x) => t + (Number(x.amount) || 0) * FREQ_PER_YEAR[x.frequency] / FREQ_PER_YEAR[f], 0));
+}
+// The next date rent is due to land: from the rent sources' next dates, else the last rent logged + its frequency, else the next payday.
+function propNextRent(id) {
+  const f = propRentFreq(id), c = [];
+  ST.incomeSources.filter((x) => !x.wages && x.propertyId === id).forEach((x) => {
+    const d = x.nextApply || x.nextDate;
+    if (d && x.frequency && x.frequency !== "once") c.push(nextDue({ dueDate: d, frequency: x.frequency }));
+  });
+  if (!c.length) {
+    const last = ST.income.filter((i) => !isWages(i) && sourceProperty(i) === id).sort((a, b) => b.date.localeCompare(a.date))[0];
+    if (last) c.push(nextFromLast(last.date, f === "monthly" ? "monthly" : f));
+  }
+  c.sort();
+  return c[0] || isoFromDay(nextPayday());
+}
+const cycleK = (f) => PF().perYear / FREQ_PER_YEAR[f];
+const propCycleCosts = (id) => round2(propCosts(id) * cycleK(propRentFreq(id))) || Number(propData(id).costEst || 0);
+const propRent = (id) => propRentReceived(id) || propRentExpected(id);
+const propCostNow = (id) => propCycleCosts(id);
 const HOUSE_SVG = '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22 24 7l18 15M10 20v21h28V20"/><path d="M20 41V28h8v13"/></svg>';
-// Property pool: the linked account's balance against what the property must keep: bills due before the next payday + the target maintenance float.
+// Property pool: the linked account's balance against what it must keep: bills due before the next rent deposit + the target maintenance float.
 function propPool(id) {
-  const p = propData(id), a = acctById(p.accountId), from = today(), to = isoFromDay(nextPayday()), seen = {};
+  const p = propData(id), a = acctById(p.accountId), from = today(), nextRent = propNextRent(id), to = nextRent < from ? from : nextRent, seen = {};
   let bills = 0;
   expenseItems().forEach((it) => {
     const own = it.coll === "bills" ? it.x.category === "property" && it.x.propertyId === id : it.coll !== "acctTransfers" && it.group && it.group.kind === "property" && (it.group.propertyId || "") === id;
@@ -1676,21 +1720,23 @@ function propPool(id) {
     seen[it.coll + it.x.id] = true; bills += occurrencesIn(it, from, to).length * it.amount;
   });
   const float = Number(p.maintFloat) || 0, pool = a ? Number(a.balance) || 0 : 0, reserved = round2(bills + float);
-  return { linked: !!a, acct: a, pool: pool, bills: round2(bills), float: float, reserved: reserved, net: round2(pool - reserved) };
+  return { nextRent: to, linked: !!a, acct: a, pool: pool, bills: round2(bills), float: float, reserved: reserved, net: round2(pool - reserved) };
 }
 function poolRows(id) {
   const q = propPool(id);
   if (!q.linked) return '<div class="pl small"><span>No linked account</span><b>Edit to link</b></div>';
-  return '<div class="pl small"><span>Pool balance</span><b>' + money(q.pool) + '</b></div>' +
+  return '<div class="psep">Bank liquidity</div><div class="pl small"><span>Pool Balance</span><b>' + money(q.pool) + '</b></div>' +
     '<div class="pl small"><span>Reserved (bills + maintenance)</span><b>' + money(q.reserved) + '</b></div>' +
-    '<div class="pl small"><span>' + (q.net >= 0 ? "Available surplus" : "Shortfall") + '</span><b class="' + (q.net >= 0 ? "pos" : "neg") + '">' + money(Math.abs(q.net)) + "</b></div>";
+    '<div class="pl small"><span>' + (q.net >= 0 ? "Available Surplus" : "Shortfall") + '</span><b class="' + (q.net >= 0 ? "pos" : "neg") + '">' + money(Math.abs(q.net)) + "</b></div>";
 }
 function propCardHtml(id) {
-  const p = propData(id), rent = propRent(id), costs = propCostNow(id), net = rent - costs;
+  const cyc = propCycle(id), expected = propRentExpected(id), received = propRentReceived(id), costs = propCycleCosts(id), basis = received || expected, net = basis - costs;
+  const q = propPool(id), pending = net < 0 && !received && q.linked && q.net >= 0;
+  const netNote = pending ? '<div class="pl small"><span>Rent due ' + fmtDate(q.nextRent) + "</span><b>Pool covers costs until then</b></div>" : received ? '<div class="pl small"><span>Rent received so far</span><b>' + money(received) + "</b></div>" : "";
   return '<div class="pcard' + (propFilter === id ? " sel" : "") + '" data-sid="' + esc(id) + '">' + infoBtn("prop", id) + '<h3>' + esc(propName(id)) + '</h3>' +
-    '<div class="pl"><span>Rent</span><b>' + money(rent) + '</b></div><div class="pl"><span>Costs</span><b>' + money(costs) + '</b></div>' +
-    '<div class="pnet ' + (net >= 0 ? "pos" : "neg") + '">' + money(net) + '</div>' +
-poolRows(id) +
+    '<div class="pl"><span>' + cycleName(cyc.freq) + ' Rent Expected</span><b>' + money(expected) + '</b></div><div class="pl"><span>Cycle Costs Paid/Due</span><b>' + money(costs) + '</b></div>' +
+    '<div class="pl"><span>Period Net</span><b class="' + (pending ? "" : net >= 0 ? "pos" : "neg") + '">' + money(net) + '</b></div>' + netNote +
+    poolRows(id) +
     '<button class="ghost" data-edit-prop="' + esc(id) + '">Edit</button></div>';
 }
 function renderPropertyFlows() {
@@ -1756,7 +1802,7 @@ function resetPropForm() {
 function startEditProp(id) {
   const f = $("propForm"), p = propData(id);
   f.elements.name.value = p.name || "Property " + id;
-  f.elements.accountId.value = p.accountId || "";
+  f.elements.accountId.value = p.accountId || ""; f.elements.rentFreq.value = propRentFreq(id);
   ["rentEst", "costEst", "maintFn", "maintFloat"].concat(PROP_COSTS).forEach((k) => { f.elements[k].value = p[k] ?? 0; });
   editing.properties = id; markTakenAccounts(id);
   $("propFormTitle").textContent = "Edit property"; $("propSubmit").textContent = "Update"; $("propDelete").classList.remove("hidden");
