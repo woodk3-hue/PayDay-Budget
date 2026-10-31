@@ -290,6 +290,18 @@ nav.none::before{opacity:0}
 .pcard button{align-self:flex-start;margin-top:4px}
 .propyearly summary{cursor:pointer;min-height:44px;display:flex;align-items:center;color:var(--brand);font-weight:600}
 .bankhead .mv{display:inline-flex;margin-left:auto;margin-right:6px}
+.wizard{position:fixed;inset:0;z-index:650;background:var(--wash) fixed,var(--bg);overflow-y:auto;padding:calc(24px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom))}
+.wizard .wbox{max-width:480px;margin:0 auto}
+.wizard h1{font-size:30px;line-height:1.15;margin:8px 0 6px}
+.wizard .wstep{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.wizard .wsub{color:var(--muted);font-size:15px;margin-bottom:14px}
+.wzopt{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;min-height:60px;margin-top:8px;text-align:left;background:var(--card);color:var(--ink);box-shadow:inset 0 0 0 .5px var(--line);font-weight:600}
+.wzopt small{font-weight:400;color:var(--muted);font-size:13px}
+.wzopt.on{box-shadow:inset 0 0 0 2px var(--brand);background:var(--brand-soft)}
+.wizard label{display:block;margin-top:14px;font-size:15px;color:var(--muted)}
+.wizard .wnav{display:flex;gap:10px;margin-top:22px}
+.wizard .wnav button{flex:1}
+.wizard .wnav .plain{background:var(--fill);color:var(--ink);box-shadow:none}
 .bufrow{margin-top:12px}
 .bufrow .bl{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:15px;color:var(--muted)}
 .bufrow .bl b{font-size:17px;color:var(--ink);font-variant-numeric:tabular-nums}
@@ -420,6 +432,10 @@ input[type=file]{padding:9px 12px}
       <p id="alertsText">Get a phone alert before things renew.</p>
       <button id="alertsBtn">Turn on alerts</button>
     </div>
+    </div>
+    <div class="card"><h2>Pay & region</h2>
+      <div id="setApp"></div>
+      <button id="setAppBtn" class="ghost" style="margin-top:6px">Run setup</button>
     </div>
     <div class="card"><h2>Big Savings</h2>
       <div id="setBuf"></div>
@@ -680,9 +696,9 @@ input[type=file]{padding:9px 12px}
       <form id="propForm">
         <label class="full">Name or address<input name="name" required placeholder="e.g. 12 Smith St"></label>
         <label class="full">Linked bank account<select name="accountId" class="acctSel"></select></label>
-        <label>Rent per fortnight<input type="number" name="rentEst" step="0.01" min="0" inputmode="decimal" value="0"></label>
-        <label>Costs per fortnight<input type="number" name="costEst" step="0.01" min="0" inputmode="decimal" value="0"></label>
-        <label class="full">Maintenance set-aside per fortnight<input type="number" name="maintFn" step="0.01" min="0" inputmode="decimal" value="0"></label>
+        <label><span data-pl="Rent per {noun}">Rent per fortnight</span><input type="number" name="rentEst" step="0.01" min="0" inputmode="decimal" value="0"></label>
+        <label><span data-pl="Costs per {noun}">Costs per fortnight</span><input type="number" name="costEst" step="0.01" min="0" inputmode="decimal" value="0"></label>
+        <label class="full"><span data-pl="Maintenance set-aside per {noun}">Maintenance set-aside per fortnight</span><input type="number" name="maintFn" step="0.01" min="0" inputmode="decimal" value="0"></label>
         <details class="full propyearly"><summary>Yearly costs (optional)</summary>
           <div class="grid" style="margin-top:8px">
             <label>Rates<input type="number" name="rates" step="0.01" min="0" inputmode="decimal" value="0"></label>
@@ -824,12 +840,36 @@ const pending = { income: false, expenses: false, goals: false, transfers: false
    3. HELPERS
    ========================================================= */
 const $ = (id) => document.getElementById(id);
-const money = (n) => (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// App-wide setup (settings/app): pay frequency anchors every per-pay figure; currency and tax-year start drive display.
+const PAY_FREQS = {
+  fortnightly: { label: "Fortnightly", noun: "fortnight", short: "fn", perYear: 26, days: 14, note: "Every 2 weeks / 26 pays per year" },
+  weekly: { label: "Weekly", noun: "week", short: "wk", perYear: 52, days: 7, note: "52 pays per year" },
+  semimonthly: { label: "Semi-monthly", noun: "half-month", short: "half", perYear: 24, days: 365 / 24, note: "Twice a month / 24 pays per year" },
+  monthly: { label: "Monthly", noun: "month", short: "mo", perYear: 12, days: 365 / 12, note: "12 pays per year" }
+};
+const CURRENCIES = [["AUD", "Australia", "en-AU", "$"], ["NZD", "New Zealand", "en-NZ", "$"], ["USD", "United States", "en-US", "$"], ["CAD", "Canada", "en-CA", "$"], ["GBP", "United Kingdom", "en-GB", "£"], ["EUR", "Eurozone", "de-DE", "€"]];
+const TAX_MONTHS = [[1, "January"], [4, "April"], [7, "July"], [10, "October"]];
+let APP = { payFrequency: "fortnightly", currency: "AUD", taxStartMonth: 7 };
+const PF = () => PAY_FREQS[APP.payFrequency] || PAY_FREQS.fortnightly;
+const pfS = () => "/" + PF().short, pfN = () => "/" + PF().noun;
+const curInfo = () => CURRENCIES.find((c) => c[0] === APP.currency) || CURRENCIES[0];
+const money = (n) => (n < 0 ? "-" : "") + curInfo()[3] + Math.abs(n).toLocaleString(curInfo()[2], { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 const today = () => new Date().toLocaleDateString("en-CA");
 const fmtDate = (d) => d ? new Date(d + "T00:00:00").toLocaleDateString("en-AU", { day: "numeric", month: "short" }) : "no date";
 const col = (name) => collection(db, "users", uid, name);
-const FREQ_PER_FORTNIGHT = { weekly: 2, fortnightly: 1, monthly: 12 / 26, quarterly: 4 / 26, yearly: 1 / 26, once: 0 };
+// Bills are normalised per pay: pays per year in a frequency ÷ the pays per year you are paid. (Name kept from when it was fortnight-only.)
+const FREQ_PER_YEAR = { weekly: 52, fortnightly: 26, monthly: 12, quarterly: 4, yearly: 1, once: 0 };
+const FREQ_PER_FORTNIGHT = {};
+const PERIOD_K = { fortnight: 1, month: 26 / 12, year: 26 };
+function applyPayFrequency() {
+  const py = PF().perYear;
+  Object.keys(FREQ_PER_YEAR).forEach((k) => { FREQ_PER_FORTNIGHT[k] = FREQ_PER_YEAR[k] / py; });
+  PERIOD_K.month = py / 12; PERIOD_K.year = py;
+  const fill = (t) => t.replace(/\{noun\}/g, PF().noun).replace(/\{Adj\}/g, PF().label).replace(/\{short\}/g, PF().short);
+  document.querySelectorAll("[data-pl]").forEach((el) => { el.textContent = fill(el.dataset.pl); });
+}
+applyPayFrequency();
 
 function currentPeriod() {
   const dayMs = 86400000, now = new Date(); now.setHours(0, 0, 0, 0);
@@ -907,7 +947,7 @@ function listen(name, orderField, dir = "desc") {
   const q = query(col(name), orderBy(orderField, dir));
   return onSnapshot(q, { includeMetadataChanges: true }, (snap) => {
     ST[name] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    pending[name] = snap.metadata.hasPendingWrites;
+    pending[name] = snap.metadata.hasPendingWrites; loadedColls.add(name);
     updateSyncPill(snap.metadata.fromCache);
     render();
   }, (e) => toast("Sync error: " + e.message));
@@ -955,10 +995,94 @@ function startSync() {
 /* =========================================================
    5. RENDER
    ========================================================= */
+/* =========================================================
+   SETUP WIZARD — pay frequency first (it anchors every per-pay figure), then region, tax year, targets
+   ========================================================= */
+let wz = null, wzDone = false, wzEl = null;
+const loadedColls = new Set();
+function syncApp() {
+  const x = ST.settings.find((y) => y.id === "app") || {};
+  const next = { payFrequency: PAY_FREQS[x.payFrequency] ? x.payFrequency : "fortnightly", currency: x.currency || "AUD", taxStartMonth: Number(x.taxStartMonth) || 7 };
+  const changed = next.payFrequency !== APP.payFrequency;
+  APP = next;
+  if (changed) applyPayFrequency();
+}
+function renderSetApp() {
+  const cur = curInfo(), tm = TAX_MONTHS.find((m) => m[0] === APP.taxStartMonth);
+  $("setApp").innerHTML = infoRow("Pay frequency", PF().label) + infoRow("Currency", cur[0] + " · " + cur[1]) + infoRow("Tax year starts", tm ? tm[1] : "July");
+}
+function wzOptHtml(k) {
+  const f = PAY_FREQS[k];
+  return '<button type="button" class="wzopt' + (wz.payFrequency === k ? " on" : "") + '" data-wz-freq="' + k + '">' + f.label + "<small>" + f.note + (k === "fortnightly" ? " · default" : "") + "</small></button>";
+}
+function wzBody() {
+  if (wz.step === 1) {
+    return '<h1>How often do you get paid?</h1><p class="wsub">Everything in the app is worked out per pay from this.</p>' +
+      Object.keys(PAY_FREQS).map(wzOptHtml).join("") +
+      '<label>Your usual pay (optional)<input type="number" id="wzPay" min="0" step="0.01" inputmode="decimal" placeholder="e.g. 3200" value="' + esc(wz.pay) + '"></label>';
+  }
+  if (wz.step === 2) {
+    return '<h1>Currency & region</h1><p class="wsub">How amounts are shown.</p><label>Currency<select id="wzCur">' +
+      CURRENCIES.map((c) => '<option value="' + c[0] + '"' + (wz.currency === c[0] ? " selected" : "") + ">" + c[0] + " – " + c[1] + "</option>").join("") + "</select></label>";
+  }
+  if (wz.step === 3) {
+    return '<h1>Tax year start</h1><p class="wsub">Used to group receipts by tax year.</p><label>Tax year starts in<select id="wzTax">' +
+      TAX_MONTHS.map((m) => '<option value="' + m[0] + '"' + (wz.taxStartMonth === m[0] ? " selected" : "") + ">" + m[1] + "</option>").join("") + "</select></label>";
+  }
+  return '<h1>Your savings targets</h1><p class="wsub">You can change these any time in Settings.</p>' +
+    '<label>Emergency safety buffer<input type="number" id="wzBuf" min="0" step="1" inputmode="decimal" value="' + esc(wz.buffer) + '"></label>' +
+    '<label>Long-term savings goal<input type="number" id="wzWealth" min="0" step="1" inputmode="decimal" value="' + esc(wz.wealth) + '"></label>';
+}
+function wzRender() {
+  wzEl.innerHTML = '<div class="wbox"><div class="wstep">Step ' + wz.step + " of 4</div>" + wzBody() +
+    '<div class="wnav">' + (wz.step > 1 ? '<button type="button" class="plain" data-wz="back">Back</button>' : '<button type="button" class="plain" data-wz="skip">Skip</button>') +
+    '<button type="button" data-wz="next">' + (wz.step === 4 ? "Finish" : "Next") + "</button></div></div>";
+}
+function wzSave() {
+  const set = (name, data) => setDoc(doc(db, "users", uid, "settings", name), { ...data, updated: serverTimestamp() }, { merge: true }).catch((err) => toast("Save failed: " + err.message));
+  set("app", { payFrequency: wz.payFrequency, currency: wz.currency, taxStartMonth: wz.taxStartMonth, onboarded: true });
+  if (Number(wz.pay) > 0) set("pay", { baseline: round2(Number(wz.pay)) });
+  set("buffer", { target: Math.max(0, Number(wz.buffer) || 0), wealth: Math.max(0, Number(wz.wealth) || 0) });
+}
+function wzClose() { if (wzEl) wzEl.remove(); wzEl = null; wz = null; }
+function openWizard() {
+  if (wzEl) return;
+  wz = { step: 1, payFrequency: APP.payFrequency, pay: payBaseline() || "", currency: APP.currency, taxStartMonth: APP.taxStartMonth, buffer: bufferTarget() || 35000, wealth: wealthGoal() || 100000 };
+  wzEl = document.createElement("div"); wzEl.className = "wizard";
+  wzEl.addEventListener("click", (e) => {
+    const f = e.target.closest("[data-wz-freq]");
+    if (f) { wz.payFrequency = f.dataset.wzFreq; wzRender(); return; }
+    const a = e.target.dataset.wz; if (!a) return;
+    if (a === "back") { wz.step--; wzRender(); }
+    else if (a === "skip") { wzSave(); wzClose(); }
+    else if (wz.step === 4) { wzSave(); wzClose(); }
+    else { wz.step++; wzRender(); }
+  });
+  wzEl.addEventListener("input", (e) => {
+    const m = { wzPay: "pay", wzBuf: "buffer", wzWealth: "wealth" }[e.target.id]; if (m) wz[m] = e.target.value;
+  });
+  wzEl.addEventListener("change", (e) => {
+    if (e.target.id === "wzCur") wz.currency = e.target.value;
+    if (e.target.id === "wzTax") wz.taxStartMonth = Number(e.target.value);
+  });
+  document.body.appendChild(wzEl); wzRender();
+}
+$("setAppBtn").addEventListener("click", openWizard);
+// A brand-new, empty account gets the wizard once; accounts that already hold data keep the defaults (fortnightly, AUD, July).
+function maybeWizard() {
+  if (wzDone || loadedColls.size < 16) return;
+  wzDone = true;
+  if (new URLSearchParams(location.search).has("setup")) { openWizard(); return; }
+  if (ST.settings.some((x) => x.id === "app")) return;
+  const hasData = ST.income.length || ST.expenses.length || ST.accounts.length || ST.bills.length || ST.subscriptions.length || ST.settings.some((x) => x.id === "pay");
+  if (!hasData) openWizard();
+}
 function render() {
+  syncApp();
   renderHome(); renderIncome(); renderGroups(); renderSavings(); renderSubs(); renderProperty(); renderBuffer(); renderAdvice(); renderHomeGoals(); renderWishlist(); renderCashflow(); renderQuickIncome();
   if (currentView === "stats") renderStats();
-  renderAccountSelects(); renderAccounts(); renderPaydaySetting(); scheduleApply();
+  renderAccountSelects(); renderAccounts(); renderPaydaySetting(); scheduleApply(); renderSetApp();
+  maybeWizard();
 }
 
 function subsSorted() {
@@ -1133,11 +1257,11 @@ function goalInfoHtml(g) {
 function propInfoHtml(id) {
   const p = propData(id), c = propSetAside(id), live = rentFortnight(id);
   return infoRow("Linked account", esc(p.accountId ? acctName(p.accountId) : "None")) +
-    infoRow("Rent this fortnight", money(live) + (live ? "" : " (estimate " + money(p.rentEst || 0) + ")")) +
-    infoRow("Yearly costs set aside", money(c.base) + "/fn") + infoRow("Bills set aside", money(c.extra) + "/fn") +
-    infoRow("Other property costs", money(groupPropertyCosts(id)) + "/fn") + (p.costEst ? infoRow("Cost estimate", money(p.costEst) + "/fn") : "") +
-    infoRow("Required set-aside", money(requiredSetAside(id)) + "/fn") +
-    infoRow("Maintenance put aside", money(maintContrib(id)) + (p.maintFn ? " (" + money(p.maintFn) + "/fn)" : "")) +
+    infoRow("Rent this " + PF().noun, money(live) + (live ? "" : " (estimate " + money(p.rentEst || 0) + ")")) +
+    infoRow("Yearly costs set aside", money(c.base) + pfS()) + infoRow("Bills set aside", money(c.extra) + pfS()) +
+    infoRow("Other property costs", money(groupPropertyCosts(id)) + pfS()) + (p.costEst ? infoRow("Cost estimate", money(p.costEst) + pfS()) : "") +
+    infoRow("Required " + PF().label + " Set-Aside", money(requiredSetAside(id)) + pfS()) +
+    infoRow("Maintenance put aside", money(maintContrib(id)) + (p.maintFn ? " (" + money(p.maintFn) + pfS() + ")" : "")) +
     infoRow("Maintenance receipts", money(maintReceipts(id))) + infoRow("Maintenance reserve", money(maintReserve(id)));
 }
 function showInfo(title, html) {
@@ -1408,7 +1532,8 @@ const propName = (id) => propData(id).name || (id ? "Property " + id : "Unassign
 const dayNum = (s) => Math.round(Date.parse(s + "T00:00:00Z") / 86400000);
 function taxYear(dateStr) {
   const y = Number(dateStr.slice(0, 4)), m = Number(dateStr.slice(5, 7));
-  const start = m >= 7 ? y : y - 1;
+  if (APP.taxStartMonth === 1) return String(y);
+  const start = m >= APP.taxStartMonth ? y : y - 1;
   return start + "-" + String(start + 1).slice(2);
 }
 // Paydays (every 14 days from PAY_ANCHOR) from today up to and including the due date.
@@ -1427,7 +1552,7 @@ function propSetAside(id) {
   const p = propData(id), yearly = PROP_COSTS.reduce((t, k) => t + Number(p[k] || 0), 0);
   const extra = ST.bills.filter((b) => openBill(b) && b.category === "property" && b.propertyId === id)
     .reduce((t, b) => t + billExtra(b), 0);
-  return { base: yearly / 26, extra: extra };
+  return { base: yearly / PF().perYear, extra: extra };
 }
 
 // Required set-aside = yearly costs + recurring fixed bills + the property group's own recurring costs, all per fortnight.
@@ -1438,7 +1563,7 @@ function requiredSetAside(id) {
 // Maintenance reserve = contributions so far (a saved base + the per-fortnight amount for each full fortnight since it started) minus maintenance receipts.
 function maintContrib(id) {
   const p = propData(id), days = p.maintStart ? dayNum(today()) - dayNum(p.maintStart) : 0;
-  return round2(Number(p.maintBase || 0) + Number(p.maintFn || 0) * Math.max(0, Math.floor(days / 14)));
+  return round2(Number(p.maintBase || 0) + Number(p.maintFn || 0) * Math.max(0, Math.floor(days / PF().days)));
 }
 const maintReceipts = (id) => round2(ST.bills.filter((b) => b.category === "maintenance" && b.propertyId === id).reduce((t, b) => t + b.amount, 0));
 const maintReserve = (id) => round2(maintContrib(id) - maintReceipts(id));
@@ -1497,7 +1622,7 @@ function propCardHtml(id) {
   return '<div class="pcard' + (propFilter === id ? " sel" : "") + '">' + infoBtn("prop", id) + '<h3>' + esc(propName(id)) + '</h3>' +
     '<div class="pl"><span>Rent</span><b>' + money(rent) + '</b></div><div class="pl"><span>Costs</span><b>' + money(costs) + '</b></div>' +
     '<div class="pnet ' + (net >= 0 ? "pos" : "neg") + '">' + money(net) + '</div>' +
-    '<div class="pl small"><span>Set-aside /fn</span><b>' + money(requiredSetAside(id)) + '</b></div>' +
+    '<div class="pl small"><span>Required ' + PF().label + ' set-aside</span><b>' + money(requiredSetAside(id)) + '</b></div>' +
     '<div class="pl small"><span>Maint. reserve</span><b class="' + (maintReserve(id) >= 0 ? "pos" : "neg") + '">' + money(maintReserve(id)) + '</b></div>' +
     '<button class="ghost" data-edit-prop="' + esc(id) + '">Edit</button></div>';
 }
@@ -1836,7 +1961,7 @@ function wishPlanLine(w, left) {
   const plan = datePlan(left, w.neededBy);
   if (!plan) return "";
   const info = deadlineInfo({ remaining: left, deadline: w.neededBy, perPay: Number(w.perPay) || 0 });
-  const flag = info && info.behind && !info.late ? ' <span class="warn">Behind: needs ' + money(info.required) + "/fortnight</span>" : "";
+  const flag = info && info.behind && !info.late ? ' <span class="warn">Behind: needs ' + money(info.required) + pfN() + "</span>" : "";
   return '<div class="sub wrap">' + planHtml(plan, w.neededBy) + flag + "</div>";
 }
 function wishRow(w, pos, n) {
@@ -1847,7 +1972,7 @@ function wishRow(w, pos, n) {
   const up = pos > 0 ? '<button class="ghost" data-wish-move="' + w.id + ':-1" aria-label="Move up">▲</button>' : "";
   const down = pos >= 0 && pos < n - 1 ? '<button class="ghost" data-wish-move="' + w.id + ':1" aria-label="Move down">▼</button>' : "";
   return '<li><div class="main" data-wish-edit="' + w.id + '" style="cursor:pointer"><div>' + esc(w.name) + '</div><div class="sub wrap">' + kind + " · " + money(w.saved) + " of " + money(w.cost) +
-    " · " + money(w.perPay) + "/fortnight</div><div class=\"sub\">" + togo + '</div>' + wishPlanLine(w, left) + '<div class="bar"><span style="width:' + pct.toFixed(0) + '%"></span></div></div>' +
+    " · " + money(w.perPay) + pfN() + "</div><div class=\"sub\">" + togo + '</div>' + wishPlanLine(w, left) + '<div class="bar"><span style="width:' + pct.toFixed(0) + '%"></span></div></div>' +
     up + down + '<button class="ghost" data-wish-add="' + w.id + '">Add</button>' +
     '<button class="ghost" data-del="wishlist:' + w.id + '">✕</button></li>';
 }
@@ -1861,7 +1986,7 @@ function showWishEdit(w) {
   const num = (id, label, v, step, min) => '<label class="sec">' + label + '<input id="' + id + '" type="number" min="' + (min ?? 0) + '" step="' + step + '" inputmode="decimal" value="' + v + '"></label>';
   wrap.innerHTML = '<div class="card"><h3>Edit wishlist item</h3><label class="sec">Name<input id="weName" style="text-align:left" value="' + esc(w.name) + '"></label>' +
     (rank ? num("weRank", "Priority rank (1 = top)", rank, "1", 1) : "") +
-    num("weCost", "Target cost", w.cost, "0.01") + num("wePerPay", "Save per fortnight", w.perPay, "0.01") + num("weSaved", "Saved so far", w.saved || 0, "0.01") +
+    num("weCost", "Target cost", w.cost, "0.01") + num("wePerPay", "Save per " + PF().noun, w.perPay, "0.01") + num("weSaved", "Saved so far", w.saved || 0, "0.01") +
     '<label class="sec">Target deadline (optional)<input id="weDate" type="date" value="' + esc(w.neededBy || "") + '"></label>' +
     '<div class="actions"><button class="plain" data-a="no">Cancel</button><button data-a="yes">Save</button></div></div>';
   wrap.addEventListener("click", (e) => {
@@ -2199,10 +2324,10 @@ function statsRange(offset) {
   if (statsView === "month") {
     const d = new Date(now.getFullYear(), now.getMonth() + offset, 1), e = new Date(d.getFullYear(), d.getMonth() + 1, 0);
     return { start: d.toLocaleDateString("en-CA"), end: e.toLocaleDateString("en-CA"),
-      label: d.toLocaleDateString("en-AU", { month: "long", year: "numeric" }), short: d.toLocaleDateString("en-AU", { month: "short" }), k: 26 / 12 };
+      label: d.toLocaleDateString("en-AU", { month: "long", year: "numeric" }), short: d.toLocaleDateString("en-AU", { month: "short" }), k: PERIOD_K.month };
   }
   const y = now.getFullYear() + offset;
-  return { start: y + "-01-01", end: y + "-12-31", label: String(y), short: String(y), k: 26 };
+  return { start: y + "-01-01", end: y + "-12-31", label: String(y), short: String(y), k: PERIOD_K.year };
 }
 function statsTotals(r) {
   const income = ST.income.filter((i) => { const d = r.earned ? incomePeriodDate(i) : i.date; return d >= r.start && d <= r.end; });
@@ -2365,7 +2490,7 @@ function acctFlows(id) {
 function acctRow(a) {
   const f = acctFlows(a.id), net = f.inn - f.out;
   return '<li><div class="main"><div>' + esc(a.name) + '</div><div class="sub wrap">' + "In " + money(f.inn) + " · out " + money(f.out) +
-    ' · <span class="' + (net >= 0 ? "ok" : "bad") + '">net ' + money(net) + '/fn</span></div></div><span class="amt">' + money(a.balance || 0) + '</span>' +
+    ' · <span class="' + (net >= 0 ? "ok" : "bad") + '">net ' + money(net) + pfS() + '</span></div></div><span class="amt">' + money(a.balance || 0) + '</span>' +
     '<button class="ghost" data-edit-acct="' + a.id + '">Edit</button><button class="ghost" data-del="accounts:' + a.id + '">✕</button></li>';
 }
 function xferRow(t) {
@@ -2746,7 +2871,6 @@ const DEFAULT_GROUPS = [
   { key: "personal", name: "Personal", kind: "personal", propertyId: "" }
 ];
 const GROUP_KINDS = { personal: "Personal", property: "Property", transfers: "Transfers" };
-const PERIOD_K = { fortnight: 1, month: 26 / 12, year: 26 };
 const grpPeriods = {}, grpOpen = {}, GROUP_SHOWN = 4;
 let seedingGroups = false;
 const groupById = (id) => ST.groups.find((g) => g.id === id);
@@ -3049,7 +3173,7 @@ function acPlanText() {
 function acSuggestHtml() {
   const sg = suggestSplit(acSurplus(), ac.cost, ac.neededBy);
   if (!sg) return "";
-  return '<div class="opt summary"><div class="head">Suggestion</div>Put ' + money(sg.amount) + "/fortnight toward " + esc(ac.name) + " and you'll reach it in " + sg.pays + " pays (" + sg.weeks +
+  return '<div class="opt summary"><div class="head">Suggestion</div>Put ' + money(sg.amount) + pfN() + " toward " + esc(ac.name) + " and you'll reach it in " + sg.pays + " pays (" + sg.weeks +
     " weeks) while still depositing " + money(sg.remainder) + ' into Big Savings every pay.<button class="small" style="margin-top:8px" data-ac-use>Use this</button></div>';
 }
 function acPathB() {
@@ -3156,7 +3280,7 @@ function adviceList() {
   items.filter((i) => i.deadline).map((i) => ({ it: i, dl: deadlineInfo(i) })).filter((x) => x.dl && x.dl.behind).sort((a, b) => a.it.deadline.localeCompare(b.it.deadline)).slice(0, 3).forEach((x) => {
     if (x.dl.late) { out.push({ warn: true, text: "⚠️ " + x.it.name + "'s deadline (" + fmtLong(x.it.deadline) + ") has passed with " + money(x.it.remaining) + " still to fund." }); return; }
     const before = top && top.key !== x.it.key && !top.deadline ? " We recommend funding " + x.it.name + " before " + top.name + " this pay cycle." : "";
-    out.push({ warn: true, text: "⚠️ " + x.it.name + " is in " + x.dl.weeks + (x.dl.weeks === 1 ? " week" : " weeks") + " and needs " + money(x.dl.required) + "/fortnight to hit its deadline." + before });
+    out.push({ warn: true, text: "⚠️ " + x.it.name + " is in " + x.dl.weeks + (x.dl.weeks === 1 ? " week" : " weeks") + " and needs " + money(x.dl.required) + pfN() + " to hit its deadline." + before });
   });
   if (!out.length && top) out.push({ warn: false, text: "No deadlines at risk. Priority 1 is " + top.name + "." });
   return out;
@@ -3181,7 +3305,7 @@ function openSmart(amount) {
 }
 function smClose() { if (smWrap) smWrap.remove(); smWrap = null; sm = null; }
 function smRow(s) {
-  const why = s.reason === "deadline" ? "Deadline " + fmtLong(s.deadline) + " · needs " + money(s.required) + "/fortnight" : "Priority " + s.rank;
+  const why = s.reason === "deadline" ? "Deadline " + fmtLong(s.deadline) + " · needs " + money(s.required) + pfN() + "" : "Priority " + s.rank;
   return '<li><div class="main"><div>' + esc(s.name) + '</div><div class="sub wrap">' + esc(why) + '</div></div><span class="amt">' + money(s.amount) + "</span></li>";
 }
 const smList = () => smListFor(sm.amount);
