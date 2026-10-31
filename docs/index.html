@@ -287,6 +287,12 @@ nav.none::before{opacity:0}
 .inote,.sec .chain{padding:8px 0;font-size:15px;color:var(--muted);text-align:left}
 .sec .sub.wrap{text-align:left}
 .pcard .pl{display:flex;justify-content:space-between;font-size:15px}
+.pcard .pl.big{font-size:16px;font-weight:600}
+.pcard .pl.big b{font-size:18px}
+.pcard .pstate{margin-top:6px;font-size:14px;font-weight:700;line-height:1.3}
+.pcard .pstate.ok{color:var(--green)}.pcard .pstate.bad{color:var(--red)}
+.pcard .pact{margin-top:6px;padding:9px 10px;border-radius:12px;background:var(--fill);font-size:14px;font-weight:700;line-height:1.3}
+.pcard .pact.ok{background:rgba(48,209,88,.16);color:var(--green)}.pcard .pact.bad{background:var(--red-soft);color:var(--red)}
 .pcard .pstatus{margin:4px 0;padding:6px 8px;border-radius:10px;background:var(--brand-soft);color:var(--brand);font-size:13px;font-weight:600;line-height:1.3}
 .pcard .psep{margin-top:8px;padding-top:6px;border-top:.5px solid var(--line);font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
 .pcard .pl.small{font-size:13px;color:var(--muted)}
@@ -1306,6 +1312,9 @@ function goalInfoHtml(g) {
 function propInfoHtml(id) {
   const p = propData(id), c = propSetAside(id);
   return infoRow("Linked account", esc(p.accountId ? acctName(p.accountId) : "None")) +
+    infoRow("Rent Coming In", money(propRentExpected(id))) + infoRow("Total Property Bills", "-" + money(propCycleCosts(id))) +
+    infoRow("Net Rent Cashflow", money((propRentReceived(id) || propRentExpected(id)) - propCycleCosts(id))) +
+    infoRow("Reserved (Bills + Maintenance)", "-" + money(propPool(id).reserved)) + infoRow("Available Surplus", money(propPool(id).net)) +
     infoRow("Rent frequency", cycleName(propRentFreq(id))) + (propLastRent(id) ? infoRow("Last rent received", money(propLastRent(id).amount) + " · " + fmtDate(propLastRent(id).date)) : "") + infoRow("Cycle", fmtDate(propCycle(id).start) + " – " + fmtDate(propCycle(id).end)) +
     infoRow("Rent received this cycle", money(propRentReceived(id))) + infoRow("Next rent due", fmtDate(propPool(id).nextRent)) +
     infoRow("Yearly costs set aside", money(c.base) + pfS()) + infoRow("Bills set aside", money(c.extra) + pfS()) +
@@ -1740,22 +1749,18 @@ function propPool(id) {
   const float = Number(p.maintFloat) || 0, pool = a ? Number(a.balance) || 0 : 0, reserved = round2(bills + float);
   return { expectedRent: propRentExpected(id), afterRent: round2(pool - bills + propRentExpected(id)), nextRent: to, linked: !!a, acct: a, pool: pool, bills: round2(bills), float: float, reserved: reserved, net: round2(pool - reserved) };
 }
-function poolRows(id) {
-  const q = propPool(id);
-  if (!q.linked) return '<div class="pl small"><span>No linked account</span><b>Edit to link</b></div>';
-  return '<div class="psep">Bank liquidity</div><div class="pl small"><span>Bank Account Balance</span><b>' + money(q.pool) + '</b></div>' +
-    '<div class="pl small"><span>Reserved (Bills + Maintenance)</span><b>-' + money(q.reserved) + '</b></div>' +
-    '<div class="pl small"><span>' + (q.net >= 0 ? "Available Surplus" : "Shortfall") + '</span><b class="' + (q.net >= 0 ? "pos" : "neg") + '">' + money(Math.abs(q.net)) + "</b></div>";
-}
+// Card face: what's in the bank, what's due before the next rent, and exactly how much to move.
 function propCardHtml(id) {
-  const cyc = propCycle(id), expected = propRentExpected(id), received = propRentReceived(id), costs = propCycleCosts(id), basis = received || expected, net = basis - costs;
-  const q = propPool(id), pending = net < 0 && !received && q.linked && q.net >= 0;
-  const netNote = pending ? '<div class="pstatus">Rent due ' + fmtDate(q.nextRent) + " — Pool covers costs until then</div>" : received ? '<div class="pl small"><span>Rent received so far</span><b>' + money(received) + "</b></div>" : "";
-  return '<div class="pcard' + (propFilter === id ? " sel" : "") + '" data-sid="' + esc(id) + '">' + infoBtn("prop", id) + '<h3>' + esc(propName(id)) + '</h3>' +
-    '<div class="pl"><span>Rent Coming In</span><b>' + money(expected) + '</b></div><div class="pl"><span>Total Property Bills</span><b>-' + money(costs) + '</b></div>' +
-    '<div class="pl"><span>Net Rent Cashflow</span><b class="' + (pending ? "" : net >= 0 ? "pos" : "neg") + '">' + money(net) + '</b></div>' + netNote +
-    poolRows(id) +
-    '<button class="ghost" data-edit-prop="' + esc(id) + '">Edit</button></div>';
+  const q = propPool(id), sel = propFilter === id ? " sel" : "";
+  const head = '<div class="pcard' + sel + '" data-sid="' + esc(id) + '">' + infoBtn("prop", id) + '<h3>' + esc(propName(id)) + "</h3>";
+  const foot = '<button class="ghost" data-edit-prop="' + esc(id) + '">Edit</button></div>';
+  if (!q.linked) return head + '<div class="pstatus">No linked account. Edit to choose one.</div>' + foot;
+  const when = fmtDate(q.nextRent), short = q.bills > q.pool, spare = Math.max(0, round2(q.pool - q.bills - q.float));
+  const status = short ? '<div class="pstate bad">⚠️ Shortfall until next rent (' + when + ")</div>" : '<div class="pstate ok">✅ Covered until next rent (' + when + ")</div>";
+  const action = short ? '<div class="pact bad">📥 Move ' + money(round2(q.bills - q.pool)) + " INTO this account</div>"
+    : spare > 0 ? '<div class="pact ok">📤 Safe to move ' + money(spare) + " OUT of account</div>"
+    : '<div class="pact">Nothing spare to move out' + (q.float ? " (keeping the " + money(q.float) + " float)" : "") + "</div>";
+  return head + '<div class="pl big"><span>Bank Balance</span><b>' + money(q.pool) + '</b></div><div class="pl big"><span>Upcoming Bills Due</span><b>' + money(q.bills) + "</b></div>" + status + action + foot;
 }
 function renderPropertyFlows() {
   const ids = filterIds(), all = propFilter === "all" || !propIds().includes(propFilter);
