@@ -446,7 +446,7 @@ input[type=file]{padding:9px 12px}
       <button class="full" id="smartBtn" style="width:100%;margin-top:10px">Smart split</button>
     </div>
     <button id="affordBtn" class="full bigadd">Can I afford it?</button>
-    <div class="card"><h2>Wishlist</h2><ul class="list" id="wishList"></ul></div>
+    <div class="card"><h2>Wishlist</h2><button id="addWishBtn" class="ghost" style="margin-bottom:6px">+ Add Wishlist Item</button><ul class="list" id="wishList"></ul></div>
     <div class="card"><h2>Goals</h2><ul class="list" id="goalList"></ul></div>
     <div class="card"><h2>Recent moves</h2><ul class="list" id="transferList"></ul></div>
   </section>
@@ -667,14 +667,17 @@ input[type=file]{padding:9px 12px}
     </div>
   <div class="card addcard" id="goalCard">
       <button type="button" class="ghost x" data-close-sheet>Close</button>
-      <h2 id="goalFormTitle">New goal</h2>
+      <h2 id="goalFormTitle">Add item</h2>
       <form id="goalForm">
+        <div class="toggle full" id="itemType"><button type="button" data-it="goal" class="on">Goal</button><button type="button" data-it="wish">Wishlist</button></div>
         <label class="full">Name<input name="name" required placeholder="e.g. Japan trip"></label>
         <label>Target<input type="number" name="target" step="0.01" min="0" inputmode="decimal" required></label>
-        <label>Starting balance<input type="number" name="opening" step="0.01" min="0" inputmode="decimal" value="0"></label>
+        <label><span id="itemSavedLbl">Starting balance</span><input type="number" name="opening" step="0.01" min="0" inputmode="decimal" value="0"></label>
         <label class="full">Needed by (optional)<input type="date" name="targetDate" data-blank></label>
-        <label class="full">Linked account (e.g. Travel account)<select name="accountId" class="acctSel"></select></label>
-        <label class="full">Funding order in that account (1 = first)<input type="number" name="order" min="1" step="1" inputmode="numeric" placeholder="e.g. 1"></label>
+        <label class="hidden" data-wishonly>Want or need<select name="kind"><option value="want">Want</option><option value="need">Need</option></select></label>
+        <label class="hidden" data-wishonly><span data-pl="Save per {noun}">Save per fortnight</span><input type="number" name="perPay" step="0.01" min="0" inputmode="decimal" placeholder="optional"></label>
+        <label class="full" data-goalonly>Linked account (e.g. Travel account)<select name="accountId" class="acctSel"></select></label>
+        <label class="full" data-goalonly>Funding order in that account (1 = first)<input type="number" name="order" min="1" step="1" inputmode="numeric" placeholder="e.g. 1"></label>
         <button class="full" type="submit" id="goalSubmit">Add goal</button>
       </form>
     </div>
@@ -1424,22 +1427,53 @@ function startEditSub(s) {
   openSheet("subCard");
 }
 
+let itemKind = "goal", itemSavedOpening = 0;
+function setItemKind(k) {
+  itemKind = k;
+  document.querySelectorAll("#itemType [data-it]").forEach((b) => b.classList.toggle("on", b.dataset.it === (k === "wish" ? "wish" : "goal")));
+  document.querySelectorAll("#goalForm [data-wishonly]").forEach((el) => el.classList.toggle("hidden", k !== "wish"));
+  document.querySelectorAll("#goalForm [data-goalonly]").forEach((el) => el.classList.toggle("hidden", k === "wish"));
+  $("itemSavedLbl").textContent = k === "wish" ? "Saved so far" : "Starting balance";
+  const g = editing.goals ? ST.goals.find((x) => x.id === editing.goals) : null, f = $("goalForm").elements;
+  if (g) f.opening.value = k === "wish" ? round2(goalBalance(g)) : (g.opening ?? 0); // a goal turning into a wishlist item keeps what it has saved
+  $("goalSubmit").textContent = editing.goals ? (k === "wish" ? "Save as wishlist item" : "Update goal") : (k === "wish" ? "Add wishlist item" : "Add goal");
+  if (!editing.goals) $("goalFormTitle").textContent = k === "wish" ? "New wishlist item" : "New goal";
+}
+$("itemType").addEventListener("click", (e) => { const b = e.target.closest("[data-it]"); if (b) setItemKind(b.dataset.it); });
+function wishFields(f, name) {
+  const cost = round2(Number(f.target.value) || 0), perPay = round2(Number(f.perPay.value) || 0) || round2(Math.max(1, cost / 12));
+  return { name: name, cost: cost, kind: f.kind.value || "want", perPay: perPay, saved: round2(Number(f.opening.value) || 0), neededBy: f.targetDate.value || "" };
+}
 $("goalForm").addEventListener("submit", (e) => {
   e.preventDefault();
-  const gd = formData(e.target); gd.order = Number(gd.order) || 0; gd.accountId = gd.accountId || "";
-  save("goals", editing.goals || null, gd);
-  editing.goals = null; e.target.reset();
-  $("goalFormTitle").textContent = "New goal"; $("goalSubmit").textContent = "Add goal";
+  const f = e.target.elements, name = f.name.value.trim();
+  if (itemKind === "wish") {
+    const w = wishFields(f, name), batch = writeBatch(db), ref = doc(col("wishlist")), orders = rankOrders(ref.id, 0);
+    batch.set(ref, { ...w, order: orders[ref.id], created: serverTimestamp() });
+    Object.keys(orders).forEach((id) => { if (id !== ref.id) batch.update(doc(db, "users", uid, "wishlist", id), { order: orders[id] }); });
+    if (editing.goals) { // goal → wishlist: carry the details over, then retire the goal and its moves
+      batch.delete(doc(db, "users", uid, "goals", editing.goals));
+      ST.transfers.filter((t) => t.goalId === editing.goals).forEach((t) => batch.delete(doc(db, "users", uid, "transfers", t.id)));
+    }
+    batch.commit().catch((err) => toast("Save failed: " + err.message));
+  } else {
+    const gd = formData(e.target); gd.order = Number(gd.order) || 0; gd.accountId = gd.accountId || "";
+    ["kind", "perPay"].forEach((k) => delete gd[k]);
+    save("goals", editing.goals || null, gd);
+  }
+  editing.goals = null; e.target.reset(); setItemKind("goal");
+  $("goalFormTitle").textContent = "Add item"; $("goalSubmit").textContent = "Add goal";
   closeSheets(false);
 });
 function startEditGoal(g) {
   const f = $("goalForm").elements;
   f.name.value = g.name; f.target.value = g.target; f.opening.value = g.opening ?? 0; f.targetDate.value = g.targetDate || "";
   f.accountId.value = g.accountId || ""; f.order.value = g.order || "";
-  editing.goals = g.id;
+  editing.goals = g.id; setItemKind("goal");
   $("goalFormTitle").textContent = "Editing " + g.name; $("goalSubmit").textContent = "Update goal";
   openSheet("goalCard");
 }
+$("addWishBtn").addEventListener("click", () => { editing.goals = null; setItemKind("wish"); openSheet("goalCard"); });
 function startEditTransfer(t) {
   const f = $("transferForm").elements;
   f.goalId.value = t.goalId; f.type.value = t.type; f.amount.value = t.amount; f.date.value = t.date; f.note.value = t.note || "";
@@ -2176,7 +2210,8 @@ function showWishEdit(w) {
   const wrap = document.createElement("div"), open = wishOpen(), rank = open.findIndex((x) => x.id === w.id) + 1;
   wrap.className = "overlay sheet";
   const num = (id, label, v, step, min) => '<label class="sec">' + label + '<input id="' + id + '" type="number" min="' + (min ?? 0) + '" step="' + step + '" inputmode="decimal" value="' + v + '"></label>';
-  wrap.innerHTML = '<div class="card"><h3>Edit wishlist item</h3><label class="sec">Name<input id="weName" style="text-align:left" value="' + esc(w.name) + '"></label>' +
+  wrap.innerHTML = '<div class="card"><h3>Edit wishlist item</h3><label class="sec">Type<select id="weType" style="text-align:left"><option value="wish">Wishlist</option><option value="goal">Goal</option></select></label>' +
+    '<label class="sec">Name<input id="weName" style="text-align:left" value="' + esc(w.name) + '"></label>' +
     (rank ? num("weRank", "Priority rank (1 = top)", rank, "1", 1) : "") +
     num("weCost", "Target cost", w.cost, "0.01") + num("wePerPay", "Save per " + PF().noun, w.perPay, "0.01") + num("weSaved", "Saved so far", w.saved || 0, "0.01") +
     '<label class="sec">Target deadline (optional)<input id="weDate" type="date" value="' + esc(w.neededBy || "") + '"></label>' +
@@ -2185,6 +2220,14 @@ function showWishEdit(w) {
     const a = e.target.dataset.a;
     if (a === "yes") {
       const name = $("weName").value.trim(), cost = parseFloat($("weCost").value), perPay = parseFloat($("wePerPay").value), saved = parseFloat($("weSaved").value) || 0;
+      if ($("weType").value === "goal") { // wishlist → goal: same name, target and saved balance
+        if (!name || !(cost > 0)) { toast("Enter a name and a target."); return; }
+        const gb = writeBatch(db);
+        gb.set(doc(col("goals")), { name: name, target: round2(cost), opening: round2(saved), targetDate: $("weDate").value || "", accountId: "", order: 0, created: serverTimestamp() });
+        gb.delete(doc(db, "users", uid, "wishlist", w.id));
+        gb.commit().catch((err) => toast("Save failed: " + err.message));
+        wrap.remove(); return;
+      }
       if (!name || !(cost > 0) || !(perPay > 0)) { toast("Enter a name, a cost and a fortnightly amount."); return; }
       const batch = writeBatch(db), fields = { name: name, cost: round2(cost), perPay: round2(perPay), saved: round2(saved), neededBy: $("weDate").value };
       if (rank) { const orders = rankOrders(w.id, parseInt($("weRank").value, 10) || rank); Object.keys(orders).forEach((id) => { if (id === w.id) fields.order = orders[id]; else batch.update(doc(db, "users", uid, "wishlist", id), { order: orders[id] }); }); }
@@ -2435,7 +2478,7 @@ function spClick(e) {
 const ADD_FORMS = {
   income: [["incomeCard", "Add income"], ["srcCard", "Add income source"]],
   expenses: [["expenseCard", "Add expense"]],
-  savings: [["transferCard", "Move money"], ["goalCard", "New goal"], ["bufferSetCard", "Big Savings setup"]],
+  savings: [["transferCard", "Move money"], ["goalCard", "Add goal or wishlist item"], ["bufferSetCard", "Big Savings setup"]],
   property: [["propCard", "Add property"], ["billCard", "Add a bill or receipt"]]
 };
 let sheetBack = null;
@@ -2462,7 +2505,7 @@ function resetAddForms() {
   $("subForm").querySelector("button[type=submit]").textContent = "Save"; $("subFormTitle").textContent = "Add subscription, bill or purchase";
   editing.incomeSources = null; $("srcForm").reset(); syncSrcForm();
   $("srcSubmit").textContent = "Save source"; $("srcFormTitle").textContent = "Add income source";
-  editing.goals = null; $("goalForm").reset(); $("goalSubmit").textContent = "Add goal"; $("goalFormTitle").textContent = "New goal";
+  editing.goals = null; $("goalForm").reset(); setItemKind("goal"); $("goalSubmit").textContent = "Add goal"; $("goalFormTitle").textContent = "Add item";
   editing.transfers = null; $("transferForm").reset(); $("transferForm").date.value = today();
   $("transferSubmit").textContent = "Save"; $("transferFormTitle").textContent = "Move money";
   resetBillForm();
