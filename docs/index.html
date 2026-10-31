@@ -2309,7 +2309,7 @@ function resetAddForms() {
   $("transferSubmit").textContent = "Save"; $("transferFormTitle").textContent = "Move money";
   resetBillForm();
   editing.accounts = null; $("acctForm").reset(); $("acctSubmit").textContent = "Save account"; $("acctFormTitle").textContent = "Add account";
-  editing.banks = null; $("bankForm").reset(); $("bankSubmit").textContent = "Save bank"; $("bankFormTitle").textContent = "Add bank";
+  editing.bankGroup = null; editing.banks = null; $("bankForm").reset(); $("bankSubmit").textContent = "Save bank"; $("bankFormTitle").textContent = "Add bank";
   editing.groups = null; $("groupForm").reset(); syncGroupForm(); $("groupSubmit").textContent = "Save group"; $("groupFormTitle").textContent = "Add group";
   editing.acctTransfers = null; $("xferForm").reset(); $("xferForm").nextApply.value = today(); syncXferForm();
   $("xferSubmit").textContent = "Save transfer"; $("xferFormTitle").textContent = "Add transfer";
@@ -2583,7 +2583,7 @@ function bankGroups() {
 }
 function bankHtml(g) {
   const total = g.accounts.reduce((t, a) => t + (Number(a.balance) || 0), 0);
-  const btns = (g.id ? '<button class="ghost" data-edit-bank="' + g.id + '">Rename</button>' : "") +
+  const btns = '<button class="ghost" data-edit-bank="' + esc(g.id) + '" data-bank-key="' + esc(g.id ? "" : g.name) + '">' + (g.id || g.name !== "No bank" ? "Rename" : "Set bank name") + "</button>" +
     '<button class="ghost" data-add-acct="' + g.id + '">+ Account</button>' + (g.id ? '<button class="ghost" data-del-bank="' + g.id + '">Remove</button>' : "");
   const rows = g.accounts.length ? g.accounts.map(acctRow).join("") : '<li class="empty">No accounts in this bank yet.</li>';
   return '<div class="card"><div class="bankhead"><b>' + esc(g.name) + '</b><span class="amt">' + money(total) + '</span></div>' +
@@ -2614,7 +2614,15 @@ $("acctForm").addEventListener("submit", (e) => {
 $("bankForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const name = formData(e.target).name.trim();
-  if (editing.banks) {
+  if (editing.bankGroup) {
+    // A group built from accounts without a bank record: create (or reuse) the bank and link those accounts to it.
+    const batch = writeBatch(db), same = ST.banks.find((b) => String(b.name).trim().toLowerCase() === name.toLowerCase());
+    let bid = same ? same.id : "";
+    if (!bid) { const ref = doc(col("banks")); bid = ref.id; batch.set(ref, { name: name, created: serverTimestamp() }); }
+    editing.bankGroup.forEach((id) => batch.update(doc(db, "users", uid, "accounts", id), { bankId: bid, bank: name }));
+    batch.commit().catch((err) => toast("Save failed: " + err.message));
+    editing.bankGroup = null;
+  } else if (editing.banks) {
     const batch = writeBatch(db);
     batch.update(doc(db, "users", uid, "banks", editing.banks), { name: name });
     ST.accounts.filter((a) => a.bankId === editing.banks).forEach((a) => batch.update(doc(db, "users", uid, "accounts", a.id), { bank: name }));
@@ -2644,6 +2652,15 @@ document.addEventListener("click", (e) => {
     f.name.value = a.name; f.bankId.value = a.bankId || (match ? match.id : ""); f.balance.value = a.balance ?? 0;
     editing.accounts = a.id; $("acctSubmit").textContent = "Update"; $("acctFormTitle").textContent = "Editing " + a.name;
     openSheet("acctCard");
+  }
+  if (t.dataset.editBank === "") {
+    const g = bankGroups().find((x) => !x.id && x.name === t.dataset.bankKey);
+    if (g) {
+      editing.bankGroup = g.accounts.map((a) => a.id); editing.banks = null;
+      $("bankForm").elements.name.value = g.name === "No bank" ? "" : g.name;
+      $("bankSubmit").textContent = "Save"; $("bankFormTitle").textContent = g.name === "No bank" ? "Name this bank" : "Rename " + g.name;
+      openSheet("bankCard");
+    }
   }
   if (t.dataset.editBank) {
     const b = ST.banks.find((x) => x.id === t.dataset.editBank);
