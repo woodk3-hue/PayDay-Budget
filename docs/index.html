@@ -90,6 +90,10 @@ window.DEMO = /[?&]demo\b/.test(location.search) || window.FIREBASE_CONFIG.apiKe
 :root[data-theme=dark][data-accent=yellow]{--brand:#ffd60a;--brand-soft:rgba(255,214,10,0.18);--on-brand:#000;--bg:#15120a;--card:#231f15;--glass:rgba(29,26,17,0.72);--pane:rgba(51,46,31,0.55);--wash:radial-gradient(1000px 700px at 15% -12%,#41381b 0,rgba(65,56,27,0) 55%),radial-gradient(900px 600px at 110% 10%,#263017 0,rgba(38,48,23,0) 55%),linear-gradient(180deg,#231f15 0%,#1a170f 55%,#15120a 100%)}
 :root[data-theme=dark][data-accent=pink]{--brand:#ff7eb3;--brand-soft:rgba(255,126,179,0.18);--on-brand:#fff;--bg:#140b0f;--card:#22161b;--glass:rgba(28,17,22,0.72);--pane:rgba(49,32,39,0.55);--wash:radial-gradient(1000px 700px at 15% -12%,#3e1d2b 0,rgba(62,29,43,0) 55%),radial-gradient(900px 600px at 110% 10%,#2e1e19 0,rgba(46,30,25,0) 55%),linear-gradient(180deg,#22161b 0%,#191014 55%,#140b0f 100%)}
 :root[data-theme=dark][data-accent=blue]{--brand:#5aa9ff;--brand-soft:rgba(90,169,255,0.18);--on-brand:#fff;--bg:#0a0f14;--card:#161c22;--glass:rgba(17,23,29,0.72);--pane:rgba(32,40,50,0.55);--wash:radial-gradient(1000px 700px at 15% -12%,#1c2d40 0,rgba(28,45,64,0) 55%),radial-gradient(900px 600px at 110% 10%,#1d182f 0,rgba(29,24,47,0) 55%),linear-gradient(180deg,#161c22 0%,#0f141a 55%,#0a0f14 100%)}
+/* Native dropdown lists follow the app's theme, not just the phone's: forcing Dark/Light in Settings used to give white-on-white (blank) lists. */
+:root[data-theme=light]{color-scheme:light}
+:root[data-theme=dark]{color-scheme:dark}
+select option,select optgroup{background:var(--card);color:var(--ink)}
 *{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
 body{font-family:var(--font);font-size:17px;line-height:1.3;letter-spacing:-.41px;background:var(--wash) fixed,var(--bg);color:var(--ink);
   -webkit-font-smoothing:antialiased;padding-bottom:calc(100px + env(safe-area-inset-bottom))}
@@ -2426,7 +2430,7 @@ $("statsNext").addEventListener("click", () => { if (statsOffset < 0) { statsOff
    ========================================================= */
 ADD_FORMS.accounts = [["bankCard", "Add bank"], ["acctCard", "Add account"], ["xferCard", "Add transfer"]];
 const acctById = (id) => ST.accounts.find((a) => a.id === id);
-const acctLabel = (a) => (a.bank ? a.bank + " · " : "") + a.name;
+const acctLabel = (a) => a ? (a.bank ? a.bank + " · " : "") + (a.name || "Account") : "Unknown account";
 const acctName = (id, outside) => id ? (acctById(id) ? acctLabel(acctById(id)) : "Deleted account") : (outside || "Outside");
 function bumpAccount(id, delta) {
   if (!id || !delta) return;
@@ -2445,13 +2449,48 @@ function linkFields(d, anchor, existing) {
   d.nextApply = applied || !anchor ? "" : nextDue({ dueDate: anchor, frequency: d.frequency });
   return d;
 }
-function renderAccountSelects() {
-  const list = ST.accounts.map((a) => '<option value="' + a.id + '">' + esc(acctLabel(a)) + "</option>").join("");
-  const banks = ST.banks.map((b) => '<option value="' + b.id + '">' + esc(b.name) + "</option>").join("");
-  document.querySelectorAll("select.bankSel").forEach((sel) => setOptions(sel, '<option value="">No bank</option>' + banks));
-  document.querySelectorAll("select.acctSel").forEach((sel) => setOptions(sel, '<option value="">None</option>' + list));
-  document.querySelectorAll("select.acctExt").forEach((sel) => setOptions(sel, '<option value="">Outside my accounts</option>' + list));
+const DEFAULT_ACCOUNTS = ["Main Checking", "Bills Account", "Credit Card", "Cash"];
+function acctOptionsHtml() {
+  const accts = (ST.accounts || []).filter((a) => a && a.id);
+  const list = accts.map((a) => '<option value="' + esc(a.id) + '">' + esc(acctLabel(a)) + "</option>").join("");
+  const defaults = accts.length ? "" : '<option value="" disabled>No accounts yet</option><optgroup label="Quick add">' +
+    DEFAULT_ACCOUNTS.map((n) => '<option value="__def:' + esc(n) + '">' + esc(n) + "</option>").join("") + "</optgroup>";
+  return '<option value="">None</option>' + list + defaults + '<option value="__new">+ Add New Account…</option>';
 }
+function renderAccountSelects() {
+  try {
+    const accts = (ST.accounts || []).filter((a) => a && a.id), banks = (ST.banks || []).filter((b) => b && b.id);
+    const list = accts.map((a) => '<option value="' + esc(a.id) + '">' + esc(acctLabel(a)) + "</option>").join("");
+    const bankList = banks.map((b) => '<option value="' + esc(b.id) + '">' + esc(b.name) + "</option>").join("");
+    document.querySelectorAll("select.bankSel").forEach((sel) => setOptions(sel, '<option value="">No bank</option>' + bankList));
+    document.querySelectorAll("select.acctSel").forEach((sel) => setOptions(sel, acctOptionsHtml()));
+    document.querySelectorAll("select.acctExt").forEach((sel) => setOptions(sel, '<option value="">Outside my accounts</option>' + list));
+  } catch (e) { console.warn("Account lists couldn't be built:", e.message); }
+}
+function showTextPrompt(title, onSave) {
+  const wrap = document.createElement("div");
+  wrap.className = "overlay";
+  wrap.innerHTML = '<div class="card"><p>' + esc(title) + '</p><div style="padding:0 16px 16px"><input type="text" maxlength="60" placeholder="e.g. Savings"></div><div class="row"><button class="ghost" data-a="no">Cancel</button><button data-a="yes">Add</button></div></div>';
+  wrap.addEventListener("click", (e) => {
+    const a = e.target.dataset.a;
+    if (a === "yes") { const v = wrap.querySelector("input").value.trim(); if (v) onSave(v); }
+    if (a || e.target === wrap) wrap.remove();
+  });
+  document.body.appendChild(wrap);
+  wrap.querySelector("input").focus();
+}
+// Create an account without leaving the form being edited, then select it there.
+function createAccountFor(sel, name) {
+  const ref = doc(col("accounts"));
+  setDoc(ref, { name: name, bank: "", bankId: "", balance: 0, created: serverTimestamp() }).catch((e) => toast("Save failed: " + e.message));
+  const o = document.createElement("option"); o.value = ref.id; o.textContent = name; sel.appendChild(o); sel.value = ref.id;
+}
+document.addEventListener("change", (e) => {
+  const sel = e.target.closest && e.target.closest("select.acctSel"); if (!sel) return;
+  const v = sel.value;
+  if (v.startsWith("__def:")) { sel.value = ""; createAccountFor(sel, v.slice(6)); }
+  else if (v === "__new") { sel.value = ""; showTextPrompt("Name your new account", (name) => createAccountFor(sel, name)); }
+});
 
 // Each due occurrence is applied once: a transaction re-checks `nextApply`, so two devices can't both take the money.
 const LINKED = {
