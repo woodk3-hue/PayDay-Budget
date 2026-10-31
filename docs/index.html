@@ -382,7 +382,7 @@ input[type=file]{padding:9px 12px}
       <ul class="list" id="upcomingList"></ul>
     </div>
     <div class="card">
-      <h2>Spending by category (this fortnight)</h2>
+      <h2 data-pl="Spending by category (this {noun})">Spending by category (this fortnight)</h2>
       <ul class="list" id="catList"></ul>
     </div>
   </section>
@@ -460,7 +460,7 @@ input[type=file]{padding:9px 12px}
     <div class="toggle" id="propFilter"></div>
     <div class="propcards" id="propCards"></div>
     <div class="card" id="cfCard">
-      <h2>Rent vs costs (this fortnight)</h2>
+      <h2 data-pl="Rent vs costs (this {noun})">Rent vs costs (this fortnight)</h2>
       <div class="grid">
         <div class="stat"><small>Rent received</small><b id="ptIn">$0</b></div>
         <div class="stat"><small>Costs</small><b id="ptCost">$0</b></div>
@@ -496,7 +496,7 @@ input[type=file]{padding:9px 12px}
   <section id="view-stats" class="view hidden">
     <div class="card">
       <div class="toggle" id="statsView">
-        <button data-f="fortnight" class="on">Fortnight</button><button data-f="month">Month</button><button data-f="year">Year</button>
+        <button data-f="fortnight" class="on" data-pl="{Noun}">Fortnight</button><button data-f="month">Month</button><button data-f="year">Year</button>
       </div>
       <div class="statsnav">
         <button class="ghost" id="statsPrev" aria-label="Earlier">‹</button><b id="statsLabel"></b><button class="ghost" id="statsNext" aria-label="Later">›</button>
@@ -859,29 +859,40 @@ const today = () => new Date().toLocaleDateString("en-CA");
 const fmtDate = (d) => d ? new Date(d + "T00:00:00").toLocaleDateString("en-AU", { day: "numeric", month: "short" }) : "no date";
 const col = (name) => collection(db, "users", uid, name);
 // Bills are normalised per pay: pays per year in a frequency ÷ the pays per year you are paid. (Name kept from when it was fortnight-only.)
-const FREQ_PER_YEAR = { weekly: 52, fortnightly: 26, monthly: 12, quarterly: 4, yearly: 1, once: 0 };
+const FREQ_PER_YEAR = { weekly: 52, fortnightly: 26, semimonthly: 24, monthly: 12, quarterly: 4, yearly: 1, once: 0 };
 const FREQ_PER_FORTNIGHT = {};
 const PERIOD_K = { fortnight: 1, month: 26 / 12, year: 26 };
 function applyPayFrequency() {
   const py = PF().perYear;
   Object.keys(FREQ_PER_YEAR).forEach((k) => { FREQ_PER_FORTNIGHT[k] = FREQ_PER_YEAR[k] / py; });
   PERIOD_K.month = py / 12; PERIOD_K.year = py;
-  const fill = (t) => t.replace(/\{noun\}/g, PF().noun).replace(/\{Adj\}/g, PF().label).replace(/\{short\}/g, PF().short);
+  const fill = (t) => t.replace(/\{noun\}/g, PF().noun).replace(/\{Adj\}/g, PF().label).replace(/\{short\}/g, PF().short).replace(/\{Noun\}/g, PF().noun.charAt(0).toUpperCase() + PF().noun.slice(1));
   document.querySelectorAll("[data-pl]").forEach((el) => { el.textContent = fill(el.dataset.pl); });
 }
 applyPayFrequency();
 
-function currentPeriod() {
-  const dayMs = 86400000, now = new Date(); now.setHours(0, 0, 0, 0);
-  const n = Math.floor((now - PERIOD_ANCHOR) / (14 * dayMs));
-  const start = new Date(PERIOD_ANCHOR.getTime() + n * 14 * dayMs);
-  const end = new Date(start.getTime() + 13 * dayMs);
-  return { start: start.toLocaleDateString("en-CA"), end: end.toLocaleDateString("en-CA") };
+// Pay-period engine. Weekly / fortnightly periods are Mon–Sun blocks counted from PERIOD_ANCHOR; semi-monthly is the 1st–15th and 16th–end;
+// monthly is the calendar month. Pay lands PAY_LAG days after a period ends (the Wednesday after a Mon–Sun period).
+const PAY_LAG = 3;
+function periodOf(dateStr) {
+  const f = APP.payFrequency, d = dayNum(dateStr);
+  if (f === "weekly" || f === "fortnightly") {
+    const len = f === "weekly" ? 7 : 14, a = dayNum(PERIOD_ANCHOR.toLocaleDateString("en-CA")), st = a + len * Math.floor((d - a) / len);
+    return { start: isoFromDay(st), end: isoFromDay(st + len - 1) };
+  }
+  const y = Number(dateStr.slice(0, 4)), m = Number(dateStr.slice(5, 7)), pad = (n) => String(n).padStart(2, "0"), ym = y + "-" + pad(m) + "-";
+  const last = pad(new Date(Date.UTC(y, m, 0)).getUTCDate());
+  if (f === "semimonthly") return Number(dateStr.slice(8, 10)) <= 15 ? { start: ym + "01", end: ym + "15" } : { start: ym + "16", end: ym + last };
+  return { start: ym + "01", end: ym + last };
 }
+const periodStep = (p, n) => { let q = p; for (let i = 0; i < Math.abs(n); i++) q = n > 0 ? periodOf(isoFromDay(dayNum(q.end) + 1)) : periodOf(isoFromDay(dayNum(q.start) - 1)); return q; };
+const currentPeriod = () => periodOf(today());
 const inPeriod = (d, p) => d >= p.start && d <= p.end;
-// A pay entry belongs to the fortnight that ended just before it landed, so a holiday-shifted payday still counts for the right one.
-const periodStartDay = (d) => { const a = dayNum(PERIOD_ANCHOR.toLocaleDateString("en-CA")); return a + 14 * Math.floor((dayNum(d) - a) / 14); };
-const incomePeriodDate = (i) => (isWages(i) ? isoFromDay(periodStartDay(i.date) - 1) : i.date);
+// A pay entry belongs to the period that ended just before it landed, so a holiday-shifted payday still counts for the right one.
+// (Monthly / semi-monthly: the period that contains the date four days earlier, which covers pay on the last day or a few days after.)
+const periodStartDay = (d) => dayNum(periodOf(d).start);
+const earnedEnd = (d) => APP.payFrequency === "weekly" || APP.payFrequency === "fortnightly" ? isoFromDay(periodStartDay(d) - 1) : periodOf(isoFromDay(dayNum(d) - 4)).end;
+const incomePeriodDate = (i) => (isWages(i) ? earnedEnd(i.date) : i.date);
 
 // Renewal scheduler (same rules as the OptiPlex notifier): roll a past due date forward
 // by its billing cycle until it is today or later. One-off purchases never roll.
@@ -1140,12 +1151,11 @@ function commitmentsPerFortnight() {
 }
 // Home counts only my pay (wages): left over = pay − commitments − anything already allotted.
 // Home follows your pay cycle: the fortnight your latest pay (logged in the last 14 days) was earned in, else the current fortnight.
-const earnedDate = (d) => isoFromDay(periodStartDay(d) - 1);
+const earnedDate = earnedEnd;
 function payCycle() {
   const last = ST.income.filter(isWages).sort((a, b) => b.date.localeCompare(a.date))[0], cur = currentPeriod();
-  if (!last || dayNum(today()) - dayNum(last.date) > 13) return { p: cur, last: null };
-  const start = periodStartDay(last.date) - 14;
-  return { p: { start: isoFromDay(start), end: isoFromDay(start + 13) }, last: last };
+  if (!last || dayNum(today()) - dayNum(last.date) > Math.round(PF().days) - 1) return { p: cur, last: null };
+  return { p: periodOf(earnedEnd(last.date)), last: last };
 }
 function periodStats() {
   const { p, last } = payCycle();
@@ -1158,8 +1168,8 @@ function periodStats() {
 function renderHome() {
   const { p, last, spentRows } = periodStats();
   const long = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "short" });
-  $("periodTitle").textContent = last ? "Pay of " + fmtDate(last.date) + " · fortnight " + fmtDate(p.start) + " – " + fmtDate(p.end) : "This fortnight · " + fmtDate(p.start) + " – " + fmtDate(p.end);
-  $("periodNote").textContent = last ? "Next pay due " + long(isoFromDay(nextPayday())) + "." : "Pay for this fortnight is due " + long(isoFromDay(dayNum(p.end) + 3)) + ".";
+  $("periodTitle").textContent = last ? "Pay of " + fmtDate(last.date) + " · " + PF().noun + " " + fmtDate(p.start) + " – " + fmtDate(p.end) : "This " + PF().noun + " · " + fmtDate(p.start) + " – " + fmtDate(p.end);
+  $("periodNote").textContent = last ? "Next pay due " + long(isoFromDay(nextPayday())) + "." : "Pay for this " + PF().noun + " is due " + long(isoFromDay(dayNum(p.end) + PAY_LAG)) + ".";
 
   const byCat = {};
   spentRows.forEach((e) => { byCat[e.category] = (byCat[e.category] || 0) + e.amount; });
@@ -1184,7 +1194,7 @@ const entriesFor = (src) => ST.income.filter((i) => (i.sourceId ? i.sourceId ===
 function pastRow(i) {
   const src = ST.incomeSources.find((x) => (i.sourceId ? x.id === i.sourceId : x.name === i.source)), diff = src ? round2(i.amount - src.amount) : 0;
   const vs = Math.abs(diff) >= 0.01 ? " · " + (diff > 0 ? "+" : "−") + money(Math.abs(diff)) + " vs usual" : "";
-  const cov = i.covers === "month" && i.coversMonth ? " · for " + monthLabel(i.coversMonth) : isWages(i) ? " · for fortnight ending " + fmtDate(incomePeriodDate(i)) : "";
+  const cov = i.covers === "month" && i.coversMonth ? " · for " + monthLabel(i.coversMonth) : isWages(i) ? " · for " + PF().noun + " ending " + fmtDate(incomePeriodDate(i)) : "";
   return '<li><div class="main"><div>' + fmtLong(i.date) + '</div><div class="sub wrap">' + esc(i.source) + cov + vs + (i.note ? " · " + esc(i.note) : "") + '</div></div>' +
     '<span class="amt pos">' + money(i.amount) + '</span>' +
     '<button class="ghost" data-edit-income="' + i.id + '">Edit</button>' +
@@ -1536,11 +1546,12 @@ function taxYear(dateStr) {
   const start = m >= APP.taxStartMonth ? y : y - 1;
   return start + "-" + String(start + 1).slice(2);
 }
-// Paydays (every 14 days from PAY_ANCHOR) from today up to and including the due date.
+// Paydays from today up to and including the due date.
 function paysBefore(due) {
-  const anchor = dayNum(PAY_ANCHOR.toLocaleDateString("en-CA")), now = dayNum(today()), end = dayNum(due);
-  const first = anchor + 14 * Math.ceil((now - anchor) / 14);
-  return first > end ? 0 : Math.floor((end - first) / 14) + 1;
+  const end = dayNum(due);
+  let p = periodOf(isoFromDay(dayNum(today()) - PAY_LAG)), n = 0;
+  for (let i = 0; i < 800 && dayNum(p.end) + PAY_LAG <= end; i++) { n++; p = periodStep(p, 1); }
+  return n;
 }
 // Recurring bills (monthly, quarterly, yearly...) are set aside at their fortnightly share; one-offs are spread over the pays left.
 const isRecurringBill = (b) => b.category !== "maintenance" && !!b.frequency && b.frequency !== "once";
@@ -1936,11 +1947,8 @@ $("billFilter").addEventListener("click", (e) => {
    ========================================================= */
 const isoFromDay = (n) => new Date(n * 86400000).toISOString().slice(0, 10);
 const fmtLong = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
-function nextPayday() {
-  const anchor = dayNum(PAY_ANCHOR.toLocaleDateString("en-CA")), now = dayNum(today());
-  return anchor + 14 * Math.ceil((now - anchor) / 14);
-}
-function readyDate(pays) { return isoFromDay(nextPayday() + 14 * (Math.max(1, pays) - 1)); }
+function nextPayday() { return dayNum(periodOf(isoFromDay(dayNum(today()) - PAY_LAG)).end) + PAY_LAG; }
+function readyDate(pays) { return isoFromDay(dayNum(periodStep(periodOf(isoFromDay(nextPayday() - PAY_LAG)), Math.max(1, pays) - 1).end) + PAY_LAG); }
 
 const wishDone = (w) => w.cost - (w.saved || 0) <= 0.005;
 // Manual priority: lowest `order` first; funded items drop to the bottom.
@@ -2316,8 +2324,7 @@ let statsView = "fortnight", statsOffset = 0;
 // A fortnight follows your pay periods; month and year are calendar periods. k scales per-fortnight amounts to the period.
 function statsRange(offset) {
   if (statsView === "fortnight") {
-    const anchor = dayNum(PERIOD_ANCHOR.toLocaleDateString("en-CA")), n = Math.floor((dayNum(today()) - anchor) / 14) + offset;
-    const start = isoFromDay(anchor + 14 * n), end = isoFromDay(anchor + 14 * n + 13);
+    const q = periodStep(currentPeriod(), offset), start = q.start, end = q.end;
     return { start: start, end: end, label: fmtDate(start) + " – " + fmtLong(end), short: fmtDate(start), k: 1, earned: true };
   }
   const now = new Date();
@@ -2559,7 +2566,7 @@ $("xferForm").addEventListener("submit", (e) => {
   if (!d.fromId && !d.toId) { toast("Pick at least one of your accounts."); return; }
   if (d.fromId === d.toId) { toast("From and To are the same account."); return; }
   d.trigger = paydayOn() && d.trigger === "payday" ? "payday" : "date";
-  if (d.trigger === "payday") { d.frequency = "fortnightly"; d.nextApply = ""; }
+  if (d.trigger === "payday") { d.frequency = APP.payFrequency; d.nextApply = ""; }
   save("acctTransfers", editing.acctTransfers, d);
   editing.acctTransfers = null; e.target.reset(); e.target.nextApply.value = today(); syncXferForm();
   $("xferSubmit").textContent = "Save transfer"; $("xferFormTitle").textContent = "Add transfer";
@@ -2803,7 +2810,7 @@ function runSetup(plan) {
   });
   plan.transfers.forEach((t) => batch.set(doc(col("acctTransfers")), {
     name: t.name, fromId: t.from ? accIds[norm(t.from)] : "", toId: t.to ? accIds[norm(t.to)] : "", externalName: t.externalName,
-    amount: t.amount, frequency: "fortnightly", trigger: "payday", nextApply: "", created: serverTimestamp() }));
+    amount: t.amount, frequency: APP.payFrequency, trigger: "payday", nextApply: "", created: serverTimestamp() }));
   if (plan.payday) batch.set(doc(db, "users", uid, "settings", "payday"), { enabled: true, updated: serverTimestamp() }, { merge: true });
   batch.commit().then(() => toast("Imported. Set each account's balance with Edit.")).catch((err) => toast("Import failed: " + err.message));
   $("setupText").value = ""; $("setupFile").value = "";
@@ -2911,7 +2918,7 @@ function groupCard(g, items) {
   const total = items.reduce((t, it) => t + it.fn, 0) * k;
   const sorted = items.slice().sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999") || a.name.localeCompare(b.name));
   const shown = open ? sorted : sorted.slice(0, GROUP_SHOWN);
-  const toggle = '<div class="toggle">' + [["fortnight", "Fortnight"], ["month", "Month"], ["year", "Year"]].map((x) =>
+  const toggle = '<div class="toggle">' + [["fortnight", cap(PF().noun)], ["month", "Month"], ["year", "Year"]].map((x) =>
     '<button data-gp="' + key + ":" + x[0] + '"' + (per === x[0] ? ' class="on"' : "") + ">" + x[1] + "</button>").join("") + "</div>";
   const btns = g.id ? '<button class="ghost" data-grp-edit="' + g.id + '">Rename</button><button class="ghost" data-grp-del="' + g.id + '">Remove</button>' : "";
   const more = sorted.length > GROUP_SHOWN ? '<button class="ghost" style="width:100%" data-gx="' + key + '">' +
@@ -3387,7 +3394,7 @@ function openQuickPay() {
   qpWrap.addEventListener("click", qpClick);
   qpWrap.addEventListener("input", qpInput);
   document.body.appendChild(qpWrap);
-  qpWrap.innerHTML = '<div class="card"><h3>Log fortnightly pay</h3><label class="sec">Amount<input id="qpAmt" type="number" step="0.01" min="0" inputmode="decimal" placeholder="$0.00" value="' + (qp.base || "") + '"></label>' +
+  qpWrap.innerHTML = '<div class="card"><h3>Log ' + PF().label.toLowerCase() + ' pay</h3><label class="sec">Amount<input id="qpAmt" type="number" step="0.01" min="0" inputmode="decimal" placeholder="$0.00" value="' + (qp.base || "") + '"></label>' +
     '<label class="sec">Received<input id="qpDate" type="date" value="' + today() + '"></label>' +
     '<label class="check sec hidden" id="qpUsualWrap"><input type="checkbox" id="qpUsual"> Set as my usual pay</label>' +
     '<div class="actions"><button class="plain" data-qp-close>Cancel</button><button data-qp-save id="qpSave"></button></div></div>';
