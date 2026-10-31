@@ -499,7 +499,7 @@ input[type=file]{padding:9px 12px}
       <div class="grid">
         <div class="stat"><small>Fixed costs</small><b id="pFixed">$0</b></div>
         <div class="stat"><small>Extra for bills</small><b id="pExtra">$0</b></div>
-        <div class="stat"><small>Total per pay</small><b id="pTotal">$0</b></div>
+        <div class="stat"><small>Total per pay (after rent)</small><b id="pTotal">$0</b></div>
       </div>
       <ul class="list" id="propSummaryList" style="margin-top:8px"></ul>
     </div>
@@ -1635,10 +1635,13 @@ function maintContrib(id) {
 }
 const maintReceipts = (id) => round2(ST.bills.filter((b) => b.category === "maintenance" && b.propertyId === id).reduce((t, b) => t + b.amount, 0));
 const maintReserve = (id) => round2(maintContrib(id) - maintReceipts(id));
-function summaryRow(label, base, extra) {
-  const sub = base === null ? "Bills only" : "Fixed " + money(base) + " + bills " + money(extra);
-  return '<li><div class="main"><div>' + esc(label) + '</div><div class="sub">' + sub + '</div></div>' +
-    '<span class="amt">' + money((base || 0) + extra) + '</span></li>';
+// Rent coming in, normalised to one of your pays (a monthly rent over a fortnightly pay is rent × 12 ÷ 26).
+const rentPerPay = (id) => propRentExpected(id) * FREQ_PER_YEAR[propRentFreq(id)] / PF().perYear;
+const outOfPocket = (id, c) => Math.max(0, round2(c.base + c.extra - rentPerPay(id)));
+function summaryRow(label, base, extra, rent, out) {
+  const sub = "Fixed " + money(base) + " + bills " + money(extra) + " − rent " + money(rent);
+  return '<li><div class="main"><div>' + esc(label) + '</div><div class="sub wrap">' + sub + '</div></div>' +
+    '<span class="amt">' + money(out) + '</span></li>';
 }
 function billSubLine(b) {
   const parts = [BILL_LABEL[b.category] || "Bill"];
@@ -1706,12 +1709,16 @@ function propCycle(id) {
 }
 const cycleName = (f) => ({ monthly: "Monthly", weekly: "Weekly", semimonthly: "Semi-monthly" }[f] || "Fortnightly");
 // Variable rent: the last payment (typed in, or the newest rent you've logged for the property) sets the next date and the amount to expect.
-function propLastRent(id) {
-  const p = propData(id);
-  if (p.rentMode !== "last" || !p.rentLastDate) return null;
-  const logged = ST.income.filter((i) => !isWages(i) && sourceProperty(i) === id && i.date >= p.rentLastDate).sort((a, b) => b.date.localeCompare(a.date))[0];
-  return logged ? { date: logged.date, amount: Number(logged.amount) || 0 } : { date: p.rentLastDate, amount: Number(p.rentLastAmount) || 0 };
+// The rent schedule is anchored on the last payment date typed on the property (so 20 Oct + 14 days = 3 Nov and it steps forward from there);
+// only when no date is typed does the newest logged rent entry stand in. A newer logged rent still supplies the amount to expect.
+function propRentAnchor(id) {
+  const p = propData(id), typed = p.rentLastDate ? { date: p.rentLastDate, amount: Number(p.rentLastAmount) || 0 } : null;
+  const logged = ST.income.filter((i) => !isWages(i) && sourceProperty(i) === id).sort((a, b) => b.date.localeCompare(a.date))[0];
+  const l = logged ? { date: logged.date, amount: Number(logged.amount) || 0 } : null;
+  if (!typed) return l;
+  return { date: typed.date, amount: l && l.date >= typed.date ? l.amount : typed.amount };
 }
+const propLastRent = (id) => (propData(id).rentMode === "last" ? propRentAnchor(id) : null);
 const propRentReceived = (id) => { const c = propCycle(id); return ST.income.filter((i) => !isWages(i) && sourceProperty(i) === id && i.date >= c.start && i.date <= c.end).reduce((t, i) => t + i.amount, 0); };
 function propRentExpected(id) {
   const p = propData(id), f = propRentFreq(id), lr = propLastRent(id);
@@ -1721,16 +1728,14 @@ function propRentExpected(id) {
 }
 // The next date rent is due to land: from the rent sources' next dates, else the last rent logged + its frequency, else the next payday.
 function propNextRent(id) {
-  const f = propRentFreq(id), c = [], lr = propLastRent(id);
-  if (lr) return nextFromLast(lr.date, f);
+  const f = propRentFreq(id), a = propRentAnchor(id);
+  // The last rent actually received (typed in, or logged) + the property's own frequency: 20 Oct + 14 days = 3 Nov, never a monthly anchor.
+  if (a) return nextFromLast(a.date, f);
+  const c = [];
   ST.incomeSources.filter((x) => !x.wages && x.propertyId === id).forEach((x) => {
     const d = x.nextApply || x.nextDate;
-    if (d && x.frequency && x.frequency !== "once") c.push(nextDue({ dueDate: d, frequency: x.frequency }));
+    if (d) c.push(d >= today() ? d : nextFromLast(d, f));
   });
-  if (!c.length) {
-    const last = ST.income.filter((i) => !isWages(i) && sourceProperty(i) === id).sort((a, b) => b.date.localeCompare(a.date))[0];
-    if (last) c.push(nextFromLast(last.date, f === "monthly" ? "monthly" : f));
-  }
   c.sort();
   return c[0] || isoFromDay(nextPayday());
 }
@@ -1796,8 +1801,8 @@ function renderProperty() {
   const fixed = sums.reduce((t, s) => t + s.base, 0), extra = sums.reduce((t, s) => t + s.extra, 0);
   $("pFixed").textContent = money(fixed);
   $("pExtra").textContent = money(extra);
-  $("pTotal").textContent = money(fixed + extra);
-  $("propSummaryList").innerHTML = sums.map((s) => summaryRow(propName(s.id), s.base, s.extra)).join("");
+  $("pTotal").textContent = money(sums.reduce((t, s) => t + outOfPocket(s.id, s), 0));
+  $("propSummaryList").innerHTML = sums.map((s) => summaryRow(propName(s.id), s.base, s.extra, rentPerPay(s.id), outOfPocket(s.id, s))).join("");
   renderPropertyFlows();
 
   const rows = ST.bills.filter((b) => (billFilter === "all" || b.category === billFilter) && matchesPropFilter(b))
