@@ -38,7 +38,11 @@ function addCycle(dateStr, freq) {
   const d = new Date(dateStr + "T00:00:00Z"), day = d.getUTCDate();
   if (freq === "weekly") d.setUTCDate(day + 7);
   else if (freq === "fortnightly") d.setUTCDate(day + 14);
-  else {
+  else if (freq === "semimonthly") {
+    // twice a month, 15 days apart: 12th → 27th → 12th next month
+    if (day <= 15) d.setUTCDate(Math.min(day + 15, new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate()));
+    else { d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + 1); d.setUTCDate(day - 15); }
+  } else {
     const months = { monthly: 1, quarterly: 3, yearly: 12 }[freq] || 0;
     d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + months);
     const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();

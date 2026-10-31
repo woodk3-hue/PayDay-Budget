@@ -313,6 +313,10 @@ nav.none::before{opacity:0}
 .bufrow .bl{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:15px;color:var(--muted)}
 .bufrow .bl b{font-size:17px;color:var(--ink);font-variant-numeric:tabular-nums}
 .bufrow .bar.bad span{background:var(--red)}
+.duecalc{grid-column:1/-1;display:grid;gap:10px}
+.duecalc .toggle button{font-size:14px;min-height:40px}
+.duecalc .calc{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.duechip{display:inline-block;justify-self:start;padding:7px 12px;border-radius:99px;background:var(--brand-soft);color:var(--brand);font-size:14px;font-weight:600}
 .swatches{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px}
 .swatches button{width:44px;height:44px;min-height:44px;padding:0;border-radius:50%;background:var(--sw);box-shadow:inset 0 0 0 1px rgba(128,128,128,.35)}
 .swatches button.on{box-shadow:0 0 0 3px var(--card),0 0 0 5px var(--sw)}
@@ -911,7 +915,11 @@ function addCycle(dateStr, freq) {
   const d = new Date(dateStr + "T00:00:00"), day = d.getDate();
   if (freq === "weekly") d.setDate(day + 7);
   else if (freq === "fortnightly") d.setDate(day + 14);
-  else {
+  else if (freq === "semimonthly") {
+    // twice a month, 15 days apart: 12th → 27th → 12th next month
+    if (day <= 15) d.setDate(Math.min(day + 15, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+    else { d.setDate(1); d.setMonth(d.getMonth() + 1); d.setDate(day - 15); }
+  } else {
     const months = { monthly: 1, quarterly: 3, yearly: 12 }[freq] || 0;
     d.setDate(1); d.setMonth(d.getMonth() + months);
     const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
@@ -1890,6 +1898,7 @@ $("billFile").addEventListener("change", async (e) => {
 
 function syncBillForm() {
   const cat = $("billCat").value;
+  try { dueBill.show(cat === "property"); } catch (e) { /* set up after this runs the first time */ }
   $("billAcctWrap").classList.toggle("hidden", cat === "maintenance");
   $("billFreqWrap").classList.toggle("hidden", cat === "maintenance" || cat === "other");
   $("billDateLabel").textContent = cat === "maintenance" ? "Receipt date" : "Due date";
@@ -2276,6 +2285,7 @@ function openSheet(id) {
   sheetBack.addEventListener("click", () => closeSheets(true));
   document.body.appendChild(sheetBack);
   $(id).classList.add("open");
+  dueCalcs.forEach((x) => x.refresh());
 }
 function closeSheets(cancel) {
   document.querySelectorAll(".addcard.open").forEach((c) => c.classList.remove("open"));
@@ -3440,6 +3450,76 @@ $("signInBtn").addEventListener("click", async () => {
   catch (err) { if (err.code === "auth/popup-blocked" || err.code === "auth/operation-not-supported-in-this-environment") signInWithRedirect(auth, provider); else toast(err.message); }
 });
 $("signOutBtn").addEventListener("click", () => signOut(auth));
+
+/* =========================================================
+   SMART DUE DATE — pick the next due date, or work it out from the last payment
+   ========================================================= */
+const DUE_FREQS = [["weekly", "Weekly"], ["fortnightly", "Fortnightly"], ["semimonthly", "Semi-monthly"], ["monthly", "Monthly"], ["quarterly", "Quarterly"], ["yearly", "Annually"]];
+const MONTHS_PER = { monthly: 1, quarterly: 3, yearly: 12 };
+// Steps n intervals from the last payment (counted from the original day, so Jan 31 + monthly never drifts), then on until it is today or later.
+function nextFromLast(last, freq) {
+  if (!last) return "";
+  const at = (n) => {
+    if (freq === "weekly" || freq === "fortnightly") { const d = new Date(last + "T00:00:00"); d.setDate(d.getDate() + n * (freq === "weekly" ? 7 : 14)); return d.toLocaleDateString("en-CA"); }
+    if (freq === "semimonthly") { let d = last; for (let i = 0; i < n; i++) d = addCycle(d, freq); return d; }
+    const o = new Date(last + "T00:00:00"), day = o.getDate(), m = new Date(o.getFullYear(), o.getMonth() + n * (MONTHS_PER[freq] || 1), 1);
+    m.setDate(Math.min(day, new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate()));
+    return m.toLocaleDateString("en-CA");
+  };
+  let n = 1, d = at(n);
+  while (d < today() && n < 1500) { n++; d = at(n); }
+  return d;
+}
+const dueChipText = (d) => {
+  if (!d) return "Pick a date";
+  const n = dayNum(d) - dayNum(today());
+  return "Next due: " + fmtLong(d) + (n === 0 ? " (today)" : n === 1 ? " (tomorrow)" : n > 1 ? " (in " + n + " days)" : " (" + Math.abs(n) + " days ago)");
+};
+const dueCalcs = [];
+function attachDueCalc(formId, dateName) {
+  const form = $(formId), dateInput = form.elements[dateName], dateLabel = dateInput.closest("label"), freqSel = form.elements.frequency;
+  if (![...freqSel.options].some((o) => o.value === "semimonthly")) {
+    const after = [...freqSel.options].find((o) => o.value === "fortnightly");
+    const o = document.createElement("option"); o.value = "semimonthly"; o.textContent = "Semi-monthly"; freqSel.insertBefore(o, after ? after.nextSibling : null);
+  }
+  const box = document.createElement("div"); box.className = "duecalc";
+  box.innerHTML = '<div class="toggle"><button type="button" data-dm="a" class="on">Next due date</button><button type="button" data-dm="b">Calculate from last payment</button></div>' +
+    '<div class="calc hidden"><label>Last payment date<input type="date" data-dlast></label>' +
+    '<label>Frequency<select data-dfreq>' + DUE_FREQS.map((f) => '<option value="' + f[0] + '">' + f[1] + "</option>").join("") + "</select></label></div>" +
+    '<span class="duechip"></span>';
+  dateLabel.after(box);
+  const last = box.querySelector("[data-dlast]"), dfreq = box.querySelector("[data-dfreq]"), calc = box.querySelector(".calc"), chip = box.querySelector(".duechip");
+  let mode = "a";
+  function refresh() {
+    if (mode === "b") {
+      if (!DUE_FREQS.some((f) => f[0] === freqSel.value)) { freqSel.value = "monthly"; }
+      dfreq.value = freqSel.value;
+      const d = nextFromLast(last.value, dfreq.value);
+      if (d) dateInput.value = d;
+    }
+    chip.textContent = dueChipText(dateInput.value);
+  }
+  function setMode(m) {
+    mode = m;
+    box.querySelectorAll("[data-dm]").forEach((b) => b.classList.toggle("on", b.dataset.dm === m));
+    calc.classList.toggle("hidden", m !== "b"); dateLabel.style.display = m === "b" ? "none" : "";
+    last.required = m === "b";
+    if (m === "b" && !last.value) { last.value = ""; }
+    refresh();
+  }
+  box.addEventListener("click", (e) => { const b = e.target.closest("[data-dm]"); if (b) setMode(b.dataset.dm); });
+  last.addEventListener("input", refresh);
+  dfreq.addEventListener("change", () => { freqSel.value = dfreq.value; refresh(); });
+  freqSel.addEventListener("change", refresh);
+  dateInput.addEventListener("input", refresh);
+  form.addEventListener("reset", () => setTimeout(() => { last.value = ""; setMode("a"); }, 0));
+  const api = { refresh: () => { if (mode === "b" && !last.value) setMode("a"); else refresh(); }, show: (v) => { box.style.display = v ? "" : "none"; if (!v) setMode("a"); } };
+  dueCalcs.push(api);
+  return api;
+}
+const dueSub = attachDueCalc("subForm", "dueDate");
+const dueExp = attachDueCalc("expenseForm", "date");
+const dueBill = attachDueCalc("billForm", "dueDate");
 
 /* =========================================================
    DRAG-AND-DROP REORDERING — grip handles, pointer (mouse + touch) and keyboard
