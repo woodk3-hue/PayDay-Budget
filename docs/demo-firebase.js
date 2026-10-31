@@ -131,6 +131,7 @@ export const writeBatch = () => {
   return {
     set(ref, data) { ops.push(() => write(ref, data, false)); },
     update(ref, data) { ops.push(() => write(ref, data, true)); },
+    delete(ref) { ops.push(() => { store[ref.name] = (store[ref.name] || []).filter((r) => r.id !== ref.id); }); },
     commit() { ops.forEach((f) => f()); notify(); return Promise.resolve(); }
   };
 };
