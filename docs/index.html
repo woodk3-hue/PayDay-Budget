@@ -333,6 +333,15 @@ nav.none::before{opacity:0}
 .duechip{display:inline-block;justify-self:start;padding:7px 12px;border-radius:99px;background:var(--brand-soft);color:var(--brand);font-size:14px;font-weight:600}
 .pstat{font-size:13px;font-weight:600;margin-top:2px}
 .pstat.red{color:var(--red)}.pstat.amber{color:var(--amber)}.pstat.green{color:var(--green)}.pstat.blue{color:#0a84ff}.pstat.idle{color:var(--muted);font-weight:400}
+#peopleChips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+#peopleChips button{min-height:36px;padding:0 12px;font-size:14px;background:var(--brand-soft);color:var(--brand);box-shadow:none;border-radius:99px}
+/* Floating quick add: Home only, above the tab bar, bottom right */
+.fab{display:none;position:fixed;right:16px;bottom:calc(86px + env(safe-area-inset-bottom));width:58px;height:58px;min-height:58px;padding:0;border-radius:50%;z-index:12;align-items:center;justify-content:center;color:var(--on-brand,#fff);
+  background:linear-gradient(180deg,rgba(255,255,255,.28),rgba(255,255,255,0) 55%),var(--brand);box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 8px 22px rgba(0,0,0,.28);transition:transform .15s}
+.fab:active{transform:scale(.92)}
+.fab svg{width:28px;height:28px;pointer-events:none}
+body[data-view=home] nav:not(.hidden)+.fab{display:flex}
+@media (prefers-reduced-motion:reduce){.fab{transition:none}}
 .swatches{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px}
 .swatches button{width:44px;height:44px;min-height:44px;padding:0;border-radius:50%;background:var(--sw);box-shadow:inset 0 0 0 1px rgba(128,128,128,.35)}
 .swatches button.on{box-shadow:0 0 0 3px var(--card),0 0 0 5px var(--sw)}
@@ -724,6 +733,21 @@ input[type=file]{padding:9px 12px}
         <button type="button" class="full" id="compareBtn">Compare paths</button>
       </form>
     </div>
+  <div class="card addcard" id="quickAddCard">
+      <button type="button" class="ghost x" data-close-sheet>Close</button>
+      <h2>Quick add</h2>
+      <form id="quickForm">
+        <div class="toggle full" id="quickTabs"><button type="button" data-qt="exp" class="on">Expense</button><button type="button" data-qt="send">Sent</button><button type="button" data-qt="week">Week</button><button type="button" data-qt="move">Move</button></div>
+        <label>Amount<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required></label>
+        <label>Date<input type="date" name="date" required></label>
+        <div class="full" id="qWho"><label>Sent to<input name="who" list="peopleList" placeholder="e.g. Cat" autocomplete="off"></label><div class="chips" id="peopleChips"></div></div>
+        <label class="full" id="qWhat"><span id="qWhatLbl">What for</span><input name="what" placeholder="e.g. Travel insurance"></label>
+        <label class="full"><span id="qFromLbl">Paid from</span><select name="fromId" class="acctSel" data-ph="Choose the account…" required></select></label>
+        <label class="full hidden" id="qTo">To my account<select name="toId" class="acctSel" data-ph="Choose the account…"></select></label>
+        <datalist id="peopleList"></datalist>
+        <button class="full" type="submit" id="quickSubmit">Save expense</button>
+      </form>
+    </div>
   <div class="card addcard" id="propCard">
       <button type="button" class="ghost x" data-close-sheet>Close</button>
       <h2 id="propFormTitle">Add property</h2>
@@ -834,6 +858,7 @@ input[type=file]{padding:9px 12px}
   <button data-v="savings" aria-label="Goals"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 8.2a4.3 4.3 0 0 1 7.5 2.6C19.5 16.4 12 21 12 21z"/></svg><span>Goals</span></button>
   <button data-v="property" aria-label="Property"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V9l8-5 8 5v12"/><path d="M9 21v-6h6v6M2.5 21h19"/></svg><span>Property</span></button>
 </nav>
+<button id="quickFab" class="fab" aria-label="Quick add" title="Quick add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
 
 <script type="module">
 /* =========================================================
@@ -1583,7 +1608,7 @@ $("alertsBtn").addEventListener("click", async () => {
 
 const TITLES = { home: "PayDay Budget", income: "Income", expenses: "Expenses", savings: "Goals", property: "Property & Bills" };
 TITLES.stats = "Stats"; TITLES.settings = "Settings"; TITLES.accounts = "Accounts";
-let currentView = "home";
+let currentView = "home"; document.body.dataset.view = "home";
 function showView(v) {
   const tabs = [...$("tabs").children], idx = tabs.findIndex((b) => b.dataset.v === v);
   document.querySelectorAll(".view").forEach((s) => s.classList.toggle("hidden", s.id !== "view-" + v));
@@ -1592,7 +1617,7 @@ function showView(v) {
   if (idx >= 0) $("tabs").style.setProperty("--i", idx);
   $("pageTitle").textContent = TITLES[v];
   $("tagline").classList.toggle("hidden", v !== "home");
-  currentView = v;
+  currentView = v; document.body.dataset.view = v;
   closeSheets(true);
   $("addBtn").classList.toggle("hidden", !ADD_FORMS[v]);
   if (v === "stats") renderStats();
@@ -2474,6 +2499,7 @@ function spClick(e) {
    6h. ADD SHEETS (header + button) and STATS
    ========================================================= */
 const ADD_FORMS = {
+  home: [["quickAddCard", "Quick add"]],
   income: [["incomeCard", "Add income"], ["srcCard", "Add income source"]],
   expenses: [["expenseCard", "Add expense"]],
   savings: [["transferCard", "Move money"], ["goalCard", "Add goal or wishlist item"], ["bufferSetCard", "Big Savings setup"]],
@@ -2488,6 +2514,7 @@ function openSheet(id) {
   document.body.appendChild(sheetBack);
   $(id).classList.add("open");
   if (id === "propCard") markTakenAccounts(editing.properties || null);
+  if (id === "quickAddCard") prepQuick();
   dueCalcs.forEach((x) => x.refresh());
 }
 function closeSheets(cancel) {
@@ -3806,6 +3833,71 @@ $("signInBtn").addEventListener("click", async () => {
   catch (err) { if (err.code === "auth/popup-blocked" || err.code === "auth/operation-not-supported-in-this-environment") signInWithRedirect(auth, provider); else toast(err.message); }
 });
 $("signOutBtn").addEventListener("click", () => signOut(auth));
+
+/* =========================================================
+   QUICK ADD — an expense, money sent to someone, a week's spending total, or a move between my accounts, from the account used
+   ========================================================= */
+let quickTab = "exp";
+const QUICK = {
+  exp: { from: "Paid from", what: "What for", ph: "e.g. Travel insurance", need: true, btn: "Save expense" },
+  send: { from: "Sent from", what: "What for (optional)", ph: "e.g. Dinner", need: false, btn: "Save transfer" },
+  week: { from: "Spent from", what: "Note (optional)", ph: "Spending this week", need: false, btn: "Save week's spending" },
+  move: { from: "Move from", what: "", ph: "", need: false, btn: "Save move" }
+};
+const lsGet = (k) => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* private mode */ } };
+function peopleNames() {
+  const names = [];
+  const add = (n) => { n = String(n || "").trim(); if (n && !names.some((x) => x.toLowerCase() === n.toLowerCase())) names.push(n); };
+  lsGet("quick-people").split("|").forEach(add);
+  ST.acctTransfers.forEach((t) => { if (!t.toId && t.fromId) add(t.externalName); });
+  return names.slice(0, 12);
+}
+function setQuickTab(t) {
+  quickTab = t;
+  const q = QUICK[t], f = $("quickForm").elements;
+  document.querySelectorAll("#quickTabs [data-qt]").forEach((b) => b.classList.toggle("on", b.dataset.qt === t));
+  $("qWho").classList.toggle("hidden", t !== "send");
+  $("qWhat").classList.toggle("hidden", t === "move");
+  $("qTo").classList.toggle("hidden", t !== "move");
+  $("qFromLbl").textContent = q.from; $("qWhatLbl").textContent = q.what; f.what.placeholder = q.ph; f.what.required = q.need;
+  f.who.required = t === "send"; f.toId.required = t === "move";
+  $("quickSubmit").textContent = q.btn;
+  const last = lsGet("quick-acct-" + t);
+  f.fromId.value = last && acctById(last) ? last : "";
+}
+function prepQuick() {
+  const f = $("quickForm").elements;
+  f.date.value = today();
+  const names = peopleNames();
+  $("peopleList").innerHTML = names.map((n) => '<option value="' + esc(n) + '"></option>').join("");
+  $("peopleChips").innerHTML = names.map((n) => '<button type="button" data-who="' + esc(n) + '">' + esc(n) + "</button>").join("");
+  setQuickTab(quickTab);
+}
+$("quickTabs").addEventListener("click", (e) => { const b = e.target.closest("[data-qt]"); if (b) setQuickTab(b.dataset.qt); });
+$("peopleChips").addEventListener("click", (e) => { const b = e.target.closest("[data-who]"); if (b) $("quickForm").elements.who.value = b.dataset.who; });
+$("quickFab").addEventListener("click", () => openSheet("quickAddCard"));
+$("quickForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const f = e.target.elements, amount = round2(Number(f.amount.value) || 0), from = f.fromId.value, date = f.date.value || today();
+  if (!(amount > 0)) { toast("Enter an amount."); return; }
+  if (!from || !acctById(from)) { toast("Choose the account you used."); return; }
+  const what = f.what.value.trim();
+  if (quickTab === "exp" || quickTab === "week") {
+    const d = { date: date, amount: amount, description: what || "Spending this week", frequency: "once", category: quickTab === "week" ? "Everyday spending" : "Other", groupId: "", accountId: from, manual: false, remindDays: null, lastNotified: null };
+    linkFields(d, date, null);
+    save("expenses", null, d);
+  } else {
+    const who = f.who.value.trim(), to = quickTab === "move" ? f.toId.value : "";
+    if (quickTab === "move" && (!to || to === from)) { toast("Choose a different account to move it to."); return; }
+    const name = quickTab === "move" ? "Move to " + acctName(to) : "To " + who + (what ? " · " + what : "");
+    save("acctTransfers", null, { name: name, fromId: from, toId: to, externalName: quickTab === "move" ? "" : who, amount: amount, trigger: "date", frequency: "once", nextApply: date });
+    if (quickTab === "send") lsSet("quick-people", [who].concat(lsGet("quick-people").split("|").filter((n) => n && n.toLowerCase() !== who.toLowerCase())).slice(0, 12).join("|"));
+  }
+  lsSet("quick-acct-" + quickTab, from);
+  e.target.reset(); f.date.value = today();
+  closeSheets(false);
+});
 
 /* =========================================================
    SMART DUE DATE — pick the next due date, or work it out from the last payment
