@@ -335,6 +335,13 @@ nav.none::before{opacity:0}
 .pstat.red{color:var(--red)}.pstat.amber{color:var(--amber)}.pstat.green{color:var(--green)}.pstat.blue{color:#0a84ff}.pstat.idle{color:var(--muted);font-weight:400}
 #peopleChips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 #peopleChips button{min-height:36px;padding:0 12px;font-size:14px;background:var(--brand-soft);color:var(--brand);box-shadow:none;border-radius:99px}
+/* Floating quick add: Home only, above the tab bar, bottom right */
+.fab{display:none;position:fixed;right:16px;bottom:calc(86px + env(safe-area-inset-bottom));width:58px;height:58px;min-height:58px;padding:0;border-radius:50%;z-index:12;align-items:center;justify-content:center;color:var(--on-brand,#fff);
+  background:linear-gradient(180deg,rgba(255,255,255,.28),rgba(255,255,255,0) 55%),var(--brand);box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 8px 22px rgba(0,0,0,.28);transition:transform .15s}
+.fab:active{transform:scale(.92)}
+.fab svg{width:28px;height:28px;pointer-events:none}
+body[data-view=home] nav:not(.hidden)+.fab{display:flex}
+@media (prefers-reduced-motion:reduce){.fab{transition:none}}
 .swatches{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px}
 .swatches button{width:44px;height:44px;min-height:44px;padding:0;border-radius:50%;background:var(--sw);box-shadow:inset 0 0 0 1px rgba(128,128,128,.35)}
 .swatches button.on{box-shadow:0 0 0 3px var(--card),0 0 0 5px var(--sw)}
@@ -391,7 +398,6 @@ input[type=file]{padding:9px 12px}
 
   <!-- DASHBOARD -->
   <section id="view-home" class="view hidden">
-    <button id="quickBtn" class="full bigadd">+ Quick add</button>
     <div class="card" data-sid="pay">
       <h2 id="periodTitle">This fortnight</h2>
       <div class="grid">
@@ -852,6 +858,7 @@ input[type=file]{padding:9px 12px}
   <button data-v="savings" aria-label="Goals"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 8.2a4.3 4.3 0 0 1 7.5 2.6C19.5 16.4 12 21 12 21z"/></svg><span>Goals</span></button>
   <button data-v="property" aria-label="Property"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V9l8-5 8 5v12"/><path d="M9 21v-6h6v6M2.5 21h19"/></svg><span>Property</span></button>
 </nav>
+<button id="quickFab" class="fab" aria-label="Quick add" title="Quick add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
 
 <script type="module">
 /* =========================================================
@@ -1601,7 +1608,7 @@ $("alertsBtn").addEventListener("click", async () => {
 
 const TITLES = { home: "PayDay Budget", income: "Income", expenses: "Expenses", savings: "Goals", property: "Property & Bills" };
 TITLES.stats = "Stats"; TITLES.settings = "Settings"; TITLES.accounts = "Accounts";
-let currentView = "home";
+let currentView = "home"; document.body.dataset.view = "home";
 function showView(v) {
   const tabs = [...$("tabs").children], idx = tabs.findIndex((b) => b.dataset.v === v);
   document.querySelectorAll(".view").forEach((s) => s.classList.toggle("hidden", s.id !== "view-" + v));
@@ -1610,7 +1617,7 @@ function showView(v) {
   if (idx >= 0) $("tabs").style.setProperty("--i", idx);
   $("pageTitle").textContent = TITLES[v];
   $("tagline").classList.toggle("hidden", v !== "home");
-  currentView = v;
+  currentView = v; document.body.dataset.view = v;
   closeSheets(true);
   $("addBtn").classList.toggle("hidden", !ADD_FORMS[v]);
   if (v === "stats") renderStats();
@@ -3869,7 +3876,7 @@ function prepQuick() {
 }
 $("quickTabs").addEventListener("click", (e) => { const b = e.target.closest("[data-qt]"); if (b) setQuickTab(b.dataset.qt); });
 $("peopleChips").addEventListener("click", (e) => { const b = e.target.closest("[data-who]"); if (b) $("quickForm").elements.who.value = b.dataset.who; });
-$("quickBtn").addEventListener("click", () => openSheet("quickAddCard"));
+$("quickFab").addEventListener("click", () => openSheet("quickAddCard"));
 $("quickForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const f = e.target.elements, amount = round2(Number(f.amount.value) || 0), from = f.fromId.value, date = f.date.value || today();
