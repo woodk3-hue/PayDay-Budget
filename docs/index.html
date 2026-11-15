@@ -342,6 +342,7 @@ nav.none::before{opacity:0}
 .fab svg{width:28px;height:28px;pointer-events:none}
 body[data-view=home] nav:not(.hidden)+.fab{display:flex}
 @media (prefers-reduced-motion:reduce){.fab{transition:none}}
+.itrow{display:grid;grid-template-columns:96px 1fr;gap:8px;margin-bottom:8px}
 .swatches{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px}
 .swatches button{width:44px;height:44px;min-height:44px;padding:0;border-radius:50%;background:var(--sw);box-shadow:inset 0 0 0 1px rgba(128,128,128,.35)}
 .swatches button.on{box-shadow:0 0 0 3px var(--card),0 0 0 5px var(--sw)}
@@ -2928,11 +2929,39 @@ $("acctForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const d = formData(e.target), bank = ST.banks.find((b) => b.id === d.bankId);
   d.bank = bank ? bank.name : ""; d.minBuffer = round2(Number(d.minBuffer) || 0);
+  // If the balance was lowered, offer to list what was spent (or leave it blank).
+  const old = editing.accounts ? acctById(editing.accounts) : null, drop = old ? round2((Number(old.balance) || 0) - (Number(d.balance) || 0)) : 0;
   save("accounts", editing.accounts, d);
   editing.accounts = null; e.target.reset();
   $("acctSubmit").textContent = "Save account"; $("acctFormTitle").textContent = "Add account";
   closeSheets(false);
+  if (old && drop > 0.004) showItemise(old, drop);
 });
+// "Where did it go?": itemise a balance drop as individual spends. They are recorded as already paid, so the new balance isn't deducted twice.
+function itemiseRow() { return '<div class="itrow"><input type="number" class="itamt" min="0" step="0.01" inputmode="decimal" placeholder="$"><input type="text" class="itwhat" maxlength="60" placeholder="What for"></div>'; }
+function showItemise(acct, drop) {
+  const wrap = document.createElement("div");
+  wrap.className = "overlay sheet";
+  wrap.innerHTML = '<div class="card"><h3>' + esc(acct.name) + " went down " + money(drop) + '</h3><p class="note" style="margin:0 0 10px">Add what you spent, or leave it blank to just update the balance.</p><div id="itRows">' + itemiseRow() + itemiseRow() + '</div>' +
+    '<button class="plain" data-it-add style="width:100%;margin-top:4px">+ Add another</button><div class="sub" id="itTotal" style="margin-top:8px">Itemised $0.00 of ' + money(drop) + '</div>' +
+    '<div class="actions"><button class="plain" data-it-skip>Leave blank</button><button data-it-save>Save spends</button></div></div>';
+  const sum = () => round2([...wrap.querySelectorAll(".itamt")].reduce((t, i) => t + (Number(i.value) || 0), 0));
+  const refresh = () => { const t = sum(); wrap.querySelector("#itTotal").innerHTML = "Itemised " + money(t) + " of " + money(drop) + (t > drop + 0.005 ? ' <span class="bad">· too much</span>' : t < drop - 0.005 ? " · " + money(round2(drop - t)) + " left" : ' <span class="ok">· all accounted for</span>'); };
+  wrap.addEventListener("input", refresh);
+  wrap.addEventListener("click", (e) => {
+    const d = e.target.dataset;
+    if (d.itAdd !== undefined) wrap.querySelector("#itRows").insertAdjacentHTML("beforeend", itemiseRow());
+    else if (d.itSave !== undefined) {
+      if (sum() > drop + 0.005) { toast("That's more than the " + money(drop) + " the balance went down by."); return; }
+      [...wrap.querySelectorAll(".itrow")].forEach((r) => {
+        const amt = round2(Number(r.querySelector(".itamt").value) || 0); if (!(amt > 0)) return;
+        save("expenses", null, { date: today(), amount: amt, description: r.querySelector(".itwhat").value.trim() || "Spend", frequency: "once", category: "Other", groupId: "", accountId: acct.id, manual: false, nextApply: "", remindDays: null, lastNotified: null });
+      });
+      wrap.remove();
+    } else if (d.itSkip !== undefined || e.target === wrap) wrap.remove();
+  });
+  document.body.appendChild(wrap);
+}
 $("bankForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const name = formData(e.target).name.trim();
