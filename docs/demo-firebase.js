@@ -70,6 +70,7 @@ const store = {
     { name: "Property buffer", fromId: "acc1", toId: "acc3", externalName: "", amount: 250, frequency: "fortnightly", trigger: "payday", nextApply: "" }
   ],
   paydayMoves: [],
+  acctActivity: [],
   allotments: [],
   groups: [],
   pushDevices: [], billFiles: []

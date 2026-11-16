@@ -563,6 +563,7 @@ input[type=file]{padding:9px 12px}
       <div class="grid"><div class="stat"><small>Total balance</small><b id="acTotal">$0</b></div></div>
     </div>
     <div id="bankGroups"></div>
+    <div class="card"><h2>Recent activity</h2><ul class="list" id="activityList"></ul></div>
     <div class="card">
       <h2>Payday transfers (optional)</h2>
       <label class="check"><input type="checkbox" id="paydayOn"> Run my payday transfers when I log my pay</label>
@@ -889,7 +890,7 @@ const db = initializeFirestore(app, {
 /* =========================================================
    2. STATE
    ========================================================= */
-const ST = { income: [], expenses: [], goals: [], transfers: [], subscriptions: [], properties: [], bills: [], wishlist: [], settings: [], incomeSources: [], accounts: [], acctTransfers: [], banks: [], allotments: [], paydayMoves: [], groups: [] };
+const ST = { acctActivity: [], income: [], expenses: [], goals: [], transfers: [], subscriptions: [], properties: [], bills: [], wishlist: [], settings: [], incomeSources: [], accounts: [], acctTransfers: [], banks: [], allotments: [], paydayMoves: [], groups: [] };
 const CATEGORIES = ["Groceries","Eating out","Shopping","Clothes","Fuel","Transport","Bills","Subscriptions",
   "Health","Medication","Gym","Home","Property","Loan","Travel","Tech","Gifts","Kids","Beauty","Other"];
 const DEFAULT_GOALS = [
@@ -1067,6 +1068,7 @@ function startSync() {
     listen("banks", "name", "asc"),
     listen("allotments", "date", "desc"),
     listen("paydayMoves", "date", "desc"),
+    listen("acctActivity", "date", "desc"),
     listen("groups", "order", "asc")
   ];
   refreshAlertsButton();
@@ -1157,7 +1159,7 @@ function openWizard() {
 $("setAppBtn").addEventListener("click", openWizard);
 // A brand-new, empty account gets the wizard once; accounts that already hold data keep the defaults (fortnightly, AUD, July).
 function maybeWizard() {
-  if (wzDone || loadedColls.size < 16) return;
+  if (wzDone || loadedColls.size < 17) return;
   wzDone = true;
   if (new URLSearchParams(location.search).has("setup")) { openWizard(); return; }
   if (ST.settings.some((x) => x.id === "app")) return;
@@ -2743,14 +2745,21 @@ async function applySpec(coll, item, mode) {
     if (cur.nextApply !== item.nextApply || (mode === "due" && cur.manual)) return;
     const freq = cur.frequency || "once", step = (n) => (freq === "once" ? "" : addCycle(n, freq));
     let n = cur.nextApply, count = 0;
-    if (mode === "one") { count = 1; n = step(n); }
-    else for (let g = 0; n && n <= today() && g < 400; g++) { count++; n = step(n); }
+    const dates = [];
+    if (mode === "one") { count = 1; dates.push(n); n = step(n); }
+    else for (let g = 0; n && n <= today() && g < 400; g++) { count++; dates.push(n); n = step(n); }
     if (!count) return;
     const amt = (Number(cur.amount) || 0) * count, fromId = linkedFrom(coll, cur), toId = linkedTo(coll, cur), bal = {};
     for (const id of [fromId, toId]) if (id && bal[id] === undefined) { const a = await tx.get(acct(id)); if (a.exists()) bal[id] = Number(a.data().balance) || 0; }
     if (fromId && bal[fromId] !== undefined) tx.update(acct(fromId), { balance: round2(bal[fromId] - amt) });
     if (toId && bal[toId] !== undefined) tx.update(acct(toId), { balance: round2(bal[toId] + amt) });
-    tx.update(itemRef, { nextApply: n });
+    // Every movement is written to the account's activity with its date, so a change in balance is never a mystery.
+    const label = cur.name || cur.description || cur.vendor || "Payment", one = Number(cur.amount) || 0;
+    dates.forEach((d) => {
+      if (fromId && bal[fromId] !== undefined) tx.set(doc(col("acctActivity")), { accountId: fromId, date: d, amount: -round2(one), label: label, note: toId ? "to " + acctName(toId) : cur.externalName ? "to " + cur.externalName : "", kind: coll, created: serverTimestamp() });
+      if (toId && bal[toId] !== undefined) tx.set(doc(col("acctActivity")), { accountId: toId, date: d, amount: round2(one), label: label, note: fromId ? "from " + acctName(fromId) : cur.externalName ? "from " + cur.externalName : "", kind: coll, created: serverTimestamp() });
+    });
+    tx.update(itemRef, { nextApply: n, lastApplied: dates[dates.length - 1] });
   });
 }
 let applying = false, applyTimer = null;
@@ -2836,6 +2845,10 @@ function acctStatus(p) {
   if (p.state === "building") return ['<span class="pstat blue">Building buffer</span>'];
   return ['<span class="pstat idle">No bills before payday</span>'];
 }
+function recentMovesHtml(id) {
+  const m = acctMoves(id).slice(0, 8);
+  return infoSect("Recent activity", m.length ? m.map((x) => '<div class="irow"><span>' + esc(x.label || "Payment") + " · " + fmtDate(x.date) + '</span><b class="' + (x.amount >= 0 ? "ok" : "bad") + '">' + signedMoney(x.amount) + "</b></div>").join("") : '<div class="inote">Nothing recorded yet. New movements will show here with their dates.</div>');
+}
 function acctInfoHtml(id) {
   const a = acctById(id); if (!a) return "";
   const p = acctProjection(a), signed = (n) => (n >= 0 ? "+" : "−") + money(Math.abs(n));
@@ -2845,17 +2858,31 @@ function acctInfoHtml(id) {
     infoRow("Total bills", "−" + money(p.total)) + (p.buffer ? infoRow("Keep at least (incl. maintenance float)", "−" + money(p.buffer)) : "") +
     (p.rentDue ? infoRow("Rent due before payday", "+" + money(p.rentDue)) : "") + infoRow("Scheduled payday deposit", signed(p.sched)) + (p.on ? "" : '<div class="inote">Payday transfers are switched off, so none are counted.</div>') +
     infoRow("Projected after payday", money(p.net)) +
-    infoRow("Recommended net adjustment", p.adj ? signed(p.adj) : "None");
+    infoRow("Recommended net adjustment", p.adj ? signed(p.adj) : "None") + recentMovesHtml(id);
 }
 // Tap an account row to edit it (update its balance). Swiping right still works too.
 document.addEventListener("click", (e) => {
   const li = e.target.closest("#bankGroups li"); if (!li || e.target.closest("button, a, input, select")) return;
   const eb = li.querySelector("[data-edit-acct]"); if (eb) eb.click();
 });
+const acctMoves = (id) => ST.acctActivity.filter((x) => x.accountId === id).sort((a, b) => b.date.localeCompare(a.date) || String(b.created && b.created.seconds || 0).localeCompare(String(a.created && a.created.seconds || 0)));
+const signedMoney = (n) => (n >= 0 ? "+" : "−") + money(Math.abs(n));
+function activityRow(x, showAcct) {
+  const a = showAcct ? acctById(x.accountId) : null;
+  return '<li><div class="main"><div>' + esc(x.label || "Payment") + '</div><div class="sub wrap">' + fmtDate(x.date) + (x.note ? " · " + esc(x.note) : "") + (a ? " · " + esc(a.name) : "") + '</div></div><span class="amt ' + (x.amount >= 0 ? "ok" : "bad") + '">' + signedMoney(x.amount) + "</span></li>";
+}
+function renderActivity() {
+  const rows = ST.acctActivity.slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 20);
+  $("activityList").innerHTML = rows.length ? rows.map((x) => activityRow(x, true)).join("") : '<li class="empty">Transfers, bills and income will show here with the date they happen.</li>';
+}
+function lastMoveLine(id) {
+  const m = acctMoves(id)[0];
+  return m ? '<div class="sub wrap">Last: ' + fmtDate(m.date) + " " + signedMoney(m.amount) + " · " + esc(m.label || "") + "</div>" : "";
+}
 function acctRow(a) {
   const f = acctFlows(a.id), net = f.inn - f.out, p = acctProjection(a);
   return '<li><div class="main"><div>' + esc(a.name) + '</div><div class="sub wrap">' + "In " + money(f.inn) + " · out " + money(f.out) +
-    ' · <span class="' + (net >= 0 ? "ok" : "bad") + '">net ' + money(net) + pfS() + '</span></div>' + acctStatus(p)[0] + '</div><span class="amt">' + money(a.balance || 0) + '</span>' + infoBtn("acct", a.id) +
+    ' · <span class="' + (net >= 0 ? "ok" : "bad") + '">net ' + money(net) + pfS() + '</span></div>' + acctStatus(p)[0] + lastMoveLine(a.id) + '</div><span class="amt">' + money(a.balance || 0) + '</span>' + infoBtn("acct", a.id) +
     '<button class="ghost" data-edit-acct="' + a.id + '">Edit</button><button class="ghost" data-del="accounts:' + a.id + '">✕</button></li>';
 }
 /* ---- Optimize transfers: one-tap payday transfer adjustments from the projections ---- */
@@ -2895,7 +2922,7 @@ $("optPanel").addEventListener("click", (e) => { if (e.target.dataset.optApply !
 function xferRow(t) {
   const kind = t.fromId && t.toId ? "internal" : "external";
   return '<li><div class="main"><div>' + esc(t.name) + '</div><div class="sub wrap">' + esc(acctName(t.fromId, t.externalName)) + " → " + esc(acctName(t.toId, t.externalName)) +
-    " · " + kind + " · " + (t.trigger === "payday" ? "on payday" : cap(t.frequency)) + (t.nextApply ? " · next " + fmtDate(t.nextApply) : "") + '</div></div><span class="amt">' + money(t.amount) + '</span>' +
+    " · " + kind + " · " + (t.trigger === "payday" ? "on payday" : cap(t.frequency)) + (t.lastApplied ? " · last " + fmtDate(t.lastApplied) : "") + (t.nextApply ? " · next " + fmtDate(t.nextApply) : "") + '</div></div><span class="amt">' + money(t.amount) + '</span>' +
     '<button class="ghost" data-edit-xfer="' + t.id + '">Edit</button><button class="ghost" data-del="acctTransfers:' + t.id + '">✕</button></li>';
 }
 // Accounts sit under their bank. Older accounts that only have a bank name are grouped by that name.
@@ -2921,6 +2948,7 @@ function renderAccounts() {
   const total = ST.accounts.reduce((t, a) => t + (Number(a.balance) || 0), 0);
   $("acTotal").textContent = money(total);
   $("bankGroups").innerHTML = bankGroups().length ? bankGroups().map(bankHtml).join("") : '<div class="card"><p class="empty">No banks yet.</p></div>';
+  renderActivity();
   $("xferList").innerHTML = ST.acctTransfers.length ? ST.acctTransfers.map(xferRow).join("") : '<li class="empty">No transfers yet.</li>';
   $("hAcctTotal").textContent = money(total);
   $("hAcctN").textContent = ST.accounts.length + (ST.accounts.length === 1 ? " account" : " accounts") + " · total";
@@ -3207,6 +3235,8 @@ function runPaydayTransfers(date) {
     if (t.fromId) delta[t.fromId] = (delta[t.fromId] || 0) - amt;
     if (t.toId) delta[t.toId] = (delta[t.toId] || 0) + amt;
     batch.set(doc(col("paydayMoves")), { date: date, amount: amt, name: t.name, fromId: t.fromId || "", toId: t.toId || "", created: serverTimestamp() });
+    if (t.fromId) batch.set(doc(col("acctActivity")), { accountId: t.fromId, date: date, amount: -amt, label: t.name, note: t.toId ? "to " + acctName(t.toId) : "to " + (t.externalName || "outside"), kind: "payday", created: serverTimestamp() });
+    if (t.toId) batch.set(doc(col("acctActivity")), { accountId: t.toId, date: date, amount: amt, label: t.name, note: t.fromId ? "from " + acctName(t.fromId) : "from " + (t.externalName || "outside"), kind: "payday", created: serverTimestamp() });
     total += amt;
   });
   Object.keys(delta).forEach((id) => batch.update(doc(db, "users", uid, "accounts", id), { balance: increment(round2(delta[id])) }));
@@ -3294,7 +3324,10 @@ async function applyIncomeSource(x) {
       if (!cur.wages) { e.covers = cur.frequency === "monthly" ? "month" : "fortnight"; if (e.covers === "month") e.coversMonth = date.slice(0, 7); }
       tx.set(doc(col("income")), e);
     });
-    if (bal !== null) tx.update(accRef, { balance: round2(bal + amt * dates.length) });
+    if (bal !== null) {
+      tx.update(accRef, { balance: round2(bal + amt * dates.length) });
+      dates.forEach((date) => tx.set(doc(col("acctActivity")), { accountId: cur.accountId, date: date, amount: round2(amt), label: cur.name, note: "income", kind: "income", created: serverTimestamp() }));
+    }
     tx.update(ref, { nextApply: n });
     dates.forEach((d) => added.push(d));
   });
