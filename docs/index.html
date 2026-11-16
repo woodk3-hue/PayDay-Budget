@@ -347,6 +347,10 @@ body[data-view=home] nav:not(.hidden)+.fab{display:flex}
 .chips button.on{background:var(--brand);color:var(--on-brand,#fff)}
 .spenditem{padding-left:28px;background:var(--fill)}
 .spenditem select{margin-top:4px;min-height:36px;font-size:14px;padding:4px 8px}
+.histbtn{min-height:32px;padding:0;margin-top:4px;font-size:13px;justify-content:flex-start;text-align:left}
+.histlist{margin-top:2px;padding:4px 0;border-top:.5px solid var(--line)}
+.histrow{display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:14px;color:var(--muted)}
+.histrow b{font-variant-numeric:tabular-nums}
 .itrow{display:grid;grid-template-columns:96px 1fr;gap:8px;margin-bottom:8px}
 .swatches{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px}
 .swatches button{width:44px;height:44px;min-height:44px;padding:0;border-radius:50%;background:var(--sw);box-shadow:inset 0 0 0 1px rgba(128,128,128,.35)}
@@ -1407,22 +1411,37 @@ document.addEventListener("click", (e) => {
   else if (kind === "prop") showInfo(propName(id), propInfoHtml(id));
   else if (kind === "buf") showInfo("Big Savings", bufferInfoHtml());
 });
+// Past payments: every add to a goal or wishlist item (smart split, surplus, extra, moves), newest first. Older smart splits come from the allotment log.
+const histOpen = {};
+function payHistory(id, name) {
+  const rows = ST.transfers.filter((t) => t.goalId === id).map((t) => ({ date: t.date, note: t.note || (t.type === "add" ? "Added" : "Spent"), amount: t.type === "add" ? t.amount : -t.amount }));
+  ST.allotments.filter((a) => a.target === name && a.amount > 0 && !rows.some((r) => r.date === a.date && Math.abs(r.amount - a.amount) < 0.005)).forEach((a) => rows.push({ date: a.date, note: "Smart split", amount: a.amount }));
+  return rows.sort((a, b) => b.date.localeCompare(a.date));
+}
+function histHtml(id, name) {
+  const rows = payHistory(id, name);
+  if (!rows.length) return "";
+  const open = !!histOpen[id], total = round2(rows.reduce((t, r) => t + r.amount, 0));
+  return '<button class="ghost histbtn" data-hist="' + esc(id) + '">Past payments (' + rows.length + ") · " + money(total) + (open ? " ▴" : " ▾") + "</button>" +
+    (open ? '<div class="histlist">' + rows.map((r) => '<div class="histrow"><span>' + fmtDate(r.date) + " · " + esc(r.note) + '</span><b class="' + (r.amount >= 0 ? "pos" : "neg") + '">' + (r.amount >= 0 ? "+" : "−") + money(Math.abs(r.amount)) + "</b></div>").join("") + "</div>" : "");
+}
+document.addEventListener("click", (e) => { const b = e.target.closest("[data-hist]"); if (!b) return; histOpen[b.dataset.hist] = !histOpen[b.dataset.hist]; renderSavings(); renderWishlist(); });
 function goalRow(g) {
   const bal = goalBalance(g), pct = g.target ? Math.max(0, Math.min(100, (bal / g.target) * 100)) : 0;
   return '<li><div class="main"><div>' + esc(g.name) + '</div><div class="sub">' + money(bal) + " of " + money(g.target) +
-    '</div><div class="bar"><span style="width:' + pct.toFixed(0) + '%"></span></div></div>' + infoBtn("goal", g.id) +
+    '</div><div class="bar"><span style="width:' + pct.toFixed(0) + '%"></span></div>' + histHtml(g.id, g.name) + '</div>' + infoBtn("goal", g.id) +
     '<button class="ghost" data-goal-add="' + g.id + '">Add</button>' +
     '<button class="ghost" data-edit-goal="' + g.id + '">Edit</button>' +
     '<button class="ghost" data-del="goals:' + g.id + '">✕</button></li>';
 }
 function transferRow(t) {
-  const g = ST.goals.find((x) => x.id === t.goalId);
-  const name = g ? g.name : "Deleted goal";
+  const g = ST.goals.find((x) => x.id === t.goalId) || ST.wishlist.find((x) => x.id === t.goalId);
+  const name = g ? g.name : "Deleted item";
   const note = t.note ? " · " + esc(t.note) : "";
   const cls = t.type === "add" ? "pos" : "neg", sign = t.type === "add" ? "+" : "−";
   return '<li><div class="main"><div>' + esc(name) + '</div><div class="sub">' + fmtDate(t.date) + note + '</div></div>' +
     '<span class="amt ' + cls + '">' + sign + money(t.amount) + '</span>' +
-    '<button class="ghost" data-edit-transfer="' + t.id + '">Edit</button>' +
+    (t.wish ? "" : '<button class="ghost" data-edit-transfer="' + t.id + '">Edit</button>') +
     '<button class="ghost" data-del="transfers:' + t.id + '">✕</button></li>';
 }
 
@@ -2261,7 +2280,7 @@ function wishRow(w, pos, n) {
   const up = pos > 0 ? '<button class="ghost" data-wish-move="' + w.id + ':-1" aria-label="Move up">▲</button>' : "";
   const down = pos >= 0 && pos < n - 1 ? '<button class="ghost" data-wish-move="' + w.id + ':1" aria-label="Move down">▼</button>' : "";
   return '<li><div class="main" data-wish-edit="' + w.id + '" style="cursor:pointer"><div>' + esc(w.name) + '</div><div class="sub wrap">' + kind + " · " + money(w.saved) + " of " + money(w.cost) +
-    " · " + money(w.perPay) + pfN() + "</div><div class=\"sub\">" + togo + '</div>' + wishPlanLine(w, left) + '<div class="bar"><span style="width:' + pct.toFixed(0) + '%"></span></div></div>' +
+    " · " + money(w.perPay) + pfN() + "</div><div class=\"sub\">" + togo + '</div>' + wishPlanLine(w, left) + '<div class="bar"><span style="width:' + pct.toFixed(0) + '%"></span></div>' + histHtml(w.id, w.name) + '</div>' +
     up + down + '<button class="ghost" data-wish-add="' + w.id + '">Add</button>' +
     '<button class="ghost" data-del="wishlist:' + w.id + '">✕</button></li>';
 }
@@ -2326,7 +2345,12 @@ document.addEventListener("click", (e) => {
   if (e.target.dataset.wishMove) { const [id, dir] = e.target.dataset.wishMove.split(":"); moveWish(id, Number(dir)); return; }
   if (!e.target.dataset.wishAdd) return;
   const w = ST.wishlist.find((x) => x.id === e.target.dataset.wishAdd);
-  showAmountPrompt("Add to " + w.name, w.perPay, (v) => save("wishlist", w.id, { saved: Math.round((w.saved + v) * 100) / 100 }));
+  showAmountPrompt("Add to " + w.name, w.perPay, (v) => {
+    const b = writeBatch(db);
+    b.update(doc(db, "users", uid, "wishlist", w.id), { saved: Math.round((w.saved + v) * 100) / 100 });
+    b.set(doc(col("transfers")), { goalId: w.id, wish: true, type: "add", amount: round2(v), date: today(), note: "Extra", created: serverTimestamp() });
+    b.commit().catch((err) => toast("Save failed: " + err.message));
+  });
 });
 
 /* =========================================================
@@ -2509,7 +2533,7 @@ function spApply() {
     if (!(amt > 0)) return;
     total += amt;
     if (t.type === "buf") batch.update(doc(db, "users", uid, "accounts", t.item.id), { balance: increment(round2(amt)) });
-    else if (t.type === "wish") batch.update(doc(db, "users", uid, "wishlist", t.item.id), { saved: round2((t.item.saved || 0) + amt) });
+    else if (t.type === "wish") { batch.update(doc(db, "users", uid, "wishlist", t.item.id), { saved: round2((t.item.saved || 0) + amt) }); batch.set(doc(col("transfers")), { goalId: t.item.id, wish: true, type: "add", amount: round2(amt), date: today(), note: "Surplus pay", created: serverTimestamp() }); }
     else { batch.set(doc(col("transfers")), { goalId: t.item.id, type: "add", amount: round2(amt), date: today(), note: "Surplus pay", created: serverTimestamp() }); bumpGoalAccount(t.item.id, amt, batch); }
   };
   if (sp.mode === "top") give(spTargets().find((t) => t.type === "wish"), spTopAmount());
@@ -3837,7 +3861,7 @@ function applySmartAmount(amount) {
   const batch = writeBatch(db), buf = bufferAccount();
   const record = (amount, name, toId) => batch.set(doc(col("allotments")), { date: today(), amount: round2(amount), fromId: "", toId: toId || "", target: name, created: serverTimestamp() });
   plan.steps.forEach((s) => {
-    if (s.kind === "w") batch.update(doc(db, "users", uid, "wishlist", s.id), { saved: round2((s.raw.saved || 0) + s.amount) });
+    if (s.kind === "w") { batch.update(doc(db, "users", uid, "wishlist", s.id), { saved: round2((s.raw.saved || 0) + s.amount) }); batch.set(doc(col("transfers")), { goalId: s.id, wish: true, type: "add", amount: s.amount, date: today(), note: "Smart split", created: serverTimestamp() }); }
     else { batch.set(doc(col("transfers")), { goalId: s.id, type: "add", amount: s.amount, date: today(), note: "Smart split", created: serverTimestamp() }); bumpGoalAccount(s.id, s.amount, batch); }
     record(s.amount, s.name, "");
   });
