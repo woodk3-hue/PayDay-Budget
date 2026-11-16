@@ -2853,12 +2853,12 @@ function acctInfoHtml(id) {
   const a = acctById(id); if (!a) return "";
   const p = acctProjection(a), signed = (n) => (n >= 0 ? "+" : "−") + money(Math.abs(n));
   const items = p.bills.length ? p.bills.map((b) => '<div class="irow"><span>' + esc(b.name) + " · " + fmtDate(b.date) + "</span><b>−" + money(b.amount) + "</b></div>").join("") : '<div class="inote">Nothing due before payday.</div>';
-  return infoRow("Current balance", money(p.bal)) +
+  return recentMovesHtml(id) + infoSect("Before next payday", infoRow("Current balance", money(p.bal)) +
     '<div class="inote" style="padding-bottom:0">Upcoming bills this cycle (to ' + fmtDate(p.to) + ")</div>" + items +
     infoRow("Total bills", "−" + money(p.total)) + (p.buffer ? infoRow("Keep at least (incl. maintenance float)", "−" + money(p.buffer)) : "") +
     (p.rentDue ? infoRow("Rent due before payday", "+" + money(p.rentDue)) : "") + infoRow("Scheduled payday deposit", signed(p.sched)) + (p.on ? "" : '<div class="inote">Payday transfers are switched off, so none are counted.</div>') +
     infoRow("Projected after payday", money(p.net)) +
-    infoRow("Recommended net adjustment", p.adj ? signed(p.adj) : "None") + recentMovesHtml(id);
+    infoRow("Recommended net adjustment", p.adj ? signed(p.adj) : "None"));
 }
 // Tap an account row to edit it (update its balance). Swiping right still works too.
 document.addEventListener("click", (e) => {
