@@ -4196,9 +4196,9 @@ function subCycle(dateStr, freq) {
 // What PayDay already expects or recorded for these account(s) in the date range.
 function biPool(acct, from, to) {
   const accts = acct === "ALL" ? ST.accounts.map((a) => a.id) : [acct], out = [], inA = (id) => !!id && accts.includes(id);
-  const push = (date, amount, label, a, kind) => { if (date >= from && date <= to) out.push({ date: date, amount: round2(amount), label: label || "", acct: a, kind: kind }); };
-  ST.expenses.filter((e) => e.frequency === "once" && inA(e.accountId)).forEach((e) => push(e.date, -e.amount, e.description, e.accountId, "once"));
-  ST.income.filter((i) => inA(i.accountId)).forEach((i) => push(i.date, i.amount, i.source, i.accountId, "once"));
+  const push = (date, amount, label, a, kind, ref) => { if (date >= from && date <= to) out.push({ date: date, amount: round2(amount), label: label || "", acct: a, kind: kind, ref: ref || null }); };
+  ST.expenses.filter((e) => e.frequency === "once" && inA(e.accountId)).forEach((e) => push(e.date, -e.amount, e.description, e.accountId, "once", { coll: "expenses", id: e.id }));
+  ST.income.filter((i) => inA(i.accountId)).forEach((i) => push(i.date, i.amount, i.source, i.accountId, "once", { coll: "income", id: i.id }));
   ST.acctActivity.filter((a) => inA(a.accountId)).forEach((a) => push(a.date, a.amount, a.label, a.accountId, "once"));
   expenseItems().filter((it) => it.freq !== "once" && it.due).forEach((it) => {
     const x = it.x, sides = it.coll === "acctTransfers" ? [[x.fromId, -1], [x.toId, 1]] : [[x.accountId, -1]];
@@ -4210,21 +4210,36 @@ function biPool(acct, from, to) {
 function biAnalyse() {
   const rows = biCombine(), seen = biSeen();
   const from = rows.length ? rows[0].date : today(), to = rows.length ? rows[rows.length - 1].date : today();
-  const pool = biPool(bi.acct, from, to);
+  const pool = biPool(bi.acct, from, today());
   let matched = 0, handled = 0; const unmatched = [];
   rows.forEach((r) => {
     let best = null, bd = 99;
     pool.forEach((p) => { if (p.used || Math.abs(p.amount - r.amount) > 0.005) return; const dd = Math.abs(dayNum(p.date) - dayNum(r.date)); if (dd <= 4 && dd < bd) { best = p; bd = dd; } });
     if (best) { best.used = true; matched++; } else if (seen.has(r.key)) handled++; else unmatched.push(r);
   });
-  const pdOnly = pool.filter((p) => !p.used && p.date <= today()).sort((a, b) => a.date.localeCompare(b.date));
+  // Same amount but a different date (e.g. spends typed in later and dated that day): offer to fix the dates.
+  const loose = [], open = [];
+  unmatched.forEach((r) => {
+    let best = null, bd = 1e9;
+    pool.forEach((p) => { if (p.used || !p.ref || Math.abs(p.amount - r.amount) > 0.005) return; const dd = Math.abs(dayNum(p.date) - dayNum(r.date)); if (dd < bd) { best = p; bd = dd; } });
+    if (best && bd <= 31) { best.used = true; loose.push({ row: r, p: best }); } else open.push(r);
+  });
+  const internal = open.filter((r) => /internal transfer|linked account/i.test(r.desc)), missing = open.filter((r) => !internal.includes(r));
+  const pdOnly = pool.filter((p) => !p.used && p.date <= today() && p.date >= from).sort((a, b) => a.date.localeCompare(b.date));
   // Balance: the newest row's balance, if the file has one.
   let bal = null;
   if (bi.map.balance >= 0 && bi.acct !== "ALL") {
     const withBal = rows.filter((r) => Number.isFinite(r.balance));
-    if (withBal.length) { const maxD = withBal.reduce((m, r) => (r.date > m ? r.date : m), ""), cand = withBal.filter((r) => r.date === maxD); bal = { date: maxD, value: round2(cand[cand.length - 1].balance) }; }
+    if (withBal.length) {
+      const maxD = withBal.reduce((m, r) => (r.date > m ? r.date : m), ""), cand = withBal.filter((r) => r.date === maxD);
+      // Several lines on the newest day: the latest is the one whose balance = another line's balance + its own amount (works for newest-first and oldest-first files).
+      const latest = cand.find((c) => cand.some((o) => o !== c && Math.abs(c.balance - (o.balance + c.amount)) < 0.005)) || cand[cand.length - 1];
+      // Lines with no balance are pending (not posted yet): they already count in what PayDay should show as spendable.
+      const pending = round2(rows.filter((r) => !Number.isFinite(r.balance)).reduce((t, r) => t + r.amount, 0));
+      bal = { date: maxD, posted: round2(latest.balance), pending: pending, value: round2(latest.balance + pending) };
+    }
   }
-  return { rows: rows, total: rows.length, skipped: handled, matched: matched, unmatched: unmatched, pdOnly: pdOnly, bal: bal, from: from, to: to };
+  return { rows: rows, total: rows.length, skipped: handled, matched: matched + loose.length, loose: loose, internal: internal, unmatched: missing, pdOnly: pdOnly, bal: bal, from: from, to: to };
 }
 // Bank PDFs (e.g. a Macquarie "Transaction listing report"): read the table by where each piece of text sits on the page.
 async function biPdfRows(file) {
@@ -4325,10 +4340,12 @@ function biStep3() {
     '<button class="ghost" data-bi-add="' + i + '">Add</button><button class="ghost" data-bi-skip="' + i + '">Skip</button></div></div><span class="amt ' + (x.amount >= 0 ? "ok" : "bad") + '">' + signedMoney(x.amount) + "</span></li>";
   const missing = r.unmatched.length ? '<ul class="list">' + r.unmatched.map(rowHtml).join("") + "</ul>" : '<div class="inote ok">Everything in your bank file is already in PayDay.</div>';
   const only = r.pdOnly.length ? '<ul class="list">' + r.pdOnly.slice(0, 40).map((p) => '<li><div class="main"><div>' + esc(p.label || "Item") + '</div><div class="sub">' + fmtDate(p.date) + (p.kind === "repeat" ? " · repeating" : "") + (acctById(p.acct) ? " · " + esc(acctById(p.acct).name) : "") + '</div></div><span class="amt ' + (p.amount >= 0 ? "ok" : "bad") + '">' + signedMoney(p.amount) + "</span></li>").join("") + "</ul>" : '<div class="inote">Nothing.</div>';
-  const balHtml = r.bal && acctById(bi.acct) ? infoRow("Bank balance on " + fmtDate(r.bal.date), money(r.bal.value)) + infoRow("PayDay balance", money(acctById(bi.acct).balance || 0)) + (Math.abs(r.bal.value - (acctById(bi.acct).balance || 0)) > 0.004 ? '<button class="plain" style="width:100%;margin-top:6px" data-bi-setbal="' + r.bal.value + '">Set PayDay to ' + money(r.bal.value) + "</button>" : '<div class="inote ok">Matches.</div>') : "";
+  const balHtml = r.bal && acctById(bi.acct) ? infoRow("Bank balance on " + fmtDate(r.bal.date), money(r.bal.posted)) + (r.bal.pending ? infoRow("Pending items", signedMoney(r.bal.pending)) + infoRow("Available after pending", money(r.bal.value)) : "") + infoRow("PayDay balance", money(acctById(bi.acct).balance || 0)) + (Math.abs(r.bal.value - (acctById(bi.acct).balance || 0)) > 0.004 ? '<button class="plain" style="width:100%;margin-top:6px" data-bi-setbal="' + r.bal.value + '">Set PayDay to ' + money(r.bal.value) + "</button>" : '<div class="inote ok">Matches.</div>') : "";
   biShell("<h3>Bank file vs PayDay</h3>" + '<p class="note" style="margin:0 0 6px">' + fmtDate(r.from) + " to " + fmtDate(r.to) + " · " + r.total + " lines · <b class=\"ok\">" + r.matched + " already in PayDay</b>" + (r.skipped ? " · " + r.skipped + " already handled before" : "") + "</p>" + balHtml +
     '<div class="isect">Not in PayDay (' + r.unmatched.length + ")</div>" + missing +
     (r.unmatched.length ? '<div style="display:flex;gap:8px;margin-top:8px"><button class="plain" style="flex:1" data-bi-skipall>Skip all</button><button class="plain" style="flex:1" data-bi-addall>Add all payments</button></div>' : "") +
+    (r.loose.length ? '<div class="isect">Matched, but the date differs (' + r.loose.length + ')</div><ul class="list">' + r.loose.map((x) => '<li><div class="main"><div>' + esc(x.p.label || "Item") + '</div><div class="sub">PayDay ' + fmtDate(x.p.date) + " → bank " + fmtDate(x.row.date) + '</div></div><span class="amt ' + (x.row.amount >= 0 ? "ok" : "bad") + '">' + signedMoney(x.row.amount) + "</span></li>").join("") + '</ul><button class="plain" style="width:100%;margin-top:6px" data-bi-fixdates>Fix these dates</button>' : "") +
+    (r.internal.length ? '<div class="isect">Looks like moves between your accounts (' + r.internal.length + ')</div><ul class="list">' + r.internal.map((x) => '<li><div class="main"><div>' + esc(x.desc.slice(0, 60)) + '</div><div class="sub">' + fmtDate(x.date) + '</div></div><span class="amt ' + (x.amount >= 0 ? "ok" : "bad") + '">' + signedMoney(x.amount) + "</span></li>").join("") + '</ul><button class="plain" style="width:100%;margin-top:6px" data-bi-skipint>Skip these</button>' : "") +
     '<div class="isect">In PayDay but not in your file (' + r.pdOnly.length + ")</div>" + only +
     '<div class="actions"><button class="plain" data-bi-back2>Back</button><button data-bi-close>Done</button></div>');
 }
@@ -4352,6 +4369,11 @@ function biClick(e) {
   const li = e.target.closest(".birow"), r = bi.res;
   if (d.biAdd !== undefined && li) { const x = r.unmatched[+d.biAdd], cat = li.querySelector("[data-bi-cat]"); if (x && biAdd(x, biRowAcct(li), cat ? cat.value : "")) { r.unmatched.splice(+d.biAdd, 1); biRefresh(); } return; }
   if (d.biSkip !== undefined) { const x = r.unmatched[+d.biSkip]; if (x) { biRemember([x.key]); r.unmatched.splice(+d.biSkip, 1); biRefresh(); } return; }
+  if (d.biFixdates !== undefined) {
+    const b = writeBatch(db); r.loose.forEach((x) => b.update(doc(db, "users", uid, x.p.ref.coll, x.p.ref.id), { date: x.row.date }));
+    b.commit().catch((err) => toast("Save failed: " + err.message)); setTimeout(biRefresh, 600); return;
+  }
+  if (d.biSkipint !== undefined) { biRemember(r.internal.map((x) => x.key)); biRefresh(); return; }
   if (d.biSkipall !== undefined) { biRemember(r.unmatched.map((x) => x.key)); r.unmatched = []; biRefresh(); return; }
   if (d.biAddall !== undefined) {
     const outs = r.unmatched.filter((x) => x.amount < 0);
