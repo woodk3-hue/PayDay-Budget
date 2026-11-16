@@ -472,6 +472,11 @@ input[type=file]{padding:9px 12px}
       <button id="alertsBtn">Turn on alerts</button>
     </div>
     </div>
+    <div class="card"><h2>Your data</h2>
+      <p class="note" style="margin-bottom:8px">Download a copy to check against your bank. The files contain your finances, so only share them with someone you trust.</p>
+      <button id="exportJson" class="plain" style="width:100%">Export my data (.json)</button>
+      <button id="exportCsv" class="plain" style="width:100%;margin-top:8px">Export account activity (.csv)</button>
+    </div>
     <div class="card"><h2>Pay & region</h2>
       <div id="setApp"></div>
       <button id="setAppBtn" class="ghost" style="margin-top:6px">Run setup</button>
@@ -1157,6 +1162,26 @@ function openWizard() {
   document.body.appendChild(wzEl); wzRender();
 }
 $("setAppBtn").addEventListener("click", openWizard);
+/* ---- Export: a copy of your data as a file (no push keys or bill PDFs) ---- */
+function downloadFile(name, type, text) {
+  const url = URL.createObjectURL(new Blob([text], { type: type })), a = document.createElement("a");
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+const plain = (rows) => rows.map((r) => { const o = {}; Object.keys(r).forEach((k) => { const v = r[k]; o[k] = v && typeof v === "object" && "seconds" in v ? new Date(v.seconds * 1000).toISOString() : v; }); return o; });
+$("exportJson").addEventListener("click", () => {
+  const out = { exportedAt: new Date().toISOString(), app: "PayDay Budget", payFrequency: APP.payFrequency, currency: APP.currency };
+  ["accounts", "banks", "acctActivity", "acctTransfers", "income", "incomeSources", "expenses", "subscriptions", "bills", "properties", "goals", "transfers", "wishlist", "groups", "settings", "allotments", "paydayMoves"].forEach((k) => { out[k] = plain(ST[k] || []); });
+  downloadFile("payday-export-" + today() + ".json", "application/json", JSON.stringify(out, null, 2));
+});
+const csvCell = (v) => '"' + String(v ?? "").replace(/"/g, '""') + '"';
+$("exportCsv").addEventListener("click", () => {
+  const rows = [["Date", "Account", "What", "Note", "Amount", "Kind"]];
+  ST.acctActivity.slice().sort((a, b) => a.date.localeCompare(b.date)).forEach((x) => { const a = acctById(x.accountId); rows.push([x.date, a ? acctLabel(a) : "", x.label || "", x.note || "", x.amount, x.kind || ""]); });
+  rows.push([]); rows.push(["Account", "Balance now"]);
+  ST.accounts.forEach((a) => rows.push([acctLabel(a), a.balance || 0]));
+  downloadFile("payday-account-activity-" + today() + ".csv", "text/csv", rows.map((r) => r.map(csvCell).join(",")).join("\n"));
+});
 // A brand-new, empty account gets the wizard once; accounts that already hold data keep the defaults (fortnightly, AUD, July).
 function maybeWizard() {
   if (wzDone || loadedColls.size < 17) return;
