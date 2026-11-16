@@ -4226,6 +4226,42 @@ function biAnalyse() {
   }
   return { rows: rows, total: rows.length, skipped: handled, matched: matched, unmatched: unmatched, pdOnly: pdOnly, bal: bal, from: from, to: to };
 }
+// Bank PDFs (e.g. a Macquarie "Transaction listing report"): read the table by where each piece of text sits on the page.
+async function biPdfRows(file) {
+  const lib = await loadPdfJs(), pdf = await lib.getDocument({ data: await file.arrayBuffer() }).promise, lines = [];
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const tc = await (await pdf.getPage(p)).getTextContent(), rows = [];
+    tc.items.forEach((it) => {
+      if (!it.str || !it.str.trim()) return;
+      const y = Math.round(it.transform[5]); let row = rows.find((r) => Math.abs(r.y - y) <= 2);
+      if (!row) { row = { y: y, parts: [] }; rows.push(row); }
+      row.parts.push({ x: it.transform[4], s: it.str.trim() });
+    });
+    rows.sort((a, b) => b.y - a.y).forEach((r) => lines.push(r.parts.sort((a, b) => a.x - b.x)));
+  }
+  const text = lines.map((l) => l.map((x) => x.s).join(" ")).join("\n");
+  const range = text.match(/From\s+(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})\s+to\s+(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/i);
+  const endYear = range ? +range[6] : new Date().getFullYear(), endMonth = range ? BI_MONTHS[range[5].slice(0, 3).toLowerCase()] || 12 : 12;
+  const hdr = lines.find((l) => l.some((x) => /^Debits$/i.test(x.s)) && l.some((x) => /^Credits$/i.test(x.s)));
+  if (!hdr) throw new Error("I couldn't find the Debits and Credits columns in that PDF. Try the CSV version from your bank.");
+  const colX = (name) => { const p = hdr.find((x) => x.s.toLowerCase() === name); return p ? p.x : null; };
+  const dX = colX("debits"), cX = colX("credits"), bX = colX("balance"), descX = colX("description");
+  if (dX === null || cX === null || descX === null) throw new Error("That PDF's columns aren't what I expected. Try the CSV version from your bank.");
+  const isAmt = (s) => /^[\d,]+\.\d{2}$/.test(s), num = (s) => parseFloat(s.replace(/,/g, "")), recs = []; let cur = null;
+  lines.forEach((l) => {
+    if (l === hdr) return;
+    const first = l[0] && l[0].x < descX - 20 ? l[0].s : "";
+    const dm = first.match(/^([A-Za-z]{3})[a-z]*\s+(\d{1,2})$/);
+    const amts = l.filter((x) => isAmt(x.s) && x.x >= dX - 25), descParts = l.filter((x) => x.x >= descX - 4 && x.x < dX - 6 && !isAmt(x.s));
+    if (dm && BI_MONTHS[dm[1].toLowerCase()]) {
+      const mo = BI_MONTHS[dm[1].toLowerCase()], y = mo > endMonth ? endYear - 1 : endYear, desc = descParts.map((x) => x.s).join(" ");
+      cur = { date: y + "-" + String(mo).padStart(2, "0") + "-" + String(+dm[2]).padStart(2, "0"), desc: desc, debit: 0, credit: 0, bal: "" };
+      amts.forEach((a) => { const col = [[Math.abs(a.x - dX), "d"], [Math.abs(a.x - cX), "c"], [bX === null ? 9999 : Math.abs(a.x - bX), "b"]].sort((p, q) => p[0] - q[0])[0][1]; if (col === "d") cur.debit = num(a.s); else if (col === "c") cur.credit = num(a.s); else cur.bal = num(a.s); });
+      recs.push(cur);
+    } else if (cur && !first && descParts.length && !amts.length) cur.desc += " " + descParts.map((x) => x.s).join(" ");
+  });
+  return [["Date", "Description", "Amount", "Balance"]].concat(recs.filter((r) => r.debit || r.credit).map((r) => [r.date, r.desc.trim(), String(round2(r.credit - r.debit)), r.bal === "" ? "" : String(r.bal)]));
+}
 function biShell(inner) {
   if (!biEl) {
     biEl = document.createElement("div"); biEl.className = "overlay sheet";
@@ -4241,9 +4277,9 @@ function openBankImport() {
 }
 function biStep1(msg) {
   const accts = ST.accounts.map((a) => '<option value="' + esc(a.id) + '"' + (bi.acct === a.id ? " selected" : "") + ">" + esc(acctLabel(a)) + "</option>").join("");
-  biShell('<h3>Import a bank file</h3><p class="note" style="margin:0 0 8px">Download a CSV from your bank (you can add several, for example the last few fortnights). Nothing is uploaded anywhere; it is read on this device.</p>' +
+  biShell('<h3>Import a bank file</h3><p class="note" style="margin:0 0 8px">Download a CSV or PDF transaction report from your bank (you can add several, for example the last few fortnights). Nothing is uploaded anywhere; it is read on this device.</p>' +
     '<label class="sec">Which account is it for?<select id="biAcct"><option value="">Choose…</option>' + accts + '<option value="ALL"' + (bi.acct === "ALL" ? " selected" : "") + '>All accounts (one combined file)</option></select></label>' +
-    '<label class="sec">Bank file(s) (.csv)<input type="file" id="biFile" accept=".csv,text/csv,.txt" multiple></label>' +
+    '<label class="sec">Bank file(s) (.csv or .pdf)<input type="file" id="biFile" accept=".csv,text/csv,.txt,.pdf,application/pdf" multiple></label>' +
     (msg ? '<p class="note bad" style="margin:8px 0 0">' + esc(msg) + "</p>" : "") +
     '<div class="actions"><button class="plain" data-bi-close>Cancel</button><button data-bi-read>Read files</button></div>');
 }
@@ -4253,7 +4289,14 @@ async function biRead() {
   if (!acct) { biStep1("Choose the account first."); $("biAcct").focus(); return; }
   if (!files.length) { biStep1("Choose at least one file."); return; }
   bi.acct = acct; lsSet("bank-last-acct", acct); bi.files = [];
-  for (const f of files) { const text = await f.text(), rows = parseCsv(text, biDelim(text)); if (rows.length > 1) bi.files.push({ name: f.name, rows: rows }); }
+  for (const f of files) {
+    let rows = [];
+    try {
+      if (/\.pdf$/i.test(f.name) || f.type === "application/pdf") rows = await biPdfRows(f);
+      else { const text = await f.text(); rows = parseCsv(text, biDelim(text)); }
+    } catch (err) { biStep1(f.name + ": " + err.message); return; }
+    if (rows.length > 1) bi.files.push({ name: f.name, rows: rows });
+  }
   if (!bi.files.length) { biStep1("Those files look empty."); return; }
   bi.header = bi.files[0].rows[0].map((h) => String(h).trim());
   const sig = biSigKey(bi.header); let saved = null; try { saved = JSON.parse(lsGet(sig) || "null"); } catch (e) { saved = null; }
