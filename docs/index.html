@@ -334,8 +334,9 @@ nav.none::before{opacity:0}
 #bankGroups li{cursor:pointer}
 .pstat{font-size:13px;font-weight:600;margin-top:2px}
 .pstat.red{color:var(--red)}.pstat.amber{color:var(--amber)}.pstat.green{color:var(--green)}.pstat.blue{color:#0a84ff}.pstat.idle{color:var(--muted);font-weight:400}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
 #peopleChips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
-#peopleChips button{min-height:36px;padding:0 12px;font-size:14px;background:var(--brand-soft);color:var(--brand);box-shadow:none;border-radius:99px}
+#peopleChips button,.chips button{min-height:36px;padding:0 12px;font-size:14px;background:var(--brand-soft);color:var(--brand);box-shadow:none;border-radius:99px}
 /* Floating quick add: Home only, above the tab bar, bottom right */
 .fab{display:none;position:fixed;right:16px;bottom:calc(86px + env(safe-area-inset-bottom));width:58px;height:58px;min-height:58px;padding:0;border-radius:50%;z-index:12;align-items:center;justify-content:center;color:var(--on-brand,#fff);
   background:linear-gradient(180deg,rgba(255,255,255,.28),rgba(255,255,255,0) 55%),var(--brand);box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 8px 22px rgba(0,0,0,.28);transition:transform .15s}
@@ -343,6 +344,9 @@ nav.none::before{opacity:0}
 .fab svg{width:28px;height:28px;pointer-events:none}
 body[data-view=home] nav:not(.hidden)+.fab{display:flex}
 @media (prefers-reduced-motion:reduce){.fab{transition:none}}
+.chips button.on{background:var(--brand);color:var(--on-brand,#fff)}
+.spenditem{padding-left:28px;background:var(--fill)}
+.spenditem select{margin-top:4px;min-height:36px;font-size:14px;padding:4px 8px}
 .itrow{display:grid;grid-template-columns:96px 1fr;gap:8px;margin-bottom:8px}
 .swatches{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px}
 .swatches button{width:44px;height:44px;min-height:44px;padding:0;border-radius:50%;background:var(--sw);box-shadow:inset 0 0 0 1px rgba(128,128,128,.35)}
@@ -477,6 +481,7 @@ input[type=file]{padding:9px 12px}
       <button id="exportJson" class="plain" style="width:100%">Export my data (.json)</button>
       <button id="exportCsv" class="plain" style="width:100%;margin-top:8px">Export account activity (.csv)</button>
     </div>
+    <div class="card"><h2>Spending categories</h2><div class="chips" id="catManage"></div><button id="addCatBtn" class="ghost" style="margin-top:6px">+ Add category</button></div>
     <div class="card"><h2>Pay & region</h2>
       <div id="setApp"></div>
       <button id="setAppBtn" class="ghost" style="margin-top:6px">Run setup</button>
@@ -557,6 +562,9 @@ input[type=file]{padding:9px 12px}
       <div class="chart" id="statsChart"></div>
       <div class="legend"><span><i style="background:var(--green)"></i>Income</span><span><i style="background:var(--brand)"></i>Expenses</span></div>
     </div>
+    <div class="card" id="spendCard"><h2>Where my spending went</h2><p class="note" id="spendSummary" style="margin-bottom:8px"></p>
+      <div class="toggle" id="spendBy"><button data-sb="cat" class="on">By category</button><button data-sb="acct">By account</button></div>
+      <ul class="list" id="spendList" style="margin-top:8px"></ul></div>
     <div class="card"><h2>Spending by category</h2><ul class="list" id="statsCats"></ul></div>
     <div class="card"><h2>Income by source</h2><ul class="list" id="statsSources"></ul></div>
   </section>
@@ -654,6 +662,7 @@ input[type=file]{padding:9px 12px}
             <option value="quarterly">Quarterly</option><option value="yearly">Yearly</option>
           </select>
         </label>
+        <label class="full" id="spendCatWrap">Spending category<select name="spendCat" id="spendCatSel"></select></label>
         <label class="full">Name<input name="description" required placeholder="e.g. Woolworths"></label>
         <label class="full">Paid from<select name="accountId" class="acctSel"></select></label>
         <label class="check full"><input type="checkbox" name="manual"> I pay this one myself</label>
@@ -750,6 +759,7 @@ input[type=file]{padding:9px 12px}
         <label>Date<input type="date" name="date" required></label>
         <div class="full" id="qWho"><label>Sent to<input name="who" list="peopleList" placeholder="e.g. Cat" autocomplete="off"></label><div class="chips" id="peopleChips"></div></div>
         <label class="full" id="qWhat"><span id="qWhatLbl">What for</span><input name="what" placeholder="e.g. Travel insurance"></label>
+        <div class="full" id="qCatWrap"><div class="subh" style="margin:0 0 4px">Category</div><div class="chips" id="catChips"></div></div>
         <label class="full"><span id="qFromLbl">Paid from</span><select name="fromId" class="acctSel" data-ph="Choose the account…" required></select></label>
         <label class="full hidden" id="qTo">To my account<select name="toId" class="acctSel" data-ph="Choose the account…"></select></label>
         <datalist id="peopleList"></datalist>
@@ -1199,6 +1209,7 @@ function render() {
   renderAccountSelects(); renderAccounts(); renderPaydaySetting(); scheduleApply(); renderSetApp();
   maybeWizard();
   sorters.forEach((x) => x.refresh());
+  renderCatManage(); renderSpendCatSelect();
 }
 
 function subsSorted() {
@@ -2661,6 +2672,7 @@ function renderStats() {
   for (let i = 0; i < n; i++) cols.push(statsChartCol(statsOffset - (n - 1) + i, max));
   $("statsChart").innerHTML = cols.join("");
 
+  renderSpending(t);
   const cats = statsCategories(r, t), total = cats.reduce((x, c) => x + c[1], 0);
   $("statsCats").innerHTML = cats.length ? cats.map((c) => statsBarRow(c[0], c[1], cats[0][1], Math.round((c[1] / total) * 100) + "% of expenses")).join("")
     : '<li class="empty">No spending in this period.</li>';
@@ -2997,7 +3009,7 @@ $("acctForm").addEventListener("submit", (e) => {
   if (old && drop > 0.004) showItemise(old, drop);
 });
 // "Where did it go?": itemise a balance drop as individual spends. They are recorded as already paid, so the new balance isn't deducted twice.
-function itemiseRow() { return '<div class="itrow"><input type="number" class="itamt" min="0" step="0.01" inputmode="decimal" placeholder="$"><input type="text" class="itwhat" maxlength="60" placeholder="What for"></div>'; }
+function itemiseRow() { return '<div class="itrow"><input type="number" class="itamt" min="0" step="0.01" inputmode="decimal" placeholder="$"><input type="text" class="itwhat" maxlength="60" placeholder="What for"><select class="itcat" style="grid-column:1/-1">' + spendCats().map((c) => "<option" + (c === "Other" ? " selected" : "") + ">" + esc(c) + "</option>").join("") + "</select></div>"; }
 function showItemise(acct, drop) {
   const wrap = document.createElement("div");
   wrap.className = "overlay sheet";
@@ -3014,7 +3026,7 @@ function showItemise(acct, drop) {
       if (sum() > drop + 0.005) { toast("That's more than the " + money(drop) + " the balance went down by."); return; }
       [...wrap.querySelectorAll(".itrow")].forEach((r) => {
         const amt = round2(Number(r.querySelector(".itamt").value) || 0); if (!(amt > 0)) return;
-        save("expenses", null, { date: today(), amount: amt, description: r.querySelector(".itwhat").value.trim() || "Spend", frequency: "once", category: "Other", groupId: "", accountId: acct.id, manual: false, nextApply: "", remindDays: null, lastNotified: null });
+        save("expenses", null, { date: today(), amount: amt, description: r.querySelector(".itwhat").value.trim() || "Spend", frequency: "once", category: "Other", spendCat: r.querySelector(".itcat").value || "Other", groupId: "", accountId: acct.id, manual: false, nextApply: "", remindDays: null, lastNotified: null });
       });
       wrap.remove();
     } else if (d.itSkip !== undefined || e.target === wrap) wrap.remove();
@@ -3397,7 +3409,7 @@ function expenseItems() {
 }
 const EDIT_ATTR = { expenses: "data-edit-expense", subscriptions: "data-edit-sub", bills: "data-edit-bill", acctTransfers: "data-edit-xfer" };
 function itemRow(it, k) {
-  const meta = it.freq === "once" ? "One-off" : cap(it.freq) + " " + money(it.amount);
+  const meta = it.freq === "once" ? "One-off" + (it.coll === "expenses" && it.x.spendCat ? " · " + it.x.spendCat : "") : cap(it.freq) + " " + money(it.amount);
   const due = it.due ? " · " + (it.coll === "acctTransfers" ? "next " : "due ") + fmtDate(it.due) : "";
   return '<li><div class="main"><div>' + esc(it.name) + '</div><div class="sub wrap">' + meta + due + '</div></div><span class="amt">' + (it.fn ? money(it.fn * k) : "—") + '</span>' +
     '<button class="ghost" ' + EDIT_ATTR[it.coll] + '="' + it.x.id + '">Edit</button>' +
@@ -3951,6 +3963,7 @@ function setQuickTab(t) {
   const q = QUICK[t], f = $("quickForm").elements;
   document.querySelectorAll("#quickTabs [data-qt]").forEach((b) => b.classList.toggle("on", b.dataset.qt === t));
   $("qWho").classList.toggle("hidden", t !== "send");
+  $("qCatWrap").classList.toggle("hidden", t !== "exp");
   $("qWhat").classList.toggle("hidden", t === "move");
   $("qTo").classList.toggle("hidden", t !== "move");
   $("qFromLbl").textContent = q.from; $("qWhatLbl").textContent = q.what; f.what.placeholder = q.ph; f.what.required = q.need;
@@ -3965,6 +3978,7 @@ function prepQuick() {
   const names = peopleNames();
   $("peopleList").innerHTML = names.map((n) => '<option value="' + esc(n) + '"></option>').join("");
   $("peopleChips").innerHTML = names.map((n) => '<button type="button" data-who="' + esc(n) + '">' + esc(n) + "</button>").join("");
+  quickCat = ""; quickCatTouched = false; renderCatChips();
   setQuickTab(quickTab);
 }
 $("quickTabs").addEventListener("click", (e) => { const b = e.target.closest("[data-qt]"); if (b) setQuickTab(b.dataset.qt); });
@@ -3977,9 +3991,10 @@ $("quickForm").addEventListener("submit", (e) => {
   if (!from || !acctById(from)) { toast("Choose the account you used."); return; }
   const what = f.what.value.trim();
   if (quickTab === "exp" || quickTab === "week") {
-    const d = { date: date, amount: amount, description: what || "Spending this week", frequency: "once", category: quickTab === "week" ? "Everyday spending" : "Other", groupId: "", accountId: from, manual: false, remindDays: null, lastNotified: null };
+    const d = { date: date, amount: amount, description: what || "Spending this week", frequency: "once", category: quickTab === "week" ? "Everyday spending" : "Other", spendCat: quickTab === "exp" ? quickCat || "Other" : "", lump: quickTab === "week", groupId: "", accountId: from, manual: false, remindDays: null, lastNotified: null };
     linkFields(d, date, null);
     save("expenses", null, d);
+    if (quickTab === "exp") learnCat(what, d.spendCat);
   } else {
     const who = f.who.value.trim(), to = quickTab === "move" ? f.toId.value : "";
     if (quickTab === "move" && (!to || to === from)) { toast("Choose a different account to move it to."); return; }
@@ -3991,6 +4006,90 @@ $("quickForm").addEventListener("submit", (e) => {
   e.target.reset(); f.date.value = today();
   closeSheets(false);
 });
+
+/* =========================================================
+   SPENDING CATEGORIES and the spending report (one-offs and lump entries by category or account)
+   ========================================================= */
+const DEFAULT_SPEND_CATS = ["Eating out", "Coffee", "Groceries", "Shopping", "Gifts", "Transport", "Health", "Entertainment", "Other"];
+const spendCats = () => { const x = ST.settings.find((y) => y.id === "spendCats"); return x && Array.isArray(x.list) && x.list.length ? x.list : DEFAULT_SPEND_CATS; };
+function saveSpendCats(list) { setDoc(doc(db, "users", uid, "settings", "spendCats"), { list: list, updated: serverTimestamp() }, { merge: true }).catch((e) => toast("Save failed: " + e.message)); }
+const CAT_WORDS = { coffee: "Coffee", cafe: "Coffee", merlo: "Coffee", starbucks: "Coffee", woolworths: "Groceries", coles: "Groceries", aldi: "Groceries", groceries: "Groceries", amazon: "Shopping", kmart: "Shopping", bunnings: "Shopping",
+  uber: "Transport", linkt: "Transport", toll: "Transport", ampol: "Transport", caltex: "Transport", parking: "Transport", petrol: "Transport", chemist: "Health", doctor: "Health", pharmacy: "Health",
+  gift: "Gifts", present: "Gifts", lunch: "Eating out", dinner: "Eating out", takeaway: "Eating out", food: "Eating out", subway: "Eating out", mcdonalds: "Eating out", cinema: "Entertainment", movie: "Entertainment" };
+let quickCat = "", quickCatTouched = false;
+function suggestCat(what) {
+  const w = String(what || "").trim().toLowerCase(); if (!w) return "";
+  let map = {}; try { map = JSON.parse(lsGet("quick-catmap") || "{}"); } catch (e) { map = {}; }
+  if (map[w] && spendCats().includes(map[w])) return map[w];
+  const hit = Object.keys(CAT_WORDS).find((k) => w.includes(k));
+  return hit && spendCats().includes(CAT_WORDS[hit]) ? CAT_WORDS[hit] : "";
+}
+function renderCatChips() {
+  $("catChips").innerHTML = spendCats().map((c) => '<button type="button" data-cat="' + esc(c) + '"' + (quickCat === c ? ' class="on"' : "") + ">" + esc(c) + "</button>").join("") + '<button type="button" data-catnew>+ New</button>';
+}
+$("catChips").addEventListener("click", (e) => {
+  if (e.target.closest("[data-catnew]")) {
+    showTextPrompt("New spending category", (name) => {
+      if (!spendCats().some((x) => x.toLowerCase() === name.toLowerCase())) saveSpendCats(spendCats().concat([name]));
+      quickCat = name; quickCatTouched = true; renderCatChips();
+    });
+    return;
+  }
+  const b = e.target.closest("[data-cat]"); if (b) { quickCat = b.dataset.cat; quickCatTouched = true; renderCatChips(); }
+});
+$("quickForm").elements.what.addEventListener("input", (e) => { if (quickTab !== "exp" || quickCatTouched) return; const s2 = suggestCat(e.target.value); if (s2) { quickCat = s2; renderCatChips(); } });
+function learnCat(what, cat) {
+  const w = String(what || "").trim().toLowerCase(); if (!w || !cat) return;
+  let map = {}; try { map = JSON.parse(lsGet("quick-catmap") || "{}"); } catch (e) { map = {}; }
+  map[w] = cat; lsSet("quick-catmap", JSON.stringify(map));
+}
+// Settings: manage the list
+function renderCatManage() {
+  $("catManage").innerHTML = spendCats().map((c) => '<button type="button" data-catdel="' + esc(c) + '" aria-label="Remove ' + esc(c) + '">' + esc(c) + " ✕</button>").join("");
+}
+$("catManage").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-catdel]"); if (!b) return;
+  showInlineConfirm("Remove the " + b.dataset.catdel + " category? Items keep their label.", () => saveSpendCats(spendCats().filter((c) => c !== b.dataset.catdel)), "Remove");
+});
+$("addCatBtn").addEventListener("click", () => showTextPrompt("New spending category", (name) => { if (!spendCats().some((c) => c.toLowerCase() === name.toLowerCase())) saveSpendCats(spendCats().concat([name])); }));
+// Expense form: category for one-offs
+function renderSpendCatSelect() {
+  const sel = $("spendCatSel"), keep = sel.value;
+  setOptions(sel, '<option value="">—</option>' + spendCats().map((c) => '<option value="' + esc(c) + '">' + esc(c) + "</option>").join(""));
+  if (keep) sel.value = keep;
+  $("spendCatWrap").classList.toggle("hidden", $("expenseForm").elements.frequency.value !== "once");
+}
+$("expenseForm").elements.frequency.addEventListener("change", renderSpendCatSelect);
+// Report (on the Stats page, for the period picked there)
+let spendBy = "cat";
+const spendOpen = {};
+function spendKey(e) { return spendBy === "acct" ? (acctById(e.accountId) ? acctById(e.accountId).name : "No account") : e.lump ? "Not itemised" : e.spendCat || "Untagged"; }
+function spendItemRow(e) {
+  const a = acctById(e.accountId);
+  const recat = spendBy === "cat" && !e.lump ? '<select data-recat="' + e.id + '" aria-label="Category">' + ['<option value="">Untagged</option>'].concat(spendCats().map((c) => '<option value="' + esc(c) + '"' + (e.spendCat === c ? " selected" : "") + ">" + esc(c) + "</option>")).join("") + "</select>" : "";
+  return '<li class="spenditem"><div class="main"><div>' + esc(e.description || "Spend") + '</div><div class="sub wrap">' + fmtDate(e.date) + (a ? " · " + esc(a.name) : "") + "</div>" + recat + '</div><span class="amt">' + money(e.amount) + "</span></li>";
+}
+function renderSpending(t) {
+  const groups = {};
+  t.once.forEach((e) => { const k = spendKey(e); (groups[k] || (groups[k] = [])).push(e); });
+  const rows = Object.keys(groups).map((k) => ({ k: k, items: groups[k].sort((a, b) => b.date.localeCompare(a.date)), total: round2(groups[k].reduce((s2, e) => s2 + e.amount, 0)) })).sort((a, b) => b.total - a.total);
+  const prev = statsTotals(statsRange(statsOffset - 1)), per = { fortnight: PF().noun, month: "month", year: "year" }[statsView], cur = round2(t.spent), pv = round2(prev.spent), diff = round2(cur - pv);
+  $("spendSummary").textContent = "Spent " + money(cur) + " · last " + per + " " + money(pv) + (pv ? " (" + (diff >= 0 ? "+" : "−") + money(Math.abs(diff)) + ")" : "");
+  document.querySelectorAll("#spendBy [data-sb]").forEach((b) => b.classList.toggle("on", b.dataset.sb === spendBy));
+  const max = rows.length ? rows[0].total : 0;
+  $("spendList").innerHTML = rows.length ? rows.map((r) => {
+    const open = !!spendOpen[spendBy + ":" + r.k], pct = max ? Math.round((r.total / max) * 100) : 0;
+    return '<li class="spendrow" data-sk="' + esc(r.k) + '" style="cursor:pointer"><div class="main"><div>' + esc(r.k) + (open ? " ▾" : " ▸") + '</div><div class="bar"><span style="width:' + pct + '%"></span></div><div class="sub">' +
+      r.items.length + (r.items.length === 1 ? " item" : " items") + (t.spent ? " · " + Math.round((r.total / t.spent) * 100) + "%" : "") + '</div></div><span class="amt">' + money(r.total) + "</span></li>" + (open ? r.items.map(spendItemRow).join("") : "");
+  }).join("") : '<li class="empty">No one-off spending in this period.</li>';
+}
+$("spendBy").addEventListener("click", (e) => { const b = e.target.closest("[data-sb]"); if (b) { spendBy = b.dataset.sb; renderStats(); } });
+$("spendList").addEventListener("click", (e) => {
+  if (e.target.closest("select")) return;
+  const row = e.target.closest("[data-sk]"); if (!row) return;
+  const k = spendBy + ":" + row.dataset.sk; spendOpen[k] = !spendOpen[k]; renderStats();
+});
+$("spendList").addEventListener("change", (e) => { const s2 = e.target.closest("[data-recat]"); if (s2) save("expenses", s2.dataset.recat, { spendCat: s2.value }); });
 
 /* =========================================================
    SMART DUE DATE — pick the next due date, or work it out from the last payment
