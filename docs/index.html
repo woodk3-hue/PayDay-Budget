@@ -412,7 +412,7 @@ input[type=file]{padding:9px 12px}
       <h2 id="periodTitle">This fortnight</h2>
       <div class="grid">
         <div class="stat" id="incomeTile" role="button" tabindex="0" style="cursor:pointer"><small>Income</small><b id="cIncome">$0</b></div>
-        <div class="stat"><small id="cBillsLbl">Bills</small><b id="cBills">$0</b></div>
+        <div class="stat" id="commitTile" role="button" tabindex="0" style="cursor:pointer" aria-label="Show my commitments"><small id="cBillsLbl">Bills</small><b id="cBills">$0</b></div>
         <div class="stat"><small>Left over</small><b id="sLeft">$0</b></div>
       </div>
       <p class="note" id="periodNote"></p>
@@ -436,15 +436,16 @@ input[type=file]{padding:9px 12px}
 
   <!-- INCOME -->
   <section id="view-income" class="view hidden">
-    <div class="card" id="quickCard">
+    <div class="card" id="quickCard" data-sid="entry">
       <h2>Enter income when you get it</h2>
       <div id="quickList"></div>
       <div id="otherPast"></div>
     </div>
-    <div class="card" id="homeAccounts" role="button" tabindex="0" style="cursor:pointer">
+    <div class="card" id="homeAccounts" data-sid="accounts" role="button" tabindex="0" style="cursor:pointer">
       <h2>Accounts</h2>
       <div class="grid"><div class="stat"><small id="hAcctN">0 accounts</small><b id="hAcctTotal">$0</b></div></div>
     </div>
+    <button id="incReorderBtn" class="ghost" style="margin-top:4px">Reorder panels</button>
   </section>
 
   <!-- EXPENSES -->
@@ -575,25 +576,20 @@ input[type=file]{padding:9px 12px}
 
   <!-- ACCOUNTS -->
   <section id="view-accounts" class="view hidden">
-    <div class="card">
+    <button id="acctReorderBtn" class="ghost" style="margin-bottom:8px">Reorder panels</button>
+    <div class="card" data-sid="total">
       <h2>All accounts</h2>
       <div class="grid"><div class="stat"><small>Total balance</small><b id="acTotal">$0</b></div></div>
     </div>
-    <div id="bankGroups"></div>
-    <div class="card"><h2>Recent activity</h2><ul class="list" id="activityList"></ul></div>
-    <div class="card">
+    <div id="bankGroups" data-sid="banks"></div>
+    <div class="card" data-sid="activity"><h2>Recent activity</h2><ul class="list" id="activityList"></ul></div>
+    <div class="card" data-sid="payday">
       <h2>Payday transfers (optional)</h2>
       <label class="check"><input type="checkbox" id="paydayOn"> Run my payday transfers when I log my pay</label>
       <label class="check" style="margin-top:10px"><input type="checkbox" id="optOn"> Optimize transfers</label>
       <div id="optPanel" class="hidden" style="margin-top:8px"></div>
     </div>
-    <div class="card"><h2>Transfers</h2><ul class="list" id="xferList"></ul></div>
-    <div class="card">
-      <h2>Import setup</h2>
-      <label>Import file (.json)<input type="file" id="setupFile" accept=".json,application/json"></label>
-      <label style="margin-top:10px">or paste it here<textarea id="setupText" rows="4" placeholder="Paste the setup text"></textarea></label>
-      <button id="setupBtn" style="width:100%;margin-top:12px">Import</button>
-    </div>
+    <div class="card" data-sid="transfers"><h2>Transfers</h2><ul class="list" id="xferList"></ul></div>
   </section>
 </main>
 
@@ -1263,6 +1259,21 @@ function recurringPerFortnight() {
   return ST.expenses.concat(ST.subscriptions, ST.bills.filter(isRecurringBill)).reduce((s, e) => s + e.amount * (FREQ_PER_FORTNIGHT[e.frequency] || 0), 0);
 }
 // Commitments = my own recurring bills. Property costs live on the Property tab.
+// What the Commitments figure on Home is made of: every repeating item in your personal groups, as its share of one pay.
+function commitmentItems() {
+  return expenseItems().filter((it) => it.group && it.group.kind === "personal" && it.fn > 0.004);
+}
+function showCommitments() {
+  const items = commitmentItems(), total = round2(items.reduce((t, it) => t + it.fn, 0)), by = {};
+  items.forEach((it) => { (by[it.group.name] || (by[it.group.name] = [])).push(it); });
+  const sections = Object.keys(by).map((g) => {
+    const list = by[g].sort((a, b) => b.fn - a.fn), sub = round2(list.reduce((t, it) => t + it.fn, 0));
+    return infoSect(g + " · " + money(sub), list.map((it) => '<div class="irow"><span>' + esc(it.name) + '<br><small style="color:var(--muted)">' + cap(it.freq) + " " + money(it.amount) + '</small></span><b>' + money(it.fn) + "</b></div>").join(""));
+  }).join("");
+  showInfo("Commitments · " + money(total) + pfS(), items.length ? sections : '<div class="inote">Nothing repeating in your personal groups yet.</div>');
+}
+$("commitTile").addEventListener("click", showCommitments);
+$("commitTile").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showCommitments(); } });
 function commitmentsPerFortnight() {
   if (ST.groups.length) return expenseItems().filter((it) => it.group && it.group.kind === "personal").reduce((t, it) => t + it.fn, 0);
   const personal = ST.bills.filter((b) => b.category === "personal" && isRecurringBill(b));
@@ -2942,7 +2953,7 @@ function lastMoveLine(id) {
 }
 function acctRow(a) {
   const f = acctFlows(a.id), net = f.inn - f.out, p = acctProjection(a);
-  return '<li><div class="main"><div>' + esc(a.name) + '</div><div class="sub wrap">' + "In " + money(f.inn) + " · out " + money(f.out) +
+  return '<li data-sid="' + esc(a.id) + '"><div class="main"><div>' + esc(a.name) + '</div><div class="sub wrap">' + "In " + money(f.inn) + " · out " + money(f.out) +
     ' · <span class="' + (net >= 0 ? "ok" : "bad") + '">net ' + money(net) + pfS() + '</span></div>' + acctStatus(p)[0] + lastMoveLine(a.id) + '</div><span class="amt">' + money(a.balance || 0) + '</span>' + infoBtn("acct", a.id) +
     '<button class="ghost" data-edit-acct="' + a.id + '">Edit</button><button class="ghost" data-del="accounts:' + a.id + '">✕</button></li>';
 }
@@ -3001,15 +3012,17 @@ function bankHtml(g) {
   const total = g.accounts.reduce((t, a) => t + (Number(a.balance) || 0), 0);
   const btns = '<button class="ghost" data-edit-bank="' + esc(g.id) + '" data-bank-key="' + esc(g.id ? "" : g.name) + '">' + (g.id || g.name !== "No bank" ? "Rename" : "Set bank name") + "</button>" +
     '<button class="ghost" data-add-acct="' + g.id + '">+ Account</button>' + (g.id ? '<button class="ghost" data-del-bank="' + g.id + '">Remove</button>' : "");
-  const rows = g.accounts.length ? g.accounts.map(acctRow).join("") : '<li class="empty">No accounts in this bank yet.</li>';
-  return '<div class="card"><div class="bankhead"><b>' + esc(g.name) + '</b><span class="amt">' + money(total) + '</span></div>' +
+  const order = savedOrder(g.accounts.map((a) => a.id), "acctrows"), rows = g.accounts.length ? order.map((id) => acctRow(g.accounts.find((a) => a.id === id))).join("") : '<li class="empty">No accounts in this bank yet.</li>';
+  return '<div class="card" data-sid="' + esc(g.id || "nb:" + g.name) + '"><div class="bankhead"><b>' + esc(g.name) + '</b><span class="amt">' + money(total) + '</span></div>' +
     '<div class="sub note">' + g.accounts.length + (g.accounts.length === 1 ? " account" : " accounts") + '</div><div class="bankbtns">' + btns + '</div><ul class="list">' + rows + "</ul></div>";
 }
 function renderAccounts() {
   const total = ST.accounts.reduce((t, a) => t + (Number(a.balance) || 0), 0);
   $("acTotal").textContent = money(total);
-  $("bankGroups").innerHTML = bankGroups().length ? bankGroups().map(bankHtml).join("") : '<div class="card"><p class="empty">No banks yet.</p></div>';
+  const bgs = savedOrder(bankGroups().map((g) => g.id || "nb:" + g.name), "banks").map((k) => bankGroups().find((g) => (g.id || "nb:" + g.name) === k));
+  $("bankGroups").innerHTML = bgs.length ? bgs.map(bankHtml).join("") : '<div class="card"><p class="empty">No banks yet.</p></div>';
   renderActivity();
+  if (typeof buildRowSorters === "function") buildRowSorters();
   $("xferList").innerHTML = ST.acctTransfers.length ? ST.acctTransfers.map(xferRow).join("") : '<li class="empty">No transfers yet.</li>';
   $("hAcctTotal").textContent = money(total);
   $("hAcctN").textContent = ST.accounts.length + (ST.accounts.length === 1 ? " account" : " accounts") + " · total";
@@ -3305,54 +3318,6 @@ function runPaydayTransfers(date) {
   toast("Ran " + list.length + " payday transfers (" + money(total) + ").");
   return true;
 }
-
-/* =========================================================
-   6m. SETUP IMPORT — banks, accounts and payday transfers from a prepared file (temporary)
-   ========================================================= */
-const norm = (n) => String(n || "").trim().toLowerCase();
-const accByName = (n) => ST.accounts.find((a) => norm(a.name) === norm(n));
-function setupPlan(text) {
-  const data = JSON.parse(text), plan = { banks: [], accounts: [], transfers: [], skipped: 0, payday: !!(data.settings && data.settings.payday) };
-  const known = new Set(ST.accounts.map((a) => norm(a.name)));
-  (Array.isArray(data.accounts) ? data.accounts : []).forEach((a) => {
-    const name = String((a && a.name) || "").trim().slice(0, 80), bank = String((a && a.bank) || "").trim().slice(0, 80);
-    if (!name || known.has(norm(name))) return;
-    known.add(norm(name));
-    plan.accounts.push({ name: name, bank: bank });
-    if (bank && !ST.banks.some((b) => norm(b.name) === norm(bank)) && !plan.banks.some((b) => norm(b) === norm(bank))) plan.banks.push(bank);
-  });
-  (Array.isArray(data.paydayTransfers) ? data.paydayTransfers : []).forEach((t) => {
-    const ok = t && t.name && Number(t.amount) > 0 && (!t.from || known.has(norm(t.from))) && (!t.to || known.has(norm(t.to))) && (t.from || t.to);
-    if (!ok || ST.acctTransfers.some((x) => norm(x.name) === norm(t.name))) { plan.skipped++; return; }
-    plan.transfers.push({ name: String(t.name).slice(0, 80), from: t.from || "", to: t.to || "", externalName: String(t.externalName || "").slice(0, 80), amount: round2(Number(t.amount)) });
-  });
-  return plan;
-}
-function runSetup(plan) {
-  const batch = writeBatch(db), bankIds = {}, accIds = {};
-  ST.banks.forEach((b) => { bankIds[norm(b.name)] = b.id; });
-  ST.accounts.forEach((a) => { accIds[norm(a.name)] = a.id; });
-  plan.banks.forEach((name) => { const ref = doc(col("banks")); bankIds[norm(name)] = ref.id; batch.set(ref, { name: name, created: serverTimestamp() }); });
-  plan.accounts.forEach((a) => {
-    const ref = doc(col("accounts")); accIds[norm(a.name)] = ref.id;
-    batch.set(ref, { name: a.name, bank: a.bank, bankId: a.bank ? bankIds[norm(a.bank)] || "" : "", balance: 0, created: serverTimestamp() });
-  });
-  plan.transfers.forEach((t) => batch.set(doc(col("acctTransfers")), {
-    name: t.name, fromId: t.from ? accIds[norm(t.from)] : "", toId: t.to ? accIds[norm(t.to)] : "", externalName: t.externalName,
-    amount: t.amount, frequency: APP.payFrequency, trigger: "payday", nextApply: "", created: serverTimestamp() }));
-  if (plan.payday) batch.set(doc(db, "users", uid, "settings", "payday"), { enabled: true, updated: serverTimestamp() }, { merge: true });
-  batch.commit().then(() => toast("Imported. Set each account's balance with Edit.")).catch((err) => toast("Import failed: " + err.message));
-  $("setupText").value = ""; $("setupFile").value = "";
-}
-$("setupFile").addEventListener("change", async (e) => { const f = e.target.files[0]; if (f) $("setupText").value = await f.text(); });
-$("setupBtn").addEventListener("click", () => {
-  let plan;
-  try { plan = setupPlan($("setupText").value); } catch (err) { toast("That doesn't look like a setup file."); return; }
-  if (!plan.accounts.length && !plan.transfers.length && !plan.banks.length) { toast("Nothing new to import in that file."); return; }
-  const names = plan.accounts.map((a) => a.name).join(", ");
-  showInlineConfirm("Add " + plan.banks.length + " banks, " + plan.accounts.length + " new accounts" + (names ? " (" + names + ")" : "") + " and " +
-    plan.transfers.length + " payday transfers? Accounts you already have are reused. Only do this once.", () => runSetup(plan), "Import");
-});
 
 /* =========================================================
    6n. RECURRING INCOME — fixed incomes add themselves on their date
@@ -4226,7 +4191,7 @@ function makeSortable(box, label, onDone) {
   }
   // pointer drag (mouse and touch)
   box.addEventListener("pointerdown", (e) => {
-    const g = e.target.closest(".grip"); if (!g || !on || e.button > 0 || !box.contains(g)) return;
+    const g = e.target.closest(".grip"); if (!g || !on || e.button > 0 || !box.contains(g) || g.parentElement.parentElement !== box) return;
     e.preventDefault();
     const el = g.parentElement, r = el.getBoundingClientRect(), before = ids();
     const ph = document.createElement("div"); ph.className = "sortph"; ph.style.height = r.height + "px";
@@ -4265,7 +4230,7 @@ function makeSortable(box, label, onDone) {
   box.addEventListener("pointercancel", (e) => drop(e, true));
   // keyboard: space/enter grabs, arrows move, enter/space drops, escape cancels
   box.addEventListener("keydown", (e) => {
-    const g = e.target.closest(".grip"); if (!g || !on) return;
+    const g = e.target.closest(".grip"); if (!g || !on || g.parentElement.parentElement !== box) return;
     const el = g.parentElement;
     if (!kb && (e.key === " " || e.key === "Enter")) {
       e.preventDefault(); kb = { before: ids() }; sortBusy = true; g.setAttribute("aria-pressed", "true");
@@ -4308,6 +4273,29 @@ const sortGroups = makeSortable($("groupCards"), nameFrom, (ids) => {
   ids.forEach((id, n) => { const g = ST.groups.find((x) => x.id === id); if (g && g.order !== n) save("groups", id, { order: n }); });
 });
 reorderToggle($("reorderBtn"), sortGroups, "Reorder panels");
+const sortInc = makeSortable($("view-income"), nameFrom, (ids) => storeOrder("income", ids));
+reorderToggle($("incReorderBtn"), sortInc, "Reorder panels");
+const sortAcct = makeSortable($("view-accounts"), nameFrom, (ids) => storeOrder("accounts", ids));
+let rowSorters = [];
+function buildRowSorters() {
+  rowSorters.forEach((x) => { const i = sorters.indexOf(x); if (i >= 0) sorters.splice(i, 1); });
+  rowSorters = [...document.querySelectorAll("#bankGroups ul.list")].map((ul) => {
+    const x = makeSortable(ul, (el) => (el.querySelector(".main div") || {}).textContent, () => storeOrder("acctrows", [...document.querySelectorAll("#bankGroups ul.list > li[data-sid]")].map((li) => li.dataset.sid)));
+    if (sortAcct.isOn()) x.setMode(true);
+    return x;
+  });
+}
+const sortBanks = makeSortable($("bankGroups"), nameFrom, (ids) => { storeOrder("banks", ids); renderAccounts(); });
+$("acctReorderBtn").addEventListener("click", () => {
+  const v = !sortAcct.isOn(); sortAcct.setMode(v); sortBanks.setMode(v); rowSorters.forEach((x) => x.setMode(v)); $("acctReorderBtn").textContent = v ? "Done" : "Reorder panels";
+});
+// A page's panels come back in the order you left them (kept on this device).
+function applyPanelOrder(boxId, key, tailId) {
+  const box = $(boxId), cards = [...box.children].filter((c) => c.dataset.sid !== undefined), tail = tailId ? $(tailId) : null;
+  savedOrder(cards.map((c) => c.dataset.sid), key).forEach((id) => box.insertBefore(cards.find((c) => c.dataset.sid === id), tail));
+}
+applyPanelOrder("view-income", "income", "incReorderBtn");
+applyPanelOrder("view-accounts", "accounts", "");
 (function applyHomeOrder() {
   const box = $("view-home"), cards = [...box.children].filter((c) => c.dataset.sid !== undefined), tail = $("homeReorderBtn");
   savedOrder(cards.map((c) => c.dataset.sid), "home").forEach((id) => box.insertBefore(cards.find((c) => c.dataset.sid === id), tail));
