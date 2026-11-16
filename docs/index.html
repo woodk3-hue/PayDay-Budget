@@ -411,6 +411,7 @@ input[type=file]{padding:9px 12px}
 
   <!-- DASHBOARD -->
   <section id="view-home" class="view hidden">
+    <div class="card hidden" id="importDue" style="border-left:4px solid var(--brand)"><h2>Bank import day</h2><p class="note" id="importDueText" style="margin-bottom:8px"></p><button id="importDueBtn" class="full" style="width:100%">Import my bank files</button></div>
     <div class="card" data-sid="pay">
       <h2 id="periodTitle">This fortnight</h2>
       <div class="grid">
@@ -491,6 +492,10 @@ input[type=file]{padding:9px 12px}
       <button id="exportCsv" class="plain" style="width:100%;margin-top:8px">Export account activity (.csv)</button>
     </div>
     <div class="card"><h2>Spending categories</h2><div class="chips" id="catManage"></div><button id="addCatBtn" class="ghost" style="margin-top:6px">+ Add category</button></div>
+    <div class="card"><h2>Bank import day</h2><p class="note" id="impNote" style="margin-bottom:8px"></p>
+      <label>Every second<select id="impDay"><option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5" selected>Friday</option><option value="6">Saturday</option><option value="0">Sunday</option></select></label>
+      <div style="display:flex;gap:8px;margin-top:8px"><button id="impSave" class="plain" style="flex:1">Save</button><button id="impOff" class="plain" style="flex:1">Turn off</button></div>
+    </div>
     <div class="card"><h2>Pay & region</h2>
       <div id="setApp"></div>
       <button id="setAppBtn" class="ghost" style="margin-top:6px">Run setup</button>
@@ -572,7 +577,7 @@ input[type=file]{padding:9px 12px}
       <div class="legend"><span><i style="background:var(--green)"></i>Income</span><span><i style="background:var(--brand)"></i>Expenses</span></div>
     </div>
     <div class="card" id="spendCard"><h2>Where my spending went</h2><p class="note" id="spendSummary" style="margin-bottom:8px"></p>
-      <div class="toggle" id="spendBy"><button data-sb="cat" class="on">By category</button><button data-sb="acct">By account</button></div>
+      <div class="toggle" id="spendBy"><button data-sb="cat" class="on">By category</button><button data-sb="acct">By account</button><button data-sb="shop">By shop</button></div>
       <ul class="list" id="spendList" style="margin-top:8px"></ul></div>
     <div class="card"><h2>Spending by category</h2><ul class="list" id="statsCats"></ul></div>
     <div class="card"><h2>Income by source</h2><ul class="list" id="statsSources"></ul></div>
@@ -1215,7 +1220,7 @@ function render() {
   renderAccountSelects(); renderAccounts(); renderPaydaySetting(); scheduleApply(); renderSetApp();
   maybeWizard();
   sorters.forEach((x) => x.refresh());
-  renderCatManage(); renderSpendCatSelect();
+  renderCatManage(); renderSpendCatSelect(); renderImportDue(); renderImportSetting();
 }
 
 function subsSorted() {
@@ -4091,7 +4096,12 @@ $("expenseForm").elements.frequency.addEventListener("change", renderSpendCatSel
 // Report (on the Stats page, for the period picked there)
 let spendBy = "cat";
 const spendOpen = {};
-function spendKey(e) { return spendBy === "acct" ? (acctById(e.accountId) ? acctById(e.accountId).name : "No account") : e.lump ? "Not itemised" : e.spendCat || "Untagged"; }
+function shopOf(e) {
+  const d = String(e.description || "Other").replace(/^(purchase (at|from)|transfer to|to|from)\s+/i, "").replace(/\([^)]*\)/g, " ").replace(/[^A-Za-z&' ]+/g, " ").replace(/\s+/g, " ").trim();
+  const w = d.split(" ").slice(0, 2).join(" ");
+  return w ? w.replace(/\b\w/g, (c) => c.toUpperCase()) : "Other";
+}
+function spendKey(e) { return spendBy === "shop" ? shopOf(e) : spendBy === "acct" ? (acctById(e.accountId) ? acctById(e.accountId).name : "No account") : e.lump ? "Not itemised" : e.spendCat || "Untagged"; }
 function spendItemRow(e) {
   const a = acctById(e.accountId);
   const recat = spendBy === "cat" && !e.lump ? '<select data-recat="' + e.id + '" aria-label="Category">' + ['<option value="">Untagged</option>'].concat(spendCats().map((c) => '<option value="' + esc(c) + '"' + (e.spendCat === c ? " selected" : "") + ">" + esc(c) + "</option>")).join("") + "</select>" : "";
@@ -4293,10 +4303,11 @@ function openBankImport() {
 function biStep1(msg) {
   const accts = ST.accounts.map((a) => '<option value="' + esc(a.id) + '"' + (bi.acct === a.id ? " selected" : "") + ">" + esc(acctLabel(a)) + "</option>").join("");
   biShell('<h3>Import a bank file</h3><p class="note" style="margin:0 0 8px">Download a CSV or PDF transaction report from your bank (you can add several, for example the last few fortnights). Nothing is uploaded anywhere; it is read on this device.</p>' +
-    '<label class="sec">Which account is it for?<select id="biAcct"><option value="">Choose…</option>' + accts + '<option value="ALL"' + (bi.acct === "ALL" ? " selected" : "") + '>All accounts (one combined file)</option></select></label>' +
+    '<label class="sec">Which account is it for?<select id="biAcct"><option value="">Choose…</option>' + accts + '<option value="ALL"' + (bi.acct === "ALL" ? " selected" : "") + '>All accounts (one combined file)</option></select></label><p class="note" id="biHint" style="margin:6px 0 0"></p>' +
     '<label class="sec">Bank file(s) (.csv or .pdf)<input type="file" id="biFile" accept=".csv,text/csv,.txt,.pdf,application/pdf" multiple></label>' +
     (msg ? '<p class="note bad" style="margin:8px 0 0">' + esc(msg) + "</p>" : "") +
     '<div class="actions"><button class="plain" data-bi-close>Cancel</button><button data-bi-read>Read files</button></div>');
+  biHintUpdate();
 }
 async function biRead() {
   const acct = $("biAcct").value, files = [...$("biFile").files];
@@ -4347,7 +4358,7 @@ function biStep3() {
     (r.loose.length ? '<div class="isect">Matched, but the date differs (' + r.loose.length + ')</div><ul class="list">' + r.loose.map((x) => '<li><div class="main"><div>' + esc(x.p.label || "Item") + '</div><div class="sub">PayDay ' + fmtDate(x.p.date) + " → bank " + fmtDate(x.row.date) + '</div></div><span class="amt ' + (x.row.amount >= 0 ? "ok" : "bad") + '">' + signedMoney(x.row.amount) + "</span></li>").join("") + '</ul><button class="plain" style="width:100%;margin-top:6px" data-bi-fixdates>Fix these dates</button>' : "") +
     (r.internal.length ? '<div class="isect">Looks like moves between your accounts (' + r.internal.length + ')</div><ul class="list">' + r.internal.map((x) => '<li><div class="main"><div>' + esc(x.desc.slice(0, 60)) + '</div><div class="sub">' + fmtDate(x.date) + '</div></div><span class="amt ' + (x.amount >= 0 ? "ok" : "bad") + '">' + signedMoney(x.amount) + "</span></li>").join("") + '</ul><button class="plain" style="width:100%;margin-top:6px" data-bi-skipint>Skip these</button>' : "") +
     '<div class="isect">In PayDay but not in your file (' + r.pdOnly.length + ")</div>" + only +
-    '<div class="actions"><button class="plain" data-bi-back2>Back</button><button data-bi-close>Done</button></div>');
+    '<div class="actions"><button class="plain" data-bi-back2>Back</button><button data-bi-done>Done</button></div>');
 }
 function biAdd(x, acctId, cat) {
   if (!acctId || !acctById(acctId)) { toast("Choose the account for this one first."); return false; }
@@ -4362,6 +4373,7 @@ function biClick(e) {
   const d = e.target.dataset;
   if (e.target === biEl || d.biClose !== undefined) { biClose(); return; }
   if (d.biRead !== undefined) { biRead(); return; }
+  if (d.biDone !== undefined) { biDone(); return; }
   if (d.biBack !== undefined) { biStep1(); return; }
   if (d.biBack2 !== undefined) { biStep2(); return; }
   if (d.biCheck !== undefined) { if (bi.map.date < 0 || bi.map.desc < 0 || (bi.map.amount < 0 && bi.map.debit < 0 && bi.map.credit < 0)) { toast("Choose the Date, Description and an Amount (or Money out / in) column."); return; } lsSet(biSigKey(bi.header), JSON.stringify(bi.map)); biStep3(); return; }
@@ -4386,12 +4398,53 @@ function biClick(e) {
 }
 function biChange(e) {
   const t = e.target;
+  if (t.id === "biAcct") { bi.acct = t.value; biHintUpdate(); return; }
   if (t.dataset.biCol !== undefined) { bi.map[t.dataset.biCol] = Number(t.value); biStep2(); }
   else if (t.dataset.biFlip !== undefined) { bi.map.flip = t.checked; biStep2(); }
 }
 // Re-draw the result after an Add / Skip, keeping the scroll position.
 function biRefresh() { const sc = biEl.querySelector(".card").scrollTop; biStep3(); biEl.querySelector(".card").scrollTop = sc; }
 $("bankImportBtn").addEventListener("click", openBankImport);
+/* ---- Fortnightly import habit: a set day, the date range to download, and what was last imported ---- */
+const impSetting = () => ST.settings.find((x) => x.id === "bankImport") || {};
+const impThrough = (acct) => (impSetting().through || {})[acct] || "";
+function impRange(acct) {
+  const th = acct && acct !== "ALL" ? [impThrough(acct)].filter(Boolean) : Object.values(impSetting().through || {}).filter(Boolean).sort();
+  return { from: th.length ? isoFromDay(dayNum(th[0]) - 3) : isoFromDay(dayNum(today()) - 21), first: !th.length };
+}
+function biHintUpdate() {
+  const el = $("biHint"); if (!el) return;
+  const a = $("biAcct") ? $("biAcct").value : ""; if (!a) { el.textContent = ""; return; }
+  const r = impRange(a);
+  el.textContent = r.first || a === "ALL" ? "Download from " + fmtLong(r.from) + " to today (about 3 weeks)." : "Last imported up to " + fmtLong(impThrough(a)) + ". Download from " + fmtLong(r.from) + " to today.";
+}
+function biDone() {
+  const r = bi && bi.res, set = { doneOn: today(), updated: serverTimestamp() };
+  if (r && bi.acct && bi.acct !== "ALL" && r.to) set.through = { [bi.acct]: r.to };
+  setDoc(doc(db, "users", uid, "settings", "bankImport"), set, { merge: true }).catch((e) => toast("Save failed: " + e.message));
+  biClose();
+}
+function impDueDate() {
+  const s = impSetting(); if (!s.enabled || !s.anchor) return "";
+  const t = dayNum(today()), a = dayNum(s.anchor); if (t < a) return "";
+  return isoFromDay(a + 14 * Math.floor((t - a) / 14));
+}
+function renderImportDue() {
+  const due = impDueDate(), s = impSetting(), show = !!due && (s.doneOn || "") < due;
+  $("importDue").classList.toggle("hidden", !show);
+  if (show) $("importDueText").textContent = "Download your bank files (CSV) from " + fmtLong(impRange("").from) + " to today, then import them. It takes about five minutes.";
+}
+function renderImportSetting() {
+  const s = impSetting(), dd = impDueDate();
+  $("impNote").textContent = s.enabled ? "On: a reminder appears on Home every second " + ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][s.weekday] + (dd ? ". Last due " + fmtLong(dd) + "." : ".") : "Off. Pick a day and I'll remind you on Home every second week to import your bank files.";
+  if (s.enabled && document.activeElement !== $("impDay")) $("impDay").value = String(s.weekday);
+}
+$("impSave").addEventListener("click", () => {
+  const wd = Number($("impDay").value), now = new Date(), diff = (wd - now.getDay() + 7) % 7;
+  setDoc(doc(db, "users", uid, "settings", "bankImport"), { enabled: true, weekday: wd, anchor: isoFromDay(dayNum(today()) + diff), updated: serverTimestamp() }, { merge: true }).catch((e) => toast("Save failed: " + e.message));
+});
+$("impOff").addEventListener("click", () => setDoc(doc(db, "users", uid, "settings", "bankImport"), { enabled: false, updated: serverTimestamp() }, { merge: true }).catch((e) => toast("Save failed: " + e.message)));
+$("importDueBtn").addEventListener("click", openBankImport);
 
 /* =========================================================
    SMART DUE DATE — pick the next due date, or work it out from the last payment
