@@ -331,6 +331,7 @@ nav.none::before{opacity:0}
 .duecalc .toggle button{font-size:14px;min-height:40px}
 .duecalc .calc{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .duechip{display:inline-block;justify-self:start;padding:7px 12px;border-radius:99px;background:var(--brand-soft);color:var(--brand);font-size:14px;font-weight:600}
+#bankGroups li{cursor:pointer}
 .pstat{font-size:13px;font-weight:600;margin-top:2px}
 .pstat.red{color:var(--red)}.pstat.amber{color:var(--amber)}.pstat.green{color:var(--green)}.pstat.blue{color:#0a84ff}.pstat.idle{color:var(--muted);font-weight:400}
 #peopleChips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
@@ -2846,6 +2847,11 @@ function acctInfoHtml(id) {
     infoRow("Projected after payday", money(p.net)) +
     infoRow("Recommended net adjustment", p.adj ? signed(p.adj) : "None");
 }
+// Tap an account row to edit it (update its balance). Swiping right still works too.
+document.addEventListener("click", (e) => {
+  const li = e.target.closest("#bankGroups li"); if (!li || e.target.closest("button, a, input, select")) return;
+  const eb = li.querySelector("[data-edit-acct]"); if (eb) eb.click();
+});
 function acctRow(a) {
   const f = acctFlows(a.id), net = f.inn - f.out, p = acctProjection(a);
   return '<li><div class="main"><div>' + esc(a.name) + '</div><div class="sub wrap">' + "In " + money(f.inn) + " · out " + money(f.out) +
