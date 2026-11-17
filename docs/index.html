@@ -2719,14 +2719,23 @@ function statsTotals(r) {
   const spent = once.reduce((t, e) => t + e.amount, 0), recurring = recurringPerFortnight() * r.k;
   return { income: income, incTotal: income.reduce((t, i) => t + i.amount, 0), once: once, spent: spent, recurring: recurring, expenses: spent + recurring };
 }
+let statsCatItems = {}, statsCatOpen = {};
 function statsCategories(r, t) {
-  const map = {};
-  const add = (c, v) => { if (v > 0.005) map[c] = (map[c] || 0) + v; };
-  t.once.forEach((e) => add(e.category || "Other", e.amount));
-  ST.expenses.forEach((e) => add(e.category || "Other", toFortnight(e.amount, e.frequency) * r.k));
-  ST.subscriptions.forEach((x) => add(x.type === "subscription" ? "Subscriptions" : x.type === "bill" ? "Bills" : "Other", toFortnight(x.amount, x.frequency) * r.k));
-  ST.bills.filter(isRecurringBill).forEach((b) => add(b.category === "property" ? "Property" : "Bills", toFortnight(b.amount, b.frequency) * r.k));
+  const map = {}; statsCatItems = {};
+  const add = (c, v, it) => { if (v > 0.005) { map[c] = (map[c] || 0) + v; (statsCatItems[c] || (statsCatItems[c] = [])).push({ ...it, v: v }); } };
+  t.once.forEach((e) => add(e.category || "Other", e.amount, { kind: "expenses", id: e.id, label: e.description || "Spend", sub: fmtDate(e.date) }));
+  ST.expenses.forEach((e) => add(e.category || "Other", toFortnight(e.amount, e.frequency) * r.k, { kind: "expenses", id: e.id, label: e.description || "Expense", sub: "Repeats " + e.frequency }));
+  ST.subscriptions.forEach((x) => add(x.type === "subscription" ? "Subscriptions" : x.type === "bill" ? "Bills" : "Other", toFortnight(x.amount, x.frequency) * r.k, { kind: "sub", id: x.id, label: x.name, sub: "Repeats " + x.frequency }));
+  ST.bills.filter(isRecurringBill).forEach((b) => add(b.category === "property" ? "Property" : "Bills", toFortnight(b.amount, b.frequency) * r.k, { kind: "bill", id: b.id, label: b.vendor, sub: "Repeats " + b.frequency }));
   return Object.entries(map).sort((a, b) => b[1] - a[1]);
+}
+function statsCatItemRow(it) {
+  return '<li class="spenditem" style="cursor:pointer" data-sc-kind="' + it.kind + '" data-sc-id="' + esc(it.id) + '"><div class="main"><div>' + esc(it.label || "Item") + '</div><div class="sub">' + esc(it.sub || "") + " · tap to edit</div></div><span class=\"amt\">" + money(it.v) + "</span></li>";
+}
+function statsCatRow(c, max, total) {
+  const open = !!statsCatOpen[c[0]], items = (statsCatItems[c[0]] || []).slice().sort((a, b) => b.v - a.v);
+  const row = statsBarRow(c[0] + (open ? " ▾" : " ▸"), c[1], max, Math.round((c[1] / total) * 100) + "% of expenses · " + items.length + (items.length === 1 ? " item" : " items")).replace("<li>", '<li data-sc-cat="' + esc(c[0]) + '" style="cursor:pointer">');
+  return row + (open ? items.map(statsCatItemRow).join("") : "");
 }
 function statsBarRow(name, amount, max, sub) {
   const pct = max ? Math.round((amount / max) * 100) : 0;
@@ -2756,7 +2765,7 @@ function renderStats() {
 
   renderSpending(t); renderOwed();
   const cats = statsCategories(r, t), total = cats.reduce((x, c) => x + c[1], 0);
-  $("statsCats").innerHTML = cats.length ? cats.map((c) => statsBarRow(c[0], c[1], cats[0][1], Math.round((c[1] / total) * 100) + "% of expenses")).join("")
+  $("statsCats").innerHTML = cats.length ? cats.map((c) => statsCatRow(c, cats[0][1], total)).join("")
     : '<li class="empty">No spending in this period.</li>';
 
   const bySrc = {};
@@ -4139,6 +4148,17 @@ function renderSpending(t) {
       r.items.length + (r.items.length === 1 ? " item" : " items") + (t.spent ? " · " + Math.round((r.total / t.spent) * 100) + "%" : "") + '</div></div><span class="amt">' + money(r.total) + "</span></li>" + (open ? r.items.map(spendItemRow).join("") : "");
   }).join("") : '<li class="empty">No one-off spending in this period.</li>';
 }
+$("statsCats").addEventListener("click", (e) => {
+  const it = e.target.closest("[data-sc-id]");
+  if (it) {
+    const id = it.dataset.scId, k = it.dataset.scKind;
+    if (k === "expenses") startEdit("expenses", ST.expenses.find((x) => x.id === id));
+    else if (k === "sub") startEditSub(ST.subscriptions.find((x) => x.id === id));
+    else if (k === "bill") startEditBill(ST.bills.find((x) => x.id === id));
+    return;
+  }
+  const c = e.target.closest("[data-sc-cat]"); if (c) { statsCatOpen[c.dataset.scCat] = !statsCatOpen[c.dataset.scCat]; renderStats(); }
+});
 $("spendBy").addEventListener("click", (e) => { const b = e.target.closest("[data-sb]"); if (b) { spendBy = b.dataset.sb; renderStats(); } });
 $("spendList").addEventListener("click", (e) => {
   if (e.target.closest("select, button")) return;
