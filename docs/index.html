@@ -493,7 +493,7 @@ input[type=file]{padding:9px 12px}
     </div>
     <div class="card"><h2>Spending categories</h2><div class="chips" id="catManage"></div><button id="addCatBtn" class="ghost" style="margin-top:6px">+ Add category</button></div>
     <div class="card"><h2>Bank import day</h2><p class="note" id="impNote" style="margin-bottom:8px"></p>
-      <label>Every second<select id="impDay"><option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5" selected>Friday</option><option value="6">Saturday</option><option value="0">Sunday</option></select></label>
+      <label>Remind me<select id="impDay"><option value="pay">On my payday</option><option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5" selected>Friday</option><option value="6">Saturday</option><option value="0">Sunday</option></select></label>
       <div style="display:flex;gap:8px;margin-top:8px"><button id="impSave" class="plain" style="flex:1">Save</button><button id="impOff" class="plain" style="flex:1">Turn off</button></div>
     </div>
     <div class="card"><h2>Pay & region</h2>
@@ -592,7 +592,7 @@ input[type=file]{padding:9px 12px}
     </div>
     <div id="bankGroups" data-sid="banks"></div>
     <div class="card" data-sid="activity"><h2>Recent activity</h2><ul class="list" id="activityList"></ul></div>
-    <div class="card" data-sid="import"><h2>Bank import</h2><p class="note">Match a CSV from your bank against PayDay, and add anything that's missing. You can add several files at once.</p><button id="bankImportBtn" class="plain" style="width:100%;margin-top:8px">Import a bank file</button></div>
+    <div class="card" data-sid="import"><h2>Bank import</h2><p class="note">On payday, pick the CSV from each bank account (all together). PayDay matches them, adds anything missing and shows a summary.</p><button id="bankImportBtn" class="plain" style="width:100%;margin-top:8px">Payday import</button></div>
     <div class="card" data-sid="payday">
       <h2>Payday transfers (optional)</h2>
       <label class="check"><input type="checkbox" id="paydayOn"> Run my payday transfers when I log my pay</label>
@@ -4295,7 +4295,7 @@ function biShell(inner) {
   }
   biEl.innerHTML = '<div class="card" style="max-height:88vh;overflow-y:auto">' + inner + "</div>";
 }
-function biClose() { if (biEl) biEl.remove(); biEl = null; bi = null; }
+function biClose() { if (biEl) biEl.remove(); biEl = null; bi = null; px = null; }
 function openBankImport() {
   bi = { step: 1, acct: lsGet("bank-last-acct") || "", files: [], header: [], map: null, res: null };
   biStep1();
@@ -4358,7 +4358,7 @@ function biStep3() {
     (r.loose.length ? '<div class="isect">Matched, but the date differs (' + r.loose.length + ')</div><ul class="list">' + r.loose.map((x) => '<li><div class="main"><div>' + esc(x.p.label || "Item") + '</div><div class="sub">PayDay ' + fmtDate(x.p.date) + " → bank " + fmtDate(x.row.date) + '</div></div><span class="amt ' + (x.row.amount >= 0 ? "ok" : "bad") + '">' + signedMoney(x.row.amount) + "</span></li>").join("") + '</ul><button class="plain" style="width:100%;margin-top:6px" data-bi-fixdates>Fix these dates</button>' : "") +
     (r.internal.length ? '<div class="isect">Looks like moves between your accounts (' + r.internal.length + ')</div><ul class="list">' + r.internal.map((x) => '<li><div class="main"><div>' + esc(x.desc.slice(0, 60)) + '</div><div class="sub">' + fmtDate(x.date) + '</div></div><span class="amt ' + (x.amount >= 0 ? "ok" : "bad") + '">' + signedMoney(x.amount) + "</span></li>").join("") + '</ul><button class="plain" style="width:100%;margin-top:6px" data-bi-skipint>Skip these</button>' : "") +
     '<div class="isect">In PayDay but not in your file (' + r.pdOnly.length + ")</div>" + only +
-    '<div class="actions"><button class="plain" data-bi-back2>Back</button><button data-bi-done>Done</button></div>');
+    (bi.queue ? '<div class="actions"><button data-px-next>' + (px && px.i + 1 < px.queue.length ? "Next file" : "Finish") + "</button></div>" : '<div class="actions"><button class="plain" data-bi-back2>Back</button><button data-bi-done>Done</button></div>'));
 }
 function biAdd(x, acctId, cat) {
   if (!acctId || !acctById(acctId)) { toast("Choose the account for this one first."); return false; }
@@ -4372,6 +4372,13 @@ function biRowAcct(li) { if (bi.acct !== "ALL") return bi.acct; const s2 = li.qu
 function biClick(e) {
   const d = e.target.dataset;
   if (e.target === biEl || d.biClose !== undefined) { biClose(); return; }
+  if (d.pxRead !== undefined) { pxRead(); return; }
+  if (d.pxBack !== undefined) { pxStep1(); return; }
+  if (d.pxStart !== undefined) { pxStart(); return; }
+  if (d.pxNext !== undefined) { pxNext(); return; }
+  if (d.pxDone !== undefined) { pxDone(); return; }
+  if (d.pxSingle !== undefined) { openBankImport(); return; }
+  if (d.pxSetbal !== undefined) { const [id, v] = d.pxSetbal.split(":"); save("accounts", id, { balance: Number(v) }); toast("PayDay balance updated."); const s2 = px.summary.find((q) => q.acct === id); if (s2) s2.bal = null; pxSummary(); return; }
   if (d.biRead !== undefined) { biRead(); return; }
   if (d.biDone !== undefined) { biDone(); return; }
   if (d.biBack !== undefined) { biStep1(); return; }
@@ -4398,17 +4405,129 @@ function biClick(e) {
 }
 function biChange(e) {
   const t = e.target;
+  if (t.dataset.pxFile !== undefined) { px.files[+t.dataset.pxFile].acct = t.value; return; }
+  if (t.dataset.pxAuto !== undefined) { px.auto = t.checked; return; }
   if (t.id === "biAcct") { bi.acct = t.value; biHintUpdate(); return; }
   if (t.dataset.biCol !== undefined) { bi.map[t.dataset.biCol] = Number(t.value); biStep2(); }
   else if (t.dataset.biFlip !== undefined) { bi.map.flip = t.checked; biStep2(); }
 }
 // Re-draw the result after an Add / Skip, keeping the scroll position.
 function biRefresh() { const sc = biEl.querySelector(".card").scrollTop; biStep3(); biEl.querySelector(".card").scrollTop = sc; }
-$("bankImportBtn").addEventListener("click", openBankImport);
+$("bankImportBtn").addEventListener("click", openPaydayImport);
+/* ---- Payday import: several bank files (one per account, or combined) in one go ---- */
+let px = null;
+const pxMap = () => { try { return JSON.parse(lsGet("bank-acctmap") || "{}"); } catch (e) { return {}; } };
+function pxLabelOf(rows) {
+  if (rows.label) return rows.label;
+  const i = rows[0].findIndex((h) => /^account$/i.test(String(h).trim()));
+  if (i < 0) return "";
+  const r = rows.slice(1).find((x) => String(x[i] || "").trim());
+  return r ? String(r[i]).trim() : "";
+}
+function pxGuessAcct(label, fileName) {
+  const m = pxMap(); if (label && m[label] && acctById(m[label])) return m[label];
+  const l = (label + " " + fileName).toLowerCase();
+  const hit = ST.accounts.find((a) => l.includes(String(a.name).toLowerCase()));
+  return hit ? hit.id : "";
+}
+function openPaydayImport() {
+  px = { step: 1, files: [], i: 0, auto: true, summary: [], cur: null };
+  bi = { acct: "", files: [], header: [], map: null, res: null, queue: false };
+  pxStep1();
+}
+function pxStep1(msg) {
+  const r = impRange("");
+  biShell('<h3>Payday import</h3><p class="note" style="margin:0 0 8px">Download a CSV (or PDF) from each bank account for <b>' + fmtLong(r.from) + " to today</b>, then choose all the files together. Nothing leaves this device.</p>" +
+    '<label class="sec">Bank files<input type="file" id="pxFile" accept=".csv,text/csv,.txt,.pdf,application/pdf" multiple></label>' +
+    (msg ? '<p class="note bad" style="margin:8px 0 0">' + esc(msg) + "</p>" : "") +
+    '<button class="ghost" style="margin-top:6px" data-px-single>One file, choose columns myself</button><div class="actions"><button class="plain" data-bi-close>Cancel</button><button data-px-read>Read files</button></div>');
+}
+async function pxRead() {
+  const files = [...$("pxFile").files];
+  if (!files.length) { pxStep1("Choose at least one file."); return; }
+  px.files = [];
+  for (const f of files) {
+    let rows = [];
+    try {
+      if (/\.pdf$/i.test(f.name) || f.type === "application/pdf") rows = await biPdfRows(f);
+      else { const text = await f.text(); rows = parseCsv(text, biDelim(text)); }
+    } catch (err) { pxStep1(f.name + ": " + err.message); return; }
+    if (rows.length < 2) continue;
+    const header = rows[0].map((h) => String(h).trim()); let saved = null;
+    try { saved = JSON.parse(lsGet(biSigKey(header)) || "null"); } catch (e) { saved = null; }
+    const label = pxLabelOf(rows);
+    px.files.push({ name: f.name, rows: rows, header: header, map: saved || biGuess(header), label: label, acct: pxGuessAcct(label, f.name) });
+  }
+  if (!px.files.length) { pxStep1("Those files look empty."); return; }
+  pxStep2();
+}
+function pxStep2() {
+  const opts = (sel) => '<option value="">Choose the account…</option>' + ST.accounts.map((a) => '<option value="' + esc(a.id) + '"' + (sel === a.id ? " selected" : "") + ">" + esc(acctLabel(a)) + "</option>").join("") + '<option value="SKIP">Skip this file</option>';
+  biShell('<h3>Which account is each file?</h3><p class="note" style="margin:0 0 6px">I matched what I could. I remember your choices for next time.</p>' +
+    px.files.map((f, i) => '<label class="sec"><span style="word-break:break-all">' + esc(f.name) + (f.label ? ' · <small style="color:var(--muted)">' + esc(f.label) + "</small>" : "") + '</span><select data-px-file="' + i + '">' + opts(f.acct) + "</select></label>").join("") +
+    '<label class="check sec"><input type="checkbox" data-px-auto' + (px.auto ? " checked" : "") + '> Add everything automatically, then show me a summary</label>' +
+    '<div class="actions"><button class="plain" data-px-back>Back</button><button data-px-start>Start</button></div>');
+}
+function pxStart() {
+  const missing = px.files.find((f) => !f.acct);
+  if (missing) { toast("Choose an account for " + missing.name + ", or skip it."); return; }
+  const m = pxMap(); px.files.forEach((f) => { if (f.label && f.acct && f.acct !== "SKIP") m[f.label] = f.acct; }); lsSet("bank-acctmap", JSON.stringify(m));
+  px.queue = px.files.filter((f) => f.acct !== "SKIP"); px.i = 0; px.summary = [];
+  if (!px.queue.length) { biClose(); px = null; return; }
+  pxRun();
+}
+function pxLoad() {
+  const f = px.queue[px.i];
+  bi = { acct: f.acct, files: [f], header: f.header, map: f.map, res: null, queue: true, step: 3 };
+  px.cur = { acct: f.acct, name: f.name, added: 0, out: 0, inn: 0, fixed: 0, moves: 0 };
+}
+function pxRun() {
+  while (px.i < px.queue.length) {
+    pxLoad();
+    const f = px.queue[px.i];
+    if (f.map.date < 0 || f.map.desc < 0 || (f.map.amount < 0 && f.map.debit < 0 && f.map.credit < 0)) { px.summary.push({ ...px.cur, error: "I couldn't read the columns in " + f.name + ". Use Import a bank file to set them." }); px.i++; continue; }
+    if (!px.auto) { biStep3(); return; }
+    const r = biAnalyse();
+    if (r.loose.length) { const b = writeBatch(db); r.loose.forEach((x) => b.update(doc(db, "users", uid, x.p.ref.coll, x.p.ref.id), { date: x.row.date })); b.commit().catch(() => {}); px.cur.fixed = r.loose.length; }
+    if (r.internal.length) { biRemember(r.internal.map((x) => x.key)); px.cur.moves = r.internal.length; }
+    r.unmatched.forEach((x) => { if (biAdd(x, f.acct, x.amount < 0 ? suggestCat(x.desc) || "Other" : "")) { px.cur.added++; if (x.amount < 0) px.cur.out += -x.amount; else px.cur.inn += x.amount; } });
+    px.summary.push({ ...px.cur, total: r.total, matched: r.matched, bal: r.bal, to: r.to, pdOnly: r.pdOnly.length });
+    px.i++;
+  }
+  pxSummary();
+}
+function pxNext() {
+  const r = bi.res || {};
+  px.summary.push({ ...px.cur, total: r.total, matched: r.matched, bal: r.bal, to: r.to, pdOnly: (r.pdOnly || []).length });
+  px.i++; pxRun();
+}
+function pxSummary() {
+  const rows = px.summary.map((s2) => {
+    const a = acctById(s2.acct), name = a ? a.name : "Account";
+    if (s2.error) return '<div class="irow"><span>' + esc(name) + '<br><small class="bad">' + esc(s2.error) + "</small></span><b></b></div>";
+    const parts = [s2.total + " lines", s2.matched + " already in PayDay"];
+    if (s2.added) parts.push(s2.added + " added (" + money(s2.out) + " out" + (s2.inn ? ", " + money(s2.inn) + " in" : "") + ")");
+    if (s2.fixed) parts.push(s2.fixed + (s2.fixed === 1 ? " date fixed" : " dates fixed"));
+    if (s2.moves) parts.push(s2.moves + " moves between accounts skipped");
+    const diff = s2.bal && a ? round2(s2.bal.value - (a.balance || 0)) : 0;
+    const bal = s2.bal && a ? (Math.abs(diff) > 0.004 ? '<br><small>Bank balance ' + money(s2.bal.value) + " vs PayDay " + money(a.balance || 0) + '</small> <button class="ghost" style="min-height:32px;padding:0;font-size:13px" data-px-setbal="' + esc(s2.acct) + ":" + s2.bal.value + '">Set to ' + money(s2.bal.value) + "</button>" : '<br><small class="ok">Balance matches the bank (' + money(s2.bal.value) + ")</small>") : "";
+    return '<div class="irow"><span>' + esc(name) + '<br><small style="color:var(--muted)">' + esc(parts.join(" · ")) + "</small>" + bal + "</span><b></b></div>";
+  }).join("");
+  biShell('<h3>Payday import done</h3><p class="note" style="margin:0 0 6px">Added items are filed under the categories I guessed. Change any in Stats → Where my spending went.</p>' + rows + '<div class="actions"><button data-px-done>Done</button></div>');
+}
+function pxDone() {
+  const th = {}; px.summary.forEach((s2) => { if (s2.to && s2.acct) th[s2.acct] = s2.to; });
+  const set = { doneOn: today(), updated: serverTimestamp() }; if (Object.keys(th).length) set.through = th;
+  setDoc(doc(db, "users", uid, "settings", "bankImport"), set, { merge: true }).catch((e) => toast("Save failed: " + e.message));
+  px = null; biClose();
+}
 /* ---- Fortnightly import habit: a set day, the date range to download, and what was last imported ---- */
 const impSetting = () => ST.settings.find((x) => x.id === "bankImport") || {};
 const impThrough = (acct) => (impSetting().through || {})[acct] || "";
+const impPayMode = () => impSetting().mode === "payday" || !impSetting().enabled;
+function impPayDue() { const P = nextPayday(), t = dayNum(today()); return P > t ? P - 14 : P; }
 function impRange(acct) {
+  if (impPayMode()) { const base = nextPayday() - 14, ths = (acct && acct !== "ALL" ? [impThrough(acct)] : Object.values(impSetting().through || {})).filter(Boolean).sort(); return { from: isoFromDay(ths.length ? Math.min(base, dayNum(ths[0]) - 3) : base), first: !ths.length }; }
   const th = acct && acct !== "ALL" ? [impThrough(acct)].filter(Boolean) : Object.values(impSetting().through || {}).filter(Boolean).sort();
   return { from: th.length ? isoFromDay(dayNum(th[0]) - 3) : isoFromDay(dayNum(today()) - 21), first: !th.length };
 }
@@ -4425,26 +4544,28 @@ function biDone() {
   biClose();
 }
 function impDueDate() {
-  const s = impSetting(); if (!s.enabled || !s.anchor) return "";
+  const s = impSetting(); if (s.enabled && s.mode === "payday") return isoFromDay(impPayDue());
+  if (!s.enabled || !s.anchor) return "";
   const t = dayNum(today()), a = dayNum(s.anchor); if (t < a) return "";
   return isoFromDay(a + 14 * Math.floor((t - a) / 14));
 }
 function renderImportDue() {
   const due = impDueDate(), s = impSetting(), show = !!due && (s.doneOn || "") < due;
   $("importDue").classList.toggle("hidden", !show);
-  if (show) $("importDueText").textContent = "Download your bank files (CSV) from " + fmtLong(impRange("").from) + " to today, then import them. It takes about five minutes.";
+  if (show) $("importDueText").textContent = "Download a CSV from each bank account, from " + fmtLong(impRange("").from) + " to today, then import them. It takes about five minutes.";
 }
 function renderImportSetting() {
   const s = impSetting(), dd = impDueDate();
-  $("impNote").textContent = s.enabled ? "On: a reminder appears on Home every second " + ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][s.weekday] + (dd ? ". Last due " + fmtLong(dd) + "." : ".") : "Off. Pick a day and I'll remind you on Home every second week to import your bank files.";
-  if (s.enabled && document.activeElement !== $("impDay")) $("impDay").value = String(s.weekday);
+  $("impNote").textContent = s.enabled && s.mode === "payday" ? "On: a reminder appears on Home each payday" + (dd ? ". Last due " + fmtLong(dd) + "." : ".") : s.enabled ? "On: a reminder appears on Home every second " + ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][s.weekday] + (dd ? ". Last due " + fmtLong(dd) + "." : ".") : "Off. Pick a day and I'll remind you on Home every second week to import your bank files.";
+  if (s.enabled && document.activeElement !== $("impDay")) $("impDay").value = s.mode === "payday" ? "pay" : String(s.weekday);
 }
 $("impSave").addEventListener("click", () => {
+  if ($("impDay").value === "pay") { setDoc(doc(db, "users", uid, "settings", "bankImport"), { enabled: true, mode: "payday", updated: serverTimestamp() }, { merge: true }).catch((e) => toast("Save failed: " + e.message)); return; }
   const wd = Number($("impDay").value), now = new Date(), diff = (wd - now.getDay() + 7) % 7;
-  setDoc(doc(db, "users", uid, "settings", "bankImport"), { enabled: true, weekday: wd, anchor: isoFromDay(dayNum(today()) + diff), updated: serverTimestamp() }, { merge: true }).catch((e) => toast("Save failed: " + e.message));
+  setDoc(doc(db, "users", uid, "settings", "bankImport"), { enabled: true, mode: "weekday", weekday: wd, anchor: isoFromDay(dayNum(today()) + diff), updated: serverTimestamp() }, { merge: true }).catch((e) => toast("Save failed: " + e.message));
 });
 $("impOff").addEventListener("click", () => setDoc(doc(db, "users", uid, "settings", "bankImport"), { enabled: false, updated: serverTimestamp() }, { merge: true }).catch((e) => toast("Save failed: " + e.message)));
-$("importDueBtn").addEventListener("click", openBankImport);
+$("importDueBtn").addEventListener("click", openPaydayImport);
 
 /* =========================================================
    SMART DUE DATE — pick the next due date, or work it out from the last payment
