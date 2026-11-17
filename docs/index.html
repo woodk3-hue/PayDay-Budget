@@ -4109,7 +4109,7 @@ function spendKey(e) { return spendBy === "shop" ? shopOf(e) : spendBy === "acct
 function spendItemRow(e) {
   const a = acctById(e.accountId);
   const recat = spendBy === "cat" && !e.lump ? '<select data-recat="' + e.id + '" aria-label="Category">' + ['<option value="">Untagged</option>'].concat(spendCats().map((c) => '<option value="' + esc(c) + '"' + (e.spendCat === c ? " selected" : "") + ">" + esc(c) + "</option>")).join("") + "</select>" : "";
-  return '<li class="spenditem"><div class="main"><div>' + esc(e.description || "Spend") + '</div><div class="sub wrap">' + fmtDate(e.date) + (a ? " · " + esc(a.name) : "") + "</div>" + recat + '</div><span class="amt">' + money(e.amount) + "</span></li>";
+  return '<li class="spenditem" style="cursor:pointer"><div class="main"><div>' + esc(e.description || "Spend") + '</div><div class="sub wrap">' + fmtDate(e.date) + (a ? " · " + esc(a.name) : "") + "</div>" + recat + '</div><span class="amt">' + money(e.amount) + '</span><button class="ghost" data-edit-expense="' + esc(e.id) + '">Edit</button></li>';
 }
 // Purchases tagged "for someone" vs repayments tagged "paying me back", per person (all time).
 function owedRow(p) {
@@ -4141,7 +4141,8 @@ function renderSpending(t) {
 }
 $("spendBy").addEventListener("click", (e) => { const b = e.target.closest("[data-sb]"); if (b) { spendBy = b.dataset.sb; renderStats(); } });
 $("spendList").addEventListener("click", (e) => {
-  if (e.target.closest("select")) return;
+  if (e.target.closest("select, button")) return;
+  const it = e.target.closest(".spenditem"); if (it) { const b = it.querySelector("[data-edit-expense]"); if (b) b.click(); return; }
   const row = e.target.closest("[data-sk]"); if (!row) return;
   const k = spendBy + ":" + row.dataset.sk; spendOpen[k] = !spendOpen[k]; renderStats();
 });
