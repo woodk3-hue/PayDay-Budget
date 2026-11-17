@@ -579,6 +579,7 @@ input[type=file]{padding:9px 12px}
     <div class="card" id="spendCard"><h2>Where my spending went</h2><p class="note" id="spendSummary" style="margin-bottom:8px"></p>
       <div class="toggle" id="spendBy"><button data-sb="cat" class="on">By category</button><button data-sb="acct">By account</button><button data-sb="shop">By shop</button></div>
       <ul class="list" id="spendList" style="margin-top:8px"></ul></div>
+    <div class="card" id="owedCard"><h2>Paid for someone</h2><p class="note">Things you bought for others, and what they've paid back. Not counted as your spending or income.</p><ul class="list" id="owedList" style="margin-top:8px"></ul></div>
     <div class="card"><h2>Spending by category</h2><ul class="list" id="statsCats"></ul></div>
     <div class="card"><h2>Income by source</h2><ul class="list" id="statsSources"></ul></div>
   </section>
@@ -654,8 +655,10 @@ input[type=file]{padding:9px 12px}
         <label class="full">What is this income?<input name="source" list="incomeNames" required placeholder="e.g. Car spot, Tax refund" autocomplete="off"></label>
         <datalist id="incomeNames"></datalist>
         <label class="full">Paid into<select name="accountId" class="acctSel"></select></label>
+        <label class="full">Someone paying you back?<input name="fromWho" list="peopleNames" placeholder="Their name (leave blank if not)" autocomplete="off"></label>
         <label class="full">Note<input name="note" placeholder="Optional"></label>
         <button class="full" type="submit">Save income</button>
+        <datalist id="peopleNames"></datalist>
       </form>
     </div>
   <div class="card addcard" id="expenseCard">
@@ -675,6 +678,7 @@ input[type=file]{padding:9px 12px}
         <label class="full" id="spendCatWrap">Spending category<select name="spendCat" id="spendCatSel"></select></label>
         <label class="full">Name<input name="description" required placeholder="e.g. Woolworths"></label>
         <label class="full">Paid from<select name="accountId" class="acctSel"></select></label>
+        <label class="full">Bought for someone else?<input name="forWho" list="peopleNames" placeholder="Their name (leave blank if it was for you)" autocomplete="off"></label>
         <label class="check full"><input type="checkbox" name="manual"> I pay this one myself</label>
         <label class="full">Remind me before it's due?
           <select name="remindDays">
@@ -1515,7 +1519,7 @@ function resetForm(form, kind) {
 $("incomeForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const d = formData(e.target), isNew = !editing.income;
-  d.source = d.source.trim();
+  d.source = d.source.trim(); d.fromWho = (d.fromWho || "").trim();
   d.accountId = d.accountId || "";
   const old = isNew ? null : ST.income.find((x) => x.id === editing.income), src = ST.incomeSources.find((x) => x.name === d.source);
   d.wages = src ? !!src.wages : old ? isWages(old) : d.source === PAY_SOURCE;
@@ -1530,7 +1534,7 @@ $("incomeForm").addEventListener("submit", (e) => {
 $("expenseForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const d = formData(e.target), g = groupById(d.groupId);
-  d.category = g ? g.name : "Other";
+  d.category = g ? g.name : "Other"; d.forWho = (d.forWho || "").trim();
   const rd = e.target.elements.remindDays.value; d.remindDays = rd === "" ? null : Number(rd); d.lastNotified = null;
   if (g && g.kind === "property" && propAccount(g.propertyId)) d.accountId = propAccount(g.propertyId);
   linkFields(d, d.date, ST.expenses.find((x) => x.id === editing.expenses));
@@ -2710,8 +2714,8 @@ function statsRange(offset) {
   return { start: y + "-01-01", end: y + "-12-31", label: String(y), short: String(y), k: PERIOD_K.year };
 }
 function statsTotals(r) {
-  const income = ST.income.filter((i) => { const d = r.earned ? incomePeriodDate(i) : i.date; return d >= r.start && d <= r.end; });
-  const once = ST.expenses.filter((e) => e.frequency === "once" && e.date >= r.start && e.date <= r.end);
+  const income = ST.income.filter((i) => { if (i.fromWho) return false; const d = r.earned ? incomePeriodDate(i) : i.date; return d >= r.start && d <= r.end; });
+  const once = ST.expenses.filter((e) => e.frequency === "once" && !e.forWho && e.date >= r.start && e.date <= r.end);
   const spent = once.reduce((t, e) => t + e.amount, 0), recurring = recurringPerFortnight() * r.k;
   return { income: income, incTotal: income.reduce((t, i) => t + i.amount, 0), once: once, spent: spent, recurring: recurring, expenses: spent + recurring };
 }
@@ -2750,7 +2754,7 @@ function renderStats() {
   for (let i = 0; i < n; i++) cols.push(statsChartCol(statsOffset - (n - 1) + i, max));
   $("statsChart").innerHTML = cols.join("");
 
-  renderSpending(t);
+  renderSpending(t); renderOwed();
   const cats = statsCategories(r, t), total = cats.reduce((x, c) => x + c[1], 0);
   $("statsCats").innerHTML = cats.length ? cats.map((c) => statsBarRow(c[0], c[1], cats[0][1], Math.round((c[1] / total) * 100) + "% of expenses")).join("")
     : '<li class="empty">No spending in this period.</li>';
@@ -4106,6 +4110,20 @@ function spendItemRow(e) {
   const a = acctById(e.accountId);
   const recat = spendBy === "cat" && !e.lump ? '<select data-recat="' + e.id + '" aria-label="Category">' + ['<option value="">Untagged</option>'].concat(spendCats().map((c) => '<option value="' + esc(c) + '"' + (e.spendCat === c ? " selected" : "") + ">" + esc(c) + "</option>")).join("") + "</select>" : "";
   return '<li class="spenditem"><div class="main"><div>' + esc(e.description || "Spend") + '</div><div class="sub wrap">' + fmtDate(e.date) + (a ? " · " + esc(a.name) : "") + "</div>" + recat + '</div><span class="amt">' + money(e.amount) + "</span></li>";
+}
+// Purchases tagged "for someone" vs repayments tagged "paying me back", per person (all time).
+function owedRow(p) {
+  const left = round2(p.spent - p.back);
+  const st = Math.abs(left) < 0.005 ? '<span class="amt ok">All square</span>' : left > 0 ? '<span class="amt bad">Owes ' + money(left) + "</span>" : '<span class="amt ok">Paid ' + money(-left) + " extra</span>";
+  return '<li><div class="main"><div>' + esc(p.name) + '</div><div class="sub">Bought ' + money(p.spent) + " · paid back " + money(p.back) + "</div></div>" + st + "</li>";
+}
+function renderOwed() {
+  const ppl = {}, get = (n) => { const k = n.toLowerCase(); return ppl[k] || (ppl[k] = { name: n, spent: 0, back: 0 }); };
+  ST.expenses.forEach((e) => { if (e.forWho) get(e.forWho).spent += e.amount || 0; });
+  ST.income.forEach((i) => { if (i.fromWho) get(i.fromWho).back += i.amount || 0; });
+  const list = Object.values(ppl).sort((a, b) => (b.spent - b.back) - (a.spent - a.back));
+  $("peopleNames").innerHTML = list.map((p) => '<option value="' + esc(p.name) + '">').join("");
+  $("owedList").innerHTML = list.length ? list.map(owedRow).join("") : '<li class="empty">Nothing yet. When you add an expense, fill in "Bought for someone else?", and when they pay you back, fill in "Someone paying you back?" on the income.</li>';
 }
 function renderSpending(t) {
   const groups = {};
