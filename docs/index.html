@@ -592,7 +592,7 @@ input[type=file]{padding:9px 12px}
     </div>
     <div id="bankGroups" data-sid="banks"></div>
     <div class="card" data-sid="activity"><h2>Recent activity</h2><ul class="list" id="activityList"></ul></div>
-    <div class="card" data-sid="import"><h2>Bank import</h2><p class="note">On payday, pick the CSV from each bank account (all together). PayDay matches them, adds anything missing and shows a summary.</p><button id="bankImportBtn" class="plain" style="width:100%;margin-top:8px">Payday import</button></div>
+    <div class="card" data-sid="import"><h2>Bank import</h2><p class="note">On payday, pick the CSV from each bank account (all together). PayDay matches them, adds anything missing and shows a summary.</p><button id="bankImportBtn" class="plain" style="width:100%;margin-top:8px">Payday import</button><div class="isect">Fortnights</div><ul class="list" id="impLog"></ul></div>
     <div class="card" data-sid="payday">
       <h2>Payday transfers (optional)</h2>
       <label class="check"><input type="checkbox" id="paydayOn"> Run my payday transfers when I log my pay</label>
@@ -1220,7 +1220,7 @@ function render() {
   renderAccountSelects(); renderAccounts(); renderPaydaySetting(); scheduleApply(); renderSetApp();
   maybeWizard();
   sorters.forEach((x) => x.refresh());
-  renderCatManage(); renderSpendCatSelect(); renderImportDue(); renderImportSetting();
+  renderCatManage(); renderSpendCatSelect(); renderImportDue(); renderImportSetting(); renderImportLog();
 }
 
 function subsSorted() {
@@ -4430,14 +4430,14 @@ function pxGuessAcct(label, fileName) {
   const hit = ST.accounts.find((a) => l.includes(String(a.name).toLowerCase()));
   return hit ? hit.id : "";
 }
-function openPaydayImport() {
-  px = { step: 1, files: [], i: 0, auto: true, summary: [], cur: null };
+function openPaydayImport(range) {
+  px = { range: range && range.from ? range : null, step: 1, files: [], i: 0, auto: true, summary: [], cur: null };
   bi = { acct: "", files: [], header: [], map: null, res: null, queue: false };
   pxStep1();
 }
 function pxStep1(msg) {
-  const r = impRange("");
-  biShell('<h3>Payday import</h3><p class="note" style="margin:0 0 8px">Download a CSV (or PDF) from each bank account for <b>' + fmtLong(r.from) + " to today</b>, then choose all the files together. Nothing leaves this device.</p>" +
+  const r = px.range || impRange("");
+  biShell('<h3>Payday import</h3><p class="note" style="margin:0 0 8px">Download a CSV (or PDF) from each bank account for <b>' + fmtLong(r.from) + " to " + (r.to ? fmtLong(r.to) : "today") + "</b>, then choose all the files together. Nothing leaves this device.</p>" +
     '<label class="sec">Bank files<input type="file" id="pxFile" accept=".csv,text/csv,.txt,.pdf,application/pdf" multiple></label>' +
     (msg ? '<p class="note bad" style="margin:8px 0 0">' + esc(msg) + "</p>" : "") +
     '<button class="ghost" style="margin-top:6px" data-px-single>One file, choose columns myself</button><div class="actions"><button class="plain" data-bi-close>Cancel</button><button data-px-read>Read files</button></div>');
@@ -4491,14 +4491,14 @@ function pxRun() {
     if (r.loose.length) { const b = writeBatch(db); r.loose.forEach((x) => b.update(doc(db, "users", uid, x.p.ref.coll, x.p.ref.id), { date: x.row.date })); b.commit().catch(() => {}); px.cur.fixed = r.loose.length; }
     if (r.internal.length) { biRemember(r.internal.map((x) => x.key)); px.cur.moves = r.internal.length; }
     r.unmatched.forEach((x) => { if (biAdd(x, f.acct, x.amount < 0 ? suggestCat(x.desc) || "Other" : "")) { px.cur.added++; if (x.amount < 0) px.cur.out += -x.amount; else px.cur.inn += x.amount; } });
-    px.summary.push({ ...px.cur, total: r.total, matched: r.matched, bal: r.bal, to: r.to, pdOnly: r.pdOnly.length });
+    px.summary.push({ ...px.cur, total: r.total, matched: r.matched, bal: r.bal, to: r.to, from: r.from, pdOnly: r.pdOnly.length });
     px.i++;
   }
   pxSummary();
 }
 function pxNext() {
   const r = bi.res || {};
-  px.summary.push({ ...px.cur, total: r.total, matched: r.matched, bal: r.bal, to: r.to, pdOnly: (r.pdOnly || []).length });
+  px.summary.push({ ...px.cur, total: r.total, matched: r.matched, bal: r.bal, to: r.to, from: r.from, pdOnly: (r.pdOnly || []).length });
   px.i++; pxRun();
 }
 function pxSummary() {
@@ -4517,7 +4517,10 @@ function pxSummary() {
 }
 function pxDone() {
   const th = {}; px.summary.forEach((s2) => { if (s2.to && s2.acct) th[s2.acct] = s2.to; });
-  const set = { doneOn: today(), updated: serverTimestamp() }; if (Object.keys(th).length) set.through = th;
+  const set = { doneOn: today(), updated: serverTimestamp() }, log = {};
+  px.summary.forEach((s2) => { if (s2.from && s2.to && s2.acct) log[s2.acct + "_" + s2.from + "_" + s2.to] = { acct: s2.acct, from: s2.from, to: s2.to, on: today() }; });
+  if (Object.keys(log).length) set.log = log;
+  if (!px.range && Object.keys(th).length) set.through = th;
   setDoc(doc(db, "users", uid, "settings", "bankImport"), set, { merge: true }).catch((e) => toast("Save failed: " + e.message));
   px = null; biClose();
 }
@@ -4566,6 +4569,28 @@ $("impSave").addEventListener("click", () => {
 });
 $("impOff").addEventListener("click", () => setDoc(doc(db, "users", uid, "settings", "bankImport"), { enabled: false, updated: serverTimestamp() }, { merge: true }).catch((e) => toast("Save failed: " + e.message)));
 $("importDueBtn").addEventListener("click", openPaydayImport);
+// Which payday-to-payday fortnights have been imported, per account, so a missed one can be imported later.
+function impLogRow(f) {
+  const st = f.missing.length === 0 ? '<span class="ok">Done</span>' : f.missing.length < f.total ? '<span class="bad">Partly</span>' : '<span class="bad">Not done</span>';
+  const miss = f.missing.length && f.missing.length < f.total ? " · missing " + f.missing.map((a) => esc(a.name)).join(", ") : "";
+  const btn = f.missing.length ? '<button class="ghost" data-imp-from="' + f.from + '" data-imp-to="' + (f.soFar ? "" : f.to) + '">Import</button>' : "";
+  return '<li><div class="main"><div>' + fmtDate(f.from) + " – " + fmtDate(f.to) + '</div><div class="sub">' + (f.soFar ? "This fortnight, so far: " : "") + st + miss + "</div></div>" + btn + "</li>";
+}
+function renderImportLog() {
+  const el = $("impLog"); if (!el) return;
+  const log = Object.values(impSetting().log || {}), th = impSetting().through || {};
+  const ids = [...new Set(log.map((x) => x.acct).concat(Object.keys(th)))].filter((id) => acctById(id));
+  if (!ids.length) { el.innerHTML = '<li><div class="main"><div class="sub">No imports yet. Each payday import is ticked off here.</div></div></li>'; return; }
+  const P = nextPayday(), t = dayNum(today()), rows = [], first = log.length ? Math.min(...log.map((x) => dayNum(x.from))) : P - 14;
+  for (let k = 0; k < 8; k++) {
+    const end = P - 14 * k, start = end - 14, upto = Math.min(end, t);
+    const ok = (id) => log.some((x) => x.acct === id && dayNum(x.from) <= start + 3 && dayNum(x.to) >= upto - 3);
+    if (k > 0 && end <= first + 3) break;
+    rows.push({ from: isoFromDay(start), to: isoFromDay(end), soFar: end > t, total: ids.length, missing: ids.filter((id) => !ok(id)).map(acctById) });
+  }
+  el.innerHTML = rows.map(impLogRow).join("");
+}
+$("impLog").addEventListener("click", (e) => { const d = e.target.dataset; if (d.impFrom) openPaydayImport({ from: d.impFrom, to: d.impTo }); });
 
 /* =========================================================
    SMART DUE DATE — pick the next due date, or work it out from the last payment
