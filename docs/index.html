@@ -4527,7 +4527,7 @@ const impThrough = (acct) => (impSetting().through || {})[acct] || "";
 const impPayMode = () => impSetting().mode === "payday" || !impSetting().enabled;
 function impPayDue() { const P = nextPayday(), t = dayNum(today()); return P > t ? P - 14 : P; }
 function impRange(acct) {
-  if (impPayMode()) { const base = impPayDue() - 14, ths = (acct && acct !== "ALL" ? [impThrough(acct)] : Object.values(impSetting().through || {})).filter(Boolean).sort(); return { from: isoFromDay(ths.length ? Math.min(base, dayNum(ths[0]) - 3) : base), first: !ths.length }; }
+  if (impPayMode()) { const base = nextPayday() - 14, ths = (acct && acct !== "ALL" ? [impThrough(acct)] : Object.values(impSetting().through || {})).filter(Boolean).sort(); return { from: isoFromDay(ths.length ? Math.min(base, dayNum(ths[0]) - 3) : base), first: !ths.length }; }
   const th = acct && acct !== "ALL" ? [impThrough(acct)].filter(Boolean) : Object.values(impSetting().through || {}).filter(Boolean).sort();
   return { from: th.length ? isoFromDay(dayNum(th[0]) - 3) : isoFromDay(dayNum(today()) - 21), first: !th.length };
 }
