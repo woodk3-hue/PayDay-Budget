@@ -4581,10 +4581,11 @@ function renderImportLog() {
   const log = Object.values(impSetting().log || {}), th = impSetting().through || {};
   const ids = [...new Set(log.map((x) => x.acct).concat(Object.keys(th)))].filter((id) => acctById(id));
   if (!ids.length) { el.innerHTML = '<li><div class="main"><div class="sub">No imports yet. Each payday import is ticked off here.</div></div></li>'; return; }
-  const P = nextPayday(), t = dayNum(today()), rows = [];
+  const P = nextPayday(), t = dayNum(today()), rows = [], first = log.length ? Math.min(...log.map((x) => dayNum(x.from))) : P - 14;
   for (let k = 0; k < 8; k++) {
     const end = P - 14 * k, start = end - 14, upto = Math.min(end, t);
     const ok = (id) => log.some((x) => x.acct === id && dayNum(x.from) <= start + 3 && dayNum(x.to) >= upto - 3);
+    if (k > 0 && end <= first + 3) break;
     rows.push({ from: isoFromDay(start), to: isoFromDay(end), soFar: end > t, total: ids.length, missing: ids.filter((id) => !ok(id)).map(acctById) });
   }
   el.innerHTML = rows.map(impLogRow).join("");
