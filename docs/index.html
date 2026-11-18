@@ -4228,7 +4228,7 @@ function biRemember(keys) { const s = biSeen(); keys.forEach((k) => s.add(k)); l
 function biCombine() {
   const have = {}, out = [];
   bi.files.forEach((f) => {
-    const local = {}, rows = biRowsOf(f);
+    const local = {}, rows = biRowsOf(f).filter((r) => (!bi.minDate || r.date >= bi.minDate) && (!bi.maxDate || r.date <= bi.maxDate));
     rows.forEach((r) => { const k = biFp(bi.acct, r); local[k] = (local[k] || 0) + 1; if (local[k] > (have[k] || 0)) out.push({ ...r, key: k + "#" + local[k] }); });
     Object.keys(local).forEach((k) => { have[k] = Math.max(have[k] || 0, local[k]); });
   });
@@ -4476,7 +4476,7 @@ function openPaydayImport(range) {
 }
 function pxStep1(msg) {
   const r = px.range || impRange("");
-  biShell('<h3>Payday import</h3><p class="note" style="margin:0 0 8px">Download a CSV (or PDF) from each bank account for <b>' + fmtLong(r.from) + " to " + (r.to ? fmtLong(r.to) : "today") + "</b>, then choose all the files together. Nothing leaves this device.</p>" +
+  biShell('<h3>Payday import</h3><p class="note" style="margin:0 0 8px">Download a CSV (or PDF) from each bank account for <b>' + fmtLong(r.from) + " to " + (r.to ? fmtLong(r.to) : "today") + "</b>, then choose all the files together. If a bank only does whole months (like Up), pick each month that overlaps; anything outside these dates is ignored. Nothing leaves this device.</p>" +
     '<label class="sec">Bank files<input type="file" id="pxFile" accept=".csv,text/csv,.txt,.pdf,application/pdf" multiple></label>' +
     (msg ? '<p class="note bad" style="margin:8px 0 0">' + esc(msg) + "</p>" : "") +
     '<button class="ghost" style="margin-top:6px" data-px-single>One file, choose columns myself</button><div class="actions"><button class="plain" data-bi-close>Cancel</button><button data-px-read>Read files</button></div>');
@@ -4511,13 +4511,17 @@ function pxStart() {
   const missing = px.files.find((f) => !f.acct);
   if (missing) { toast("Choose an account for " + missing.name + ", or skip it."); return; }
   const m = pxMap(); px.files.forEach((f) => { if (f.label && f.acct && f.acct !== "SKIP") m[f.label] = f.acct; }); lsSet("bank-acctmap", JSON.stringify(m));
-  px.queue = px.files.filter((f) => f.acct !== "SKIP"); px.i = 0; px.summary = [];
+  // Several files for one account (e.g. two monthly Up exports) are read together, overlaps counted once.
+  const groups = {};
+  px.files.filter((f) => f.acct !== "SKIP").forEach((f) => { const k = f.acct + "|" + f.header.join("|"); if (groups[k]) { groups[k].files.push(f); groups[k].name += ", " + f.name; } else groups[k] = { ...f, files: [f] }; });
+  px.queue = Object.values(groups); px.i = 0; px.summary = [];
   if (!px.queue.length) { biClose(); px = null; return; }
   pxRun();
 }
 function pxLoad() {
   const f = px.queue[px.i];
-  bi = { acct: f.acct, files: [f], header: f.header, map: f.map, res: null, queue: true, step: 3 };
+  const rg = px.range || impRange("");
+  bi = { acct: f.acct, files: f.files || [f], header: f.header, map: f.map, res: null, queue: true, step: 3, minDate: rg.from, maxDate: rg.to || "" };
   px.cur = { acct: f.acct, name: f.name, added: 0, out: 0, inn: 0, fixed: 0, moves: 0 };
 }
 function pxRun() {
