@@ -593,7 +593,7 @@ input[type=file]{padding:9px 12px}
     </div>
     <div id="bankGroups" data-sid="banks"></div>
     <div class="card" data-sid="activity"><h2>Recent activity</h2><ul class="list" id="activityList"></ul></div>
-    <div class="card" data-sid="import"><h2>Bank import</h2><p class="note">On payday, pick the CSV from each bank account (all together). PayDay matches them, adds anything missing and shows a summary.</p><button id="bankImportBtn" class="plain" style="width:100%;margin-top:8px">Payday import</button><div class="isect">Fortnights</div><ul class="list" id="impLog"></ul></div>
+    <div class="card" data-sid="import"><h2>Bank import</h2><p class="note">On payday, pick the CSV from each bank account (all together). PayDay matches them, adds anything missing and shows a summary.</p><button id="bankImportBtn" class="plain" style="width:100%;margin-top:8px">Payday import</button><div class="isect">Fortnights</div><ul class="list" id="impLog"></ul><details class="sec"><summary>Which accounts do I import?</summary><div id="impAccts" style="margin-top:6px"></div></details></div>
     <div class="card" data-sid="payday">
       <h2>Payday transfers (optional)</h2>
       <label class="check"><input type="checkbox" id="paydayOn"> Run my payday transfers when I log my pay</label>
@@ -4615,24 +4615,36 @@ $("importDueBtn").addEventListener("click", openPaydayImport);
 // Which payday-to-payday fortnights have been imported, per account, so a missed one can be imported later.
 function impLogRow(f) {
   const st = f.missing.length === 0 ? '<span class="ok">Done</span>' : f.missing.length < f.total ? '<span class="bad">Partly</span>' : '<span class="bad">Not done</span>';
-  const miss = f.missing.length && f.missing.length < f.total ? " · missing " + f.missing.map((a) => esc(a.name)).join(", ") : "";
+  const chip = (a, done) => '<span class="' + (done ? "ok" : "bad") + '" style="white-space:nowrap">' + (done ? "✓ " : "○ ") + esc(a.name) + (done ? "" : " (pending)") + "</span>";
+  const miss = '<div class="sub wrap" style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px 12px">' + f.accts.map((a) => chip(a, !f.missing.includes(a))).join("") + "</div>";
   const btn = f.missing.length ? '<button class="ghost" data-imp-from="' + f.from + '" data-imp-to="' + (f.soFar ? "" : f.to) + '">Import</button>' : "";
-  return '<li><div class="main"><div>' + fmtDate(f.from) + " – " + fmtDate(f.to) + '</div><div class="sub">' + (f.soFar ? "This fortnight, so far: " : "") + st + miss + "</div></div>" + btn + "</li>";
+  return '<li><div class="main"><div>' + fmtDate(f.from) + " – " + fmtDate(f.to) + '</div><div class="sub">' + (f.soFar ? "This fortnight, so far: " : "") + st + "</div>" + miss + "</div>" + btn + "</li>";
+}
+// Accounts you import from the bank each fortnight (all of them unless you untick some).
+const impAccts = () => { const sel = impSetting().accts; return ST.accounts.filter((a) => !sel || sel.includes(a.id)).map((a) => a.id); };
+function renderImpAccts() {
+  const el = $("impAccts"); if (!el) return; const on = impAccts();
+  el.innerHTML = ST.accounts.map((a) => '<label class="check"><input type="checkbox" data-imp-acct="' + esc(a.id) + '"' + (on.includes(a.id) ? " checked" : "") + "> " + esc(acctLabel(a)) + "</label>").join("");
 }
 function renderImportLog() {
   const el = $("impLog"); if (!el) return;
   const log = Object.values(impSetting().log || {}), th = impSetting().through || {};
-  const ids = [...new Set(log.map((x) => x.acct).concat(Object.keys(th)))].filter((id) => acctById(id));
-  if (!ids.length) { el.innerHTML = '<li><div class="main"><div class="sub">No imports yet. Each payday import is ticked off here.</div></div></li>'; return; }
+  const ids = impAccts();
+  renderImpAccts();
+  if (!ids.length) { el.innerHTML = '<li><div class="main"><div class="sub">Choose the accounts you import below.</div></div></li>'; return; }
   const P = nextPayday(), t = dayNum(today()), rows = [], first = log.length ? Math.min(...log.map((x) => dayNum(x.from))) : P - 14;
   for (let k = 0; k < 8; k++) {
     const end = P - 14 * k, start = end - 14, upto = Math.min(end, t);
     const ok = (id) => log.some((x) => x.acct === id && dayNum(x.from) <= start + 3 && dayNum(x.to) >= upto - 3);
     if (k > 0 && end <= first + 3) break;
-    rows.push({ from: isoFromDay(start), to: isoFromDay(end), soFar: end > t, total: ids.length, missing: ids.filter((id) => !ok(id)).map(acctById) });
+    rows.push({ from: isoFromDay(start), to: isoFromDay(end), soFar: end > t, total: ids.length, accts: ids.map(acctById), missing: ids.filter((id) => !ok(id)).map(acctById) });
   }
   el.innerHTML = rows.map(impLogRow).join("");
 }
+$("impAccts").addEventListener("change", () => {
+  const ids = [...document.querySelectorAll("[data-imp-acct]")].filter((c) => c.checked).map((c) => c.dataset.impAcct);
+  setDoc(doc(db, "users", uid, "settings", "bankImport"), { accts: ids, updated: serverTimestamp() }, { merge: true }).catch((e) => toast("Save failed: " + e.message));
+});
 $("impLog").addEventListener("click", (e) => { const d = e.target.dataset; if (d.impFrom) openPaydayImport({ from: d.impFrom, to: d.impTo }); });
 
 /* =========================================================
